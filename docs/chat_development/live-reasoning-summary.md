@@ -2,6 +2,8 @@
 
 Tham khảo từ: deepseek-harness (`ReasoningRow.tsx`, note `2026-08-02-web-thinking-tail-scroll`).
 
+> Ghi chú: `ReasoningContent` tự áp dụng chuyển đổi delimiter LaTeX qua `remend` handler (xem [`math-rendering.md`](./math-rendering.md)), nên ở đây chỉ truyền thẳng `reasoning`, không cần gọi hàm chuẩn hoá thủ công nào.
+
 ## Vấn đề
 
 `ReasoningTrigger` (AI Elements) chỉ hiện một nhãn **tĩnh** trong lúc đang stream, không quan tâm nội dung thật đang chảy về:
@@ -65,7 +67,7 @@ Gắn vào `ReasoningTrigger` bằng cách truyền `children` tùy chỉnh (ghi
   <ReasoningTrigger>
     <ReasoningSummary isStreaming={isReasoningStreaming} reasoning={reasoning} />
   </ReasoningTrigger>
-  <ReasoningContent>{normalizeLatexDelimiters(reasoning)}</ReasoningContent>
+  <ReasoningContent>{reasoning}</ReasoningContent>
 </Reasoning>
 ```
 

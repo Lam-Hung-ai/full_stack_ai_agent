@@ -26,3 +26,5 @@ npm run dev
 Open http://localhost:3000.
 
 See `backend/README.md` and `frontend/README.md` for details.
+
+See `docs/chat_development/` for notes on non-obvious decisions and bugs found during development (AG-UI manual wiring, the reasoning render-gap bug, math rendering).
