@@ -5,13 +5,13 @@ This is the [Next.js](https://nextjs.org) frontend, bootstrapped with `create-ne
 ```bash
 cp .env.example .env.local
 # edit .env.local if the backend isn't on http://localhost:8000
-npm install
+pnpm install
 ```
 
 ## Run
 
 ```bash
-npm run dev
+pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000). The chat page (`src/app/page.tsx`) talks to the backend over the [AG-UI protocol](https://docs.ag-ui.com):
@@ -21,12 +21,12 @@ Open [http://localhost:3000](http://localhost:3000). The chat page (`src/app/pag
 
 ## UI components
 
-- `src/components/ui/*` — every shadcn/ui base component (`npx shadcn@latest add --all`).
-- `src/components/ai-elements/*` — all AI Elements patterns (conversation, message, prompt-input, reasoning, tool, sources, etc.), installed from the AI SDK registry (`npx shadcn@latest add https://registry.ai-sdk.dev/all.json`).
+- `src/components/ui/*` — every shadcn/ui base component (`pnpm dlx shadcn@latest add --all`).
+- `src/components/ai-elements/*` — all AI Elements patterns (conversation, message, prompt-input, reasoning, tool, sources, etc.), installed from the AI SDK registry (`pnpm dlx shadcn@latest add https://registry.ai-sdk.dev/all.json`).
 - `Tool`/`ToolHeader`/`ToolContent`/`ToolInput`/`ToolOutput` render AG-UI tool calls — `page.tsx` maps an AG-UI `ToolCall` (plus its matching `tool` result message, by `toolCallId`) into the shape these expect.
 - `Reasoning`/`ReasoningTrigger`/`ReasoningContent` render the model's reasoning/thinking — `page.tsx` pairs an AG-UI `reasoning`-role message with the assistant message that follows it (no shared id between them).
 
-To add more shadcn components later: `npx shadcn@latest add <name>`.
+To add more shadcn components later: `pnpm dlx shadcn@latest add <name>`.
 
 ## Math rendering
 

@@ -7,5 +7,6 @@ Tập hợp các ghi chú về những vấn đề thực tế gặp phải, cá
 - [`live-reasoning-summary.md`](./live-reasoning-summary.md) — dòng tóm tắt sống thay cho nhãn "Thinking..." tĩnh, để phân biệt model đang chạy hay bị treo.
 - [`raf-batched-reasoning-updates.md`](./raf-batched-reasoning-updates.md) — gộp nhiều lần `setState` liên tiếp vào 1 `requestAnimationFrame` khi reasoning stream quá nhanh.
 - [`math-rendering.md`](./math-rendering.md) — hành trình xử lý hiển thị công thức toán (singleDollarTextMath, delimiter `\(...\)`/`\[...\]`, so sánh với deepseek-harness, và kết luận không cần system prompt nhắc về toán).
+- [`npm-to-pnpm-migration.md`](./npm-to-pnpm-migration.md) — chuyển sang pnpm lộ ra 2 phantom dependency (`katex`, `remend`) mà npm's flat node_modules từng che giấu.
 
 Hai ghi chú `live-reasoning-summary.md` và `raf-batched-reasoning-updates.md` ban đầu nằm ở `frontend/docs/notes/` — gộp về đây để toàn bộ "kinh nghiệm phát triển" nằm một chỗ, tách khỏi code của từng app.
