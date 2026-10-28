@@ -1,8 +1,7 @@
 "use client";
 
-import { BrainIcon, ChevronDownIcon, SparklesIcon } from "lucide-react";
+import { SparklesIcon } from "lucide-react";
 import type { ToolUIPart } from "ai";
-import type { Message as AGUIMessage } from "@ag-ui/client";
 import {
   Conversation,
   ConversationContent,
@@ -18,90 +17,11 @@ import {
   PromptInputTextarea,
 } from "@/components/ai-elements/prompt-input";
 import { Loader } from "@/components/ai-elements/loader";
-import {
-  Reasoning,
-  ReasoningContent,
-  ReasoningTrigger,
-  useReasoning,
-} from "@/components/ai-elements/reasoning";
+import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning";
 import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "@/components/ai-elements/tool";
+import { ReasoningSummary } from "@/components/chat/reasoning-summary";
 import { useAgentChat } from "@/hooks/use-agent-chat";
-import { cn } from "@/lib/utils";
-
-type TurnMessage = Extract<AGUIMessage, { role: "user" | "assistant" }>;
-type Turn = { message: TurnMessage; reasoning?: string };
-
-// AG-UI streams a standalone `reasoning` message before the `assistant` message
-// it belongs to (no shared id), so pair each one with the assistant turn that follows it.
-function buildTurns(messages: AGUIMessage[]): Turn[] {
-  const turns: Turn[] = [];
-  let pendingReasoning: string | undefined;
-
-  for (const message of messages) {
-    if (message.role === "reasoning") {
-      pendingReasoning = message.content;
-      continue;
-    }
-    if (message.role === "user" || message.role === "assistant") {
-      turns.push({ message, reasoning: message.role === "assistant" ? pendingReasoning : undefined });
-      pendingReasoning = undefined;
-    }
-  }
-
-  // The assistant message doesn't exist yet while reasoning is still streaming
-  // (TEXT_MESSAGE_START only fires after REASONING_END), so without this the
-  // entire reasoning phase renders nothing — reasoning only became visible once
-  // the run finished. Render a placeholder turn so it shows up immediately.
-  if (pendingReasoning !== undefined) {
-    turns.push({
-      message: { id: "__pending-reasoning__", role: "assistant", content: "" },
-      reasoning: pendingReasoning,
-    });
-  }
-
-  return turns;
-}
-
-function findToolResult(messages: AGUIMessage[], toolCallId: string) {
-  return messages.find((m) => m.role === "tool" && m.toolCallId === toolCallId) as
-    | Extract<AGUIMessage, { role: "tool" }>
-    | undefined;
-}
-
-function parseToolArgs(raw: string): unknown {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return raw;
-  }
-}
-
-// While collapsed, show the latest non-blank line instead of a static "Thinking..."
-// label — a stalled model visibly stalls, a fast one visibly moves, without
-// needing to expand the panel to tell the difference.
-function latestLine(text: string): string {
-  const visible = text.trimEnd();
-  const newline = visible.lastIndexOf("\n");
-  return newline === -1 ? visible : visible.slice(newline + 1);
-}
-
-function ReasoningSummary({ reasoning, isStreaming }: { reasoning: string; isStreaming: boolean }) {
-  const { isOpen } = useReasoning();
-
-  return (
-    <>
-      <BrainIcon className="size-4 shrink-0" />
-      {isStreaming ? (
-        <span className="min-w-0 flex-1 truncate text-left">{latestLine(reasoning)}</span>
-      ) : (
-        <span>Thought for a few seconds</span>
-      )}
-      <ChevronDownIcon
-        className={cn("size-4 shrink-0 transition-transform", isOpen ? "rotate-180" : "rotate-0")}
-      />
-    </>
-  );
-}
+import { buildTurns, findToolResult, parseToolArgs } from "@/lib/agui-messages";
 
 export default function Home() {
   const { messages, status, sendMessage } = useAgentChat();

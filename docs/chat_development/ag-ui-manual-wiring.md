@@ -1,10 +1,12 @@
 # Nối tay endpoint `/agent` thay vì dùng helper có sẵn
 
+> Quyết định hiện hành 26/10/2026: dùng `from ag_ui_langgraph import LangGraphAgent` để emit AG-UI, `EventEncoder` encode SSE. Không dùng CopilotKit; chỉ tham khảo input/output API. Các snippet dưới mô tả endpoint hiện tại, chưa phải detached-worker implementation.
+
 ## Vấn đề
 
 `ag_ui_langgraph` cung cấp sẵn `add_langgraph_fastapi_endpoint(app, agent, path)` — một dòng là xong, tự động đăng ký route AG-UI cho LangGraph agent. Đây là cách "chuẩn" được gợi ý trong docs của thư viện.
 
-Nhưng yêu cầu thực tế: về sau cần thêm **custom authentication/authorization** cho endpoint này (xác thực user, kiểm tra quyền trước khi cho chạy agent). Helper tiện lợi kia không để lộ chỗ nào để chèn một FastAPI `Depends(...)` vào route — nó tự tạo route bên trong, mình không kiểm soát signature của handler.
+Nhưng yêu cầu thực tế: về sau cần thêm **custom authentication/authorization** cho endpoint này (xác thực user, kiểm tra quyền trước khi cho chạy agent). Ở phiên bản thư viện local đã đọc, helper nhận `**kwargs` và có thể chuyển `dependencies=[Depends(...)]` vào route; vì vậy không phải helper hoàn toàn không hỗ trợ auth. Dự án vẫn nối tay để nhận principal trong signature, kiểm soát ownership, queue, subscribe/replay và stop lifecycle theo application contract.
 
 ## Giải pháp
 
@@ -47,3 +49,10 @@ async def agent_endpoint(
 ```
 
 Đánh đổi: mất vài dòng boilerplate so với gọi helper 1 dòng, đổi lại toàn quyền kiểm soát route — đáng giá vì auth là yêu cầu đã biết trước, không phải đoán.
+
+
+## Áp dụng cho worker và reconnect
+
+Trong thiết kế đích, worker sở hữu `LangGraphAgent.run(validated_input)` và consume events dù browser đã rời đi. Shared publisher lưu các BaseEvent và cập nhật live projection; HTTP run handler chỉ đọc output, dùng EventEncoder để trả SSE. Không giữ graph execution trong HTTP generator như snippet hiện trạng khi cần sống qua disconnect.
+
+Connect chỉ đọc snapshot + event tail, không gọi lại LangGraphAgent.run(). Restore/title events dùng model chính thức ag_ui.core; không tự implement mapper native graph-to-AG-UI. Dùng wrapper không tự tạo queue, distributed ownership hoặc replay storage.
