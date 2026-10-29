@@ -1,45 +1,63 @@
 # agent-backend
 
-FastAPI + LangGraph backend. Runs a LangGraph ReAct-style agent (via `langchain.agents.create_agent`) behind an [AG-UI protocol](https://docs.ag-ui.com) endpoint, streamed over SSE, using an OpenRouter-hosted model through [`langchain-openrouter`](https://pypi.org/project/langchain-openrouter/)'s `ChatOpenRouter`.
+FastAPI + LangGraph backend for the chat agent. The agent (`langchain.agents.create_agent`, OpenRouter model through `langchain-openrouter`) is exposed over the [AG-UI protocol](https://docs.ag-ui.com) as Server-Sent Events. Design, decisions and sprint plan: [`docs/chat_development`](../docs/chat_development/README.md). Coding rules: [`AGENTS.md`](AGENTS.md).
 
 ## Setup
 
+Requires `uv`, Docker (or a PostgreSQL 18 you can create databases on) and [`dbmate`](https://github.com/amacneil/dbmate). Tests also need `initdb`, `pg_ctl` and `pg_dump` on `PATH`.
+
 ```bash
-cp .env.example .env
-# edit .env and set OPENROUTER_API_KEY (get one at https://openrouter.ai/keys)
+cp .env.example .env            # set OPENROUTER_API_KEY
 uv sync
+docker compose up -d postgres   # from the repository root; PostgreSQL 18 on 5433
+
+# From the repository root: apply migrations, then let the LangGraph saver
+# create its tables in schema langgraph_checkpoints.
+dbmate --env-file backend/.env -e DBMATE_DATABASE_URL --no-dump-schema up
+uv run --directory backend db checkpoints
 ```
 
 ## Run
 
 ```bash
-uv run uvicorn agent_backend.main:app --reload --port 8000
+uv run uvicorn app.main:app --reload --port 8000
 ```
 
-- `GET /health` — liveness check, no API key needed.
-- `POST /agent` — AG-UI endpoint. Body is an AG-UI `RunAgentInput`; response is an AG-UI event stream (`text/event-stream`): `RUN_STARTED`, `TEXT_MESSAGE_*`, `TOOL_CALL_*`, `REASONING_*`, `STATE_SNAPSHOT`, `MESSAGES_SNAPSHOT`, `RUN_FINISHED`/`RUN_ERROR`.
+- `GET /health` — liveness.
+- `POST /agent` — legacy AG-UI endpoint taking a raw `RunAgentInput`; the conversation API under `/api/v1` replaces it in sprint S2.
 
-`OPENROUTER_REASONING_EFFORT` (`.env`) turns on model "thinking"/reasoning tokens when the chosen model supports them (set it to an empty string to turn it off). OpenRouter streams this as `delta.reasoning`, which the base `langchain-openai` client doesn't parse — `langchain-openrouter`'s `ChatOpenRouter` does, surfacing it as `REASONING_START/MESSAGE_CONTENT/END` events that the frontend renders in a collapsible "Thought for..." block.
+`OPENROUTER_REASONING_EFFORT` turns on model reasoning when the model supports it (empty turns it off); it is streamed as `REASONING_*` events.
 
 ## Structure
 
-- `src/agent_backend/agent_graph.py` — builds the LangGraph agent (model, tools, checkpointer).
-- `src/agent_backend/agui.py` — wraps the compiled graph as an `ag_ui_langgraph.LangGraphAgent`.
-- `src/agent_backend/main.py` — FastAPI app, CORS, and the `/agent` route.
-- `src/agent_backend/config.py` — environment variables (OpenRouter key/model/base URL, CORS origins).
-
-## AG-UI wiring
-
-`/agent` is wired by hand in `main.py` (not via `ag_ui_langgraph.add_langgraph_fastapi_endpoint`), so an auth/authz dependency can be added later, e.g.:
-
-```python
-@app.post("/agent")
-async def agent_endpoint(
-    input_data: RunAgentInput,
-    request: Request,
-    user: User = Depends(get_current_user),
-):
-    ...
+```text
+src/app/
+├── main.py                 app, middleware, routers
+├── config/settings.py      environment (pydantic-settings)
+├── database/
+│   ├── session.py          async engine (psycopg 3), search_path chat_app
+│   └── generated_tables.py generated, never edited
+├── common/                 errors, request id, logging
+├── modules/agent/          LangGraph graph, AG-UI wrapper, legacy /agent route
+└── tools/database.py       `uv run db export | generate | checkpoints`
 ```
 
-The graph uses `InMemorySaver` as its checkpointer (required for AG-UI's `thread_id`-based runs/interrupts) — swap it for a persistent saver (Postgres/Redis) before deploying, since it currently resets on restart and doesn't work across multiple workers.
+## Database workflow
+
+Migrations are plain SQL in `../db/migrations`, run by dbmate (see AGENTS.md section 29). After a schema change, regenerate both generated files **from a freshly migrated database**:
+
+```bash
+uv run db export --clean   # ../db/schema/schema.sql
+uv run db generate         # src/app/database/generated_tables.py
+```
+
+## Checks
+
+```bash
+uv run ruff check src tests
+uv run ruff format --check src tests
+uv run pyrefly check
+uv run pytest
+```
+
+Tests start a disposable PostgreSQL cluster and load `db/schema/schema.sql`; `tests/integration/test_migrations.py` replays every migration and fails if that file drifts.

@@ -58,3 +58,8 @@ Loại: `BẮT ĐẦU`, `KẾT THÚC`, `LỖI`, `SỬA`, `THAY ĐỔI`, `QUYẾT
 | 29/10/2026 | — | RỦI RO | RR-10, RR-11 | Runner trong process; access token hết hạn với stream | — |
 | 29/10/2026 | — | QUYẾT ĐỊNH | QD-14, TD-005 | File S3 theo mẫu storage của hr-ai | — |
 | 29/10/2026 | — | QUYẾT ĐỊNH | QD-15, QD-16 | Người dùng chốt runner trong process (Q-06); uỷ quyền quyết định nhỏ, tự commit mỗi sprint, chỉ test phần liên quan | — |
+| 29/10/2026 | S0 | BẮT ĐẦU | — | Bắt đầu Sprint 0 trên nhánh `chat` | CH-S0-DOC-01 |
+| 29/10/2026 | S0 | QUYẾT ĐỊNH | QD-17 | psycopg 3 cho cả SQLAlchemy và saver | CH-S0-BE-02 |
+| 29/10/2026 | S0 | THAY ĐỔI | TD-006 | PostgreSQL dev bằng compose; chi tiết baseline và công cụ database | CH-S0-DB-01, BE-03 |
+| 29/10/2026 | S0 | RỦI RO | RR-12 | Lỗi lint có sẵn trong component vendor | CH-S0-FE-01 |
+| 29/10/2026 | S0 | KẾT THÚC | — | Xong 9/9 task; backend 8 test, frontend 14 test xanh | — |

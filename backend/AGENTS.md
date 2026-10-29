@@ -83,6 +83,18 @@ Phạm vi áp dụng:
 
 Nếu một thư mục con có AGENTS.md riêng, file gần code nhất được ưu tiên cho phần việc trong thư mục đó. Các quy tắc ở file cha vẫn có hiệu lực nếu file con không ghi đè rõ ràng.
 
+### Ghi đè cho dự án chat
+
+File này lấy từ quy chuẩn chung; các điểm dưới đây ghi đè cho repository chat (quyết định ở `docs/chat_development/nhat-ky/quyet-dinh.md`). Khi mâu thuẫn, mục này thắng.
+
+- **Tenant là workspace (QD-10).** Dữ liệu chat cô lập theo `workspace_id` (workspace cá nhân hoặc workspace của tổ chức). Mọi quy tắc ghi "organization_id" ở mục 2, 11, 16, 33 áp cho `workspace_id` với bảng có cột này. Quyền vào workspace tổ chức kiểm qua `organization_members` đang hoạt động ở mỗi request. Chat còn riêng tư theo `owner_user_id`: Owner/Admin/Superuser không tự đọc chat của người khác.
+- **Schema PostgreSQL.** Bảng ứng dụng nằm trong schema `chat_app`; kết nối dùng `search_path=chat_app,public` (`database/session.py`). Schema `langgraph_checkpoints` do saver LangGraph quản lý qua `uv run db checkpoints`; không viết DDL hay FK vào đó, không select từ repository.
+- **Driver.** SQLAlchemy và saver cùng dùng psycopg 3 (`postgresql+psycopg://`) để lúc pause ghi checkpoint và message trên cùng kết nối (QD-17).
+- **Module nền tảng** của dự án: `auth`, `users`, `workspaces`, `organizations`, `members`, `authorization`. Không có `organization_units`; các module tuyển dụng trong ví dụ không tồn tại. Schema chat có `organization_invitations`, nên lời mời tổ chức thuộc module `members` (S6), thay cho ghi chú "không có module invitations" ở mục 6.
+- **Thực thi agent.** Lượt trả lời chạy bằng runner trong process backend, không dùng Celery (QD-15). Celery ở mục 3 và 18 chỉ áp dụng khi có QD mới.
+- **Nhật ký thao tác** (mục 22, `activity_logs`, `AUDIT_POLICY`): **chưa áp dụng**, vì schema chat chưa có các bảng đó. Không tự thêm khi chưa có QD.
+- **Hạ tầng dev.** `compose.yaml` ở gốc repository chạy PostgreSQL 18 (cổng 5433).
+
 ## 2. Tuyên ngôn kiến trúc
 
 > **Scope:** 15 nguyên tắc kiến trúc bất biến định hình ranh giới domain, tenant isolation và database workflow.

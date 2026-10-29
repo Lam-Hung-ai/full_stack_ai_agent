@@ -1,0 +1,21 @@
+# Local development services. Redis (sprint S5) and RustFS (S7) join later.
+services:
+  postgres:
+    image: postgres:18.0
+    environment:
+      POSTGRES_USER: agent
+      POSTGRES_PASSWORD: agent
+      POSTGRES_DB: agent_chat
+    ports:
+      # 5432 is often taken by a system PostgreSQL.
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent -d agent_chat"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:

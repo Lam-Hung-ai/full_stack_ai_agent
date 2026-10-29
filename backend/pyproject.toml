@@ -1,23 +1,64 @@
 [project]
 name = "agent-backend"
 version = "0.1.0"
-description = "Add your description here"
+description = "Chat agent backend: FastAPI + LangGraph behind the AG-UI protocol"
 readme = "README.md"
 authors = [
     { name = "Lam Hung", email = "lamhung13102005@gmail.com" }
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 dependencies = [
-    "ag-ui-langgraph>=0.0.47",
     "fastapi[standard]>=0.150.0",
-    "langchain>=1.4.6",
-    "langchain-core>=1.6.12",
-    "langchain-openrouter>=0.2.9",
-    "langgraph>=1.2.16",
+    "pydantic-settings>=2.16.1",
     "python-dotenv>=1.2.4",
+    "sqlalchemy[asyncio]>=2.0.44",
+    # One driver for SQLAlchemy and the LangGraph saver: pausing a run writes
+    # the checkpoint and the message on the same connection (database decisions, phase 4).
+    "psycopg[binary]==3.3.6",
     "uvicorn[standard]>=0.54.0",
+    # AG-UI and LangGraph are pinned exactly: the chat adapter depends on their
+    # lifecycle and checkpoint internals (risk RR-09 in docs/chat_development).
+    "ag-ui-protocol==1.0.0",
+    "ag-ui-langgraph==0.0.47",
+    "langgraph==1.2.16",
+    "langgraph-checkpoint==4.3.0",
+    "langgraph-checkpoint-postgres==3.2.0",
+    "langchain>=1.4.6",
+    "langchain-core==1.6.12",
+    "langchain-openrouter>=0.2.9",
 ]
+
+[project.scripts]
+db = "app.tools.database:main"
 
 [build-system]
 requires = ["uv_build>=0.12.9,<0.13.0"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "app"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pyrefly>=1.2.0",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.16.6",
+    "sqlacodegen>=4.0.4",
+]
+
+[tool.ruff]
+extend-exclude = ["src/app/database/generated_tables.py"]
+force-exclude = true
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.pyrefly]
+search-path = ["src", "."]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

@@ -2,7 +2,7 @@
 
 import { BrainIcon, ChevronDownIcon } from "lucide-react";
 import { useReasoning } from "@/components/ai-elements/reasoning";
-import { latestLine } from "@/lib/agui-messages";
+import { latestLine } from "../utils/agui-messages";
 import { cn } from "@/lib/utils";
 
 /**
