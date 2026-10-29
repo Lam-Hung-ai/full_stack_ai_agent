@@ -1,7 +1,11 @@
 import type { NextConfig } from "next";
 
+// The browser calls /api/v1 on the Next.js origin and Next forwards it to
+// FastAPI, so the refresh cookie (SameSite=Strict, path /api/v1/auth) stays
+// first-party. Server-only setting, not exposed to the browser.
+const backendUrl = process.env.BACKEND_URL ?? "http://localhost:8000";
+
 const nextConfig: NextConfig = {
-  /* config options here */
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {
@@ -11,6 +15,9 @@ const nextConfig: NextConfig = {
         as: "*.css",
       },
     },
+  },
+  async rewrites() {
+    return [{ source: "/api/v1/:path*", destination: `${backendUrl}/api/v1/:path*` }];
   },
 };
 

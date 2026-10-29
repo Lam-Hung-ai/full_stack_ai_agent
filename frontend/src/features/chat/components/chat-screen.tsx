@@ -29,7 +29,7 @@ export function ChatScreen() {
   const isBusy = status === "submitted" || status === "streaming";
 
   return (
-    <div className="mx-auto flex h-dvh w-full max-w-3xl flex-col p-4">
+    <div className="mx-auto flex h-full w-full max-w-3xl flex-col p-4">
       <Conversation>
         <ConversationContent>
           {turns.length === 0 ? (

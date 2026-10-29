@@ -18,6 +18,10 @@ def pg():
             DATABASE_URL=url.replace("postgresql://", "postgresql+psycopg://", 1),
             ALLOWED_ORIGINS='["http://localhost:3000"]',
             LOG_FORMAT="text",
+            JWT_SECRET="test-only-signing-key-at-least-32-bytes-long",
+            COOKIE_SECURE="false",
+            REGISTRATION_ENABLED="true",
+            AUTH_RATE_LIMIT="10000",
             # Never call a real model with the dev machine's key.
             OPENROUTER_API_KEY="",
         )
@@ -40,11 +44,15 @@ def db(pg: psycopg.Connection):
     tables = pg.execute(
         "SELECT schemaname, tablename FROM pg_tables WHERE schemaname = 'chat_app'"
     ).fetchall()
+    # Messages forbid TRUNCATE by trigger; replica mode skips triggers for
+    # this statement only, on the test superuser's connection.
+    pg.execute("SET session_replication_role = replica")
     pg.execute(
         sql.SQL("TRUNCATE {} CASCADE").format(
             sql.SQL(", ").join(sql.Identifier(schema, name) for schema, name in tables)
         )
     )
+    pg.execute("RESET session_replication_role")
 
     def query(statement: LiteralString, params: tuple | dict = ()) -> list[dict]:
         with pg.cursor() as cursor:

@@ -1,4 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  clearAccessToken,
+  getAccessToken,
+  onSessionExpired,
+  setAccessToken,
+} from "@/lib/auth/session";
 import { ApiError } from "./api-error";
 import { apiClient, apiUrl } from "./client";
 
@@ -71,5 +77,68 @@ describe("apiClient", () => {
       status: 0,
       code: "network_error",
     });
+  });
+});
+
+describe("apiClient with a session", () => {
+  afterEach(() => {
+    clearAccessToken();
+  });
+
+  it("attaches the access token", async () => {
+    setAccessToken("t1");
+    const fetchMock = vi.fn(async () => Response.json({}));
+    vi.stubGlobal("fetch", fetchMock);
+    await apiClient("/api/v1/users/me");
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(new Headers(init.headers).get("Authorization")).toBe("Bearer t1");
+  });
+
+  it("refreshes once for concurrent 401s and replays each request", async () => {
+    setAccessToken("old");
+    let refreshes = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        if (url.endsWith("/api/v1/auth/refresh")) {
+          refreshes += 1;
+          return Response.json({ access_token: "new" });
+        }
+        const auth = new Headers(init.headers).get("Authorization");
+        return auth === "Bearer new"
+          ? Response.json({ ok: true })
+          : Response.json({ error: { code: "invalid_access_token" } }, { status: 401 });
+      }),
+    );
+
+    const results = await Promise.all([apiClient("/api/v1/a"), apiClient("/api/v1/b")]);
+    expect(results).toEqual([{ ok: true }, { ok: true }]);
+    expect(refreshes).toBe(1);
+    expect(getAccessToken()).toBe("new");
+  });
+
+  it("reports an expired session when the refresh fails", async () => {
+    setAccessToken("old");
+    const expired = vi.fn();
+    const unsubscribe = onSessionExpired(expired);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ error: { code: "x" } }, { status: 401 })),
+    );
+    await expect(apiClient("/api/v1/a")).rejects.toMatchObject({ status: 401 });
+    expect(expired).toHaveBeenCalledOnce();
+    expect(getAccessToken()).toBeNull();
+    unsubscribe();
+  });
+
+  it("does not refresh for auth endpoints or anonymous requests", async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({ error: { code: "invalid_credentials" } }, { status: 401 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(apiClient("/api/v1/auth/login", { method: "POST" })).rejects.toMatchObject({
+      code: "invalid_credentials",
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 });

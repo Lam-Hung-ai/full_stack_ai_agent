@@ -6,6 +6,9 @@ from app.common.logging import configure_logging
 from app.common.request_context import RequestIdMiddleware
 from app.config.settings import get_settings
 from app.modules.agent.router import router as agent_router
+from app.modules.auth.router import router as auth_router
+from app.modules.users.router import router as users_router
+from app.modules.workspaces.router import router as workspaces_router
 
 configure_logging()
 
@@ -26,6 +29,9 @@ app.add_middleware(
 app.add_middleware(RequestIdMiddleware)
 
 api_router = APIRouter(prefix="/api/v1")
+api_router.include_router(auth_router)
+api_router.include_router(users_router)
+api_router.include_router(workspaces_router)
 app.include_router(api_router)
 app.include_router(agent_router)
 

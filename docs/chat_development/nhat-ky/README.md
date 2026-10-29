@@ -63,3 +63,10 @@ Loại: `BẮT ĐẦU`, `KẾT THÚC`, `LỖI`, `SỬA`, `THAY ĐỔI`, `QUYẾT
 | 29/10/2026 | S0 | THAY ĐỔI | TD-006 | PostgreSQL dev bằng compose; chi tiết baseline và công cụ database | CH-S0-DB-01, BE-03 |
 | 29/10/2026 | S0 | RỦI RO | RR-12 | Lỗi lint có sẵn trong component vendor | CH-S0-FE-01 |
 | 29/10/2026 | S0 | KẾT THÚC | — | Xong 9/9 task; backend 8 test, frontend 14 test xanh | — |
+| 29/10/2026 | S0 | PHÁT HÀNH | — | Commit Sprint 0 trên `chat` | `d8a6fc4` |
+| 29/10/2026 | S1 | BẮT ĐẦU | — | Bắt đầu Sprint 1 | CH-S1-DOC-01 |
+| 29/10/2026 | S1 | THAY ĐỔI | TD-007 | Route auth, users, workspaces; rewrite `/api/v1` qua Next | CH-S1-BE-02, FE-01 |
+| 29/10/2026 | S1 | LỖI | L-02, L-03 | Phiên bị thu hồi ngay sau đăng nhập; id trùng giữa hai form | CH-S1-FE-02 |
+| 29/10/2026 | S1 | QUYẾT ĐỊNH | QD-18 | Ân hạn 10 giây cho token refresh vừa xoay | CH-S1-BE-02 |
+| 29/10/2026 | S1 | SỬA | L-02, L-03 | Bỏ abort signal khi xoay token, xóa thay vì reset query session; `useId` cho form | CH-S1-FE-02 |
+| 29/10/2026 | S1 | KẾT THÚC | — | Xong 9/9 task; backend 28 test, frontend 29 test xanh; 5 kịch bản chạy thật đạt | — |

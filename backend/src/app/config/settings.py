@@ -25,6 +25,21 @@ class Settings(BaseSettings):
     # Fail fast when the pool is exhausted instead of hanging past proxy timeouts.
     db_pool_timeout: int = Field(default=10, ge=1)
 
+    jwt_secret: SecretStr = Field(min_length=32)
+    jwt_issuer: str = "agent-chat"
+    jwt_audience: str = "agent-chat-api"
+    access_token_minutes: int = Field(default=15, ge=1, le=60)
+    refresh_token_days: int = Field(default=30, ge=1, le=90)
+    #: A token rotated this recently may be presented again without counting as
+    #: theft: two tabs loading at once, or a request whose response was lost.
+    refresh_reuse_grace_seconds: int = Field(default=10, ge=0, le=60)
+    #: Self-service sign-up. Off by default: accounts come from an operator or
+    #: an organization invitation unless the deployment opts in.
+    registration_enabled: bool = False
+    cookie_secure: bool = True
+    #: Requests per minute per IP on /auth.
+    auth_rate_limit: int = Field(default=30, ge=1)
+
     allowed_origins: list[str] = ["http://localhost:3000"]
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     log_format: Literal["json", "text"] = "json"

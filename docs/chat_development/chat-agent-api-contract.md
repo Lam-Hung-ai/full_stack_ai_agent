@@ -36,7 +36,7 @@ Các path dưới đây tương đối với `/api/v1`.
 
 GET metadata và history tách riêng vì history có thể dài. Con trỏ nhánh đã lưu không thay parent tường minh trong request gửi; lựa chọn nhánh per-tab vẫn ở client.
 
-Folder, upload/download, share/copy, auth/workspace/RBAC dùng REST API riêng theo database đã chốt; chi tiết route/payload của các nhóm đó chưa chốt trong lần thảo luận này. Health endpoints thuộc vận hành service, không phải API agent discovery.
+Folder, upload/download, share/copy, auth/workspace/RBAC dùng REST API riêng theo database đã chốt. Đã có từ S1 (TD-007): `/auth/{register,login,refresh,session,logout,logout-all}`, `GET /users/me`, `GET /workspaces`, `GET /workspaces/{id}`; payload theo OpenAPI của backend. Các nhóm còn lại chốt khi tới sprint tương ứng. Health endpoints thuộc vận hành service, không phải API agent discovery.
 
 ## 3. Gửi câu hỏi mới
 

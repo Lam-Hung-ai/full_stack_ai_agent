@@ -9,6 +9,8 @@ Lỗi ở đây là **hành vi sai** so với quyết định đã chốt (datab
 | Mã | Mức | Tóm tắt | Phát hiện | Xác minh | Sửa ở | Trạng thái |
 | --- | --- | --- | --- | --- | --- | --- |
 | L-01 | Thấp | Use case C04 ghi backend chuyển tín hiệu stop theo `messageId + runId`; mục 5 còn "API dedupe" | Rà tài liệu 29/10 | Đã xác minh | TD-001 | Đã sửa |
+| L-02 | Cao | Sau đăng nhập bị đẩy về `/login`: `resetQueries` hủy request `/auth/session` đang chạy, proxy vẫn chuyển tới backend nên token đã xoay; request lặp mang cookie cũ bị coi là dùng lại, cả phiên bị thu hồi | Chạy thật S1, 29/10 | Đã xác minh | CH-S1-FE-02, CH-S1-BE-02 | Đã sửa (S1) |
+| L-03 | Thấp | Form đăng nhập và đăng ký dùng `id` cố định; Next giữ route trước ở trạng thái ẩn nên trùng `id`, nhãn bị gộp ("Email Email") | Chạy thật S1, 29/10 | Đã xác minh | CH-S1-FE-02 | Đã sửa (S1) |
 
 Giá trị cột *Xác minh*:
 - **Đã xác minh:** đã đọc code/tài liệu hoặc chạy thử và chắc chắn.
@@ -23,6 +25,15 @@ Giá trị cột *Xác minh*:
 - **Mong đợi:** stop theo conversation + assistant `messageId`, không body, không `runId` ([quyết định ID §7](../conversation-message-run-id-decisions.md#7-stop-theo-assistant)); tạm bỏ dedup ([API §9](../chat-agent-api-contract.md#9-xử-lý-mạng-đơn-giản-trong-phạm-vi-hiện-tại)).
 - **Đã sửa:** TD-001 (29/10/2026).
 - **Trạng thái:** Đã sửa.
+
+### L-02: Phiên bị thu hồi ngay sau đăng nhập
+- **Vị trí:** `frontend/src/features/auth/hooks/use-auth-mutations.ts` (`useLogin`), `use-session.ts`; `backend/src/app/modules/auth/service.py::_rotate`.
+- **Tái hiện:** đăng ký hoặc đăng nhập trên trình duyệt.
+- **Thực tế:** request `/auth/session` đầu `ERR_ABORTED` nhưng backend đã xoay token; request thứ hai nhận `401 refresh_reuse`, mọi token của họ phiên bị thu hồi.
+- **Mong đợi:** vào màn chat.
+- **Cách sửa:** không gắn abort signal cho request xoay token; `useLogin` xóa query session thay vì reset; backend cho ân hạn 10 giây với token vừa xoay (QD-18), áp cả trường hợp hai tab cùng tải trang.
+- **Test chặn tái phát:** `tests/api/auth/test_auth.py::test_token_presented_again_within_grace_keeps_the_session`.
+- **Trạng thái:** Đã sửa (S1).
 
 ## Mẫu ghi
 
