@@ -41,14 +41,14 @@ Search nội dung, nguồn/kết nối, memory, feedback và audit UI là featur
 | C01 | Viết một email/bản nháp, chat mới có tên | Hiện tại cho chat/text; title background cần cơ chế không ghi đè user trước khi bật |
 | C02 | Hỏi tiếp theo nhánh đang chọn | Hiện tại: context đi theo parent đã authorize, giữ câu cũ |
 | C03 | Đóng/mở trang giữa câu trả lời | Backend: worker tách HTTP, Redis snapshot + watermark + tail; không hứa khôi phục prefix khi Redis/worker mất |
-| C04 | Stop và giữ phần trả lời dở | Hiện tại cho status/partial; backend chuyển tín hiệu theo messageId + runId, ACK không đồng nghĩa đã dừng |
+| C04 | Stop và giữ phần trả lời dở | Hiện tại cho status/partial; stop theo conversation + assistant messageId, không body. pending/running dừng và cancelled giữ partial; requires_action hủy toàn lượt. ACK không đồng nghĩa đã dừng |
 | C05 | Retry mạng không nhân lượt, regenerate tạo phương án mới | Regenerate đã chốt. Hiện không tự retry mutation, lỗi mạng thì đọc trạng thái/connect; chưa bảo đảm dedup mọi submit. Identity/hash để mở rộng sau nếu cần |
 | C06 | Edit câu cũ, chọn nhánh khác hoặc copy chat | Hiện tại cho parent/sibling và copy snapshot; không exact native checkpoint fork theo branch |
 | C07 | Đổi tên thủ công thắng tên tự sinh | Backend: chưa chốt conditional update thay thế source/revision đã bỏ |
 | C08 | Hai tab giữ hai nhánh, không trộn context | Hiện tại có parent tường minh và busy qua active unique; state nhánh per-tab và integration test còn cần |
 | C09 | Pin/archive/folder, đọc trên thiết bị khác, tìm chat | Hiện tại cho tổ chức sidebar/history; search nội dung chưa thiết kế, không unread/read markers |
 
-Retry request cũ và regenerate mới là hai thao tác khác nhau. Public threadId, SQL messageId và wire runId theo [quyết định ID](conversation-message-run-id-decisions.md).
+Retry request cũ và regenerate mới là hai thao tác khác nhau. Public threadId (conversation) và SQL messageId theo [quyết định ID](conversation-message-run-id-decisions.md).
 
 ### File và dữ liệu
 
@@ -102,7 +102,7 @@ Với policy share toàn org hiện tại, nguồn Finance/HR hạn chế cần 
 
 ## 5. Hợp đồng cần hoàn thiện trước triển khai
 
-- API dedupe, public/native thread mapping, exact stop và background title.
+- Public/native thread mapping, phối hợp stop theo assistant message và background title.
 - Redis accumulated prefix + tail, gap/reset, authority writer và reconnect không gọi model.
 - Renderer activity user_interaction và context builder lấy user answer đúng một lần.
 - API auth cho history/list/start/connect/resume/download/share/copy; không tin client state/tools.

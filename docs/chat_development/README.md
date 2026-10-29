@@ -14,6 +14,11 @@ Cập nhật: **29/10/2026**. Backend FastAPI + LangGraph OSS + LangGraphAgent/E
 
 Đã xóa DDL/catalogue database cũ và các đoạn mâu thuẫn. Không còn một baseline schema thứ hai trong thư mục này. Các SQL từng giai đoạn trong database_decisions giữ nguyên làm lịch sử và dependency áp dụng; đọc cấu trúc cuối sau toàn chuỗi.
 
+## Kế hoạch và nhật ký
+
+- [Kế hoạch sprint](ke-hoach-sprint.md): lộ trình đề xuất S0 → S8, mốc, Definition of Done, nhánh/commit, nghi thức sprint. File từng sprint ở [sprints/](sprints/) (bắt đầu từ [mẫu](sprints/_mau-sprint.md)).
+- [Nhật ký dự án](nhat-ky/README.md): dòng thời gian chung, thay đổi (`TD`), lỗi (`L`), quyết định và câu hỏi (`QD`, `Q`), rủi ro (`RR`). Ghi khi phát sinh, chỉ thêm không sửa lịch sử.
+
 ## LangGraph và AG-UI
 
 - [Tham khảo API CopilotKit, dùng LangGraphAgent](copilotkit-agui-integration.md): ranh giới wrapper/worker/gateway, không thêm package CopilotKit.

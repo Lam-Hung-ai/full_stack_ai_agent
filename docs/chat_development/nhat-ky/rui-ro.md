@@ -1,0 +1,23 @@
+# Nhật ký rủi ro và nợ kỹ thuật
+
+Rà lại vào ngày đầu và ngày cuối mỗi sprint. Mỗi lần rà, cập nhật cột *Trạng thái* và *Lần rà gần nhất*.
+
+| Mã | Loại | Mô tả | Khả năng | Ảnh hưởng | Giảm thiểu | Chủ | Trạng thái | Lần rà gần nhất |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| RR-01 | Rủi ro | Worker chết giữa lượt: mất partial trong RAM/Redis, message kẹt `pending`/`running`, conversation không gửi tiếp được | Trung bình | Cao | Chấp nhận theo phạm vi (QD-07). Cần đường gỡ kẹt thủ công hoặc stop vẫn chuyển được `cancelled`; đo tần suất khi chạy thật | Dev BE | Chấp nhận | 29/10/2026 |
+| RR-02 | Rủi ro | Mất Redis khi đang sinh: partial chưa có trong PostgreSQL bị mất, reconnect không dựng lại được | Thấp | Trung bình | Chấp nhận; connect phải báo thiếu dữ liệu thay vì nối suffix vào prefix thiếu ([kiến trúc §5](../agent-chat-architecture.md#5-reconnect-và-nhiều-tab)) | Dev BE | Chấp nhận | 29/10/2026 |
+| RR-03 | Rủi ro | Không dedup submit (QD-06): request đến lại sau terminal tạo lượt trùng | Thấp | Thấp | Frontend khoá thao tác khi đang chờ, không tự retry; lỗi mạng thì đọc trạng thái/connect | Dev FE | Chấp nhận | 29/10/2026 |
+| RR-04 | Nợ kỹ thuật | `backend/AGENTS.md` và `frontend/AGENTS.md` lệch code hiện tại: cấu trúc `src/agent_backend` (không phải `src/app/modules`), cô lập `organization_id` (database dùng `workspace_id`), ví dụ module tuyển dụng; frontend chưa cài TanStack Query, Zustand, Zod, Vitest, chưa có `src/features/` | Chắc chắn | Trung bình | Đã chốt QD-09, QD-10, QD-13; xử lý trong S0 | PO, Dev | Theo dõi (xử lý ở S0) | 29/10/2026 |
+| RR-05 | Rủi ro | `HttpAgent.runAgent()` tự sinh `runId` phía client, còn contract để server cấp; override `requestInit` có thể chưa đủ để lifecycle SDK khớp `RUN_STARTED` của server | Trung bình | Trung bình | Viết spike/test cho ChatAgent ngay đầu sprint frontend; ghi `TD` nếu cần đổi cách dựng | Dev FE | Mở | 29/10/2026 |
+| RR-06 | Rủi ro | Proof checkpoint dùng assistant ID làm public `threadId`; mapping C1 public / A1 native chưa được kiểm chứng trong adapter | Trung bình | Cao | Test tích hợp riêng cho mapping ở sprint pause durable | Dev BE | Mở | 29/10/2026 |
+| RR-07 | Rủi ro | Đổi graph/version làm hỏng checkpoint đang `requires_action`; chưa có migration checkpoint | Thấp | Cao | Ghi `graph_version` trong metadata; kiểm tra tương thích trước resume; không deploy đổi graph khi còn action chờ mà chưa thử | Dev BE | Theo dõi | 29/10/2026 |
+| RR-08 | Rủi ro | Node chứa interrupt có thể chạy lại từ đầu khi resume: side effect đặt trước interrupt bị lặp | Trung bình | Trung bình | Đặt side effect sau interrupt hoặc làm idempotent; chỉ tool đọc ở giai đoạn đầu | Dev BE | Theo dõi | 29/10/2026 |
+| RR-10 | Rủi ro | Runner trong process (đề xuất Q-06): deploy hoặc restart mất lượt đang chạy; chạy nhiều process thì stop và connect chưa tới đúng process cho tới khi có Redis (S5) | Trung bình | Trung bình | Chạy một process backend tới S5; shutdown chờ lượt đang chạy trong hạn rồi finalize; stop luôn chuyển được `cancelled` ở database | Dev BE | Mở | 29/10/2026 |
+| RR-11 | Rủi ro | Access token hết hạn khi người dùng mở lại hoặc stream lâu: `ChatAgent` không tự retry mutation (QD-06) nên phải phân biệt 401 trước khi stream (refresh rồi gửi lại được) với lỗi sau khi stream bắt đầu | Trung bình | Thấp | Theo `apiStream` của hr-ai: refresh một lần khi 401 trước khi có body; test ở S2 | Dev FE | Mở | 29/10/2026 |
+| RR-09 | Rủi ro | Phiên bản SDK (`@ag-ui/client ^1.0.3`, `ag-ui-langgraph >=0.0.47`, `langgraph >=1.2.16`) chưa pin chặt; nâng bản có thể đổi `requestInit`, `connect`, `ResumeEntry` hoặc lifecycle | Trung bình | Trung bình | Pin phiên bản khi bắt đầu code; nâng SDK ghi `TD` nhóm `SDK` và chạy lại test adapter | Dev | Mở | 29/10/2026 |
+
+## Mẫu ghi
+
+```markdown
+| RR-xx | Rủi ro / Nợ kỹ thuật | <mô tả> | Thấp/TB/Cao/Chắc chắn | Thấp/TB/Cao/Nghiêm trọng | <giảm thiểu> | <chủ> | Mở/Theo dõi/Đã xử lý/Chấp nhận | dd/mm/yyyy |
+```
