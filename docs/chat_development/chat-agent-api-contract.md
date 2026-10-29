@@ -1,298 +1,130 @@
-# API cần có cho chat AG-UI — backend custom tham khảo CopilotKit
+# API chat AG-UI theo database đã chốt
 
-> Chốt ngày 26/10/2026: backend FastAPI custom + LangGraph OSS + `ag_ui_langgraph.LangGraphAgent` + AG-UI client hiện có. **Không dùng CopilotKit Runtime, React SDK, core hoặc Intelligence.** Source CopilotKit chỉ là tài liệu tham khảo. Chưa triển khai API mới.
-> **Lưu trữ production, đề xuất 27/10/2026:** [thiết kế mới](./production-data-storage-design.md) bổ sung journal commit trước SSE và conversation/branch/native-thread mapping. Transport run/connect/stop bên dưới giữ nguyên; field nhánh và ý nghĩa public thread ID phải được chốt cùng implementation, chưa được coi là đã hỗ trợ đầy đủ branching.
->
-> **Phạm vi phân quyền:** [tình huống sản phẩm và quyền tổ chức](./chat-use-cases-and-organization-access.md) bổ sung yêu cầu membership, chat/result visibility, source ACL và quyền từng tool action. Các kiểm tra này áp dụng cả history/connect/replay/export và worker thực thi, không chỉ POST run. Đây là yêu cầu thiết kế, chưa xác nhận implementation hỗ trợ.
-> Đây là contract thay thế bản Assistant/Thread/Run tham khảo Agent Server trước đó. Kiến trúc worker, Postgres native checkpoint/Store và Redis vẫn theo [thiết kế nền tảng](./langgraph-oss-agent-platform-design.md).
-> Quyết định transport: POST run trả AG-UI SSE; POST connect tự gửi snapshot + watermark rồi tail trong cùng response. Không có user feed toàn ứng dụng hoặc hai public endpoint `/realtime/*` trong phạm vi hiện tại.
-> Tham chiếu source: `/home/lamhung/code/CopilotKit`, commit `89629de0a26cb0965399c033894a2eed9bee52a2`, package runtime `1.80.0`. Phạm vi là backend chat tự triển khai; không cài CopilotKit Runtime hoặc SDK.
+Cập nhật: **29/10/2026**, Asia/Ho_Chi_Minh. Đây là contract để triển khai/refactor, chưa khẳng định các endpoint dưới đây đã tồn tại.
 
-## 1. Chọn API theo ba trách nhiệm
+Dùng FastAPI custom, LangGraph OSS, `ag_ui_langgraph.LangGraphAgent`, EventEncoder và frontend AG-UI hiện có. Không dùng CopilotKit runtime/SDK hoặc LangGraph Agent Server. Chỉ tham khảo cách chia run/connect/stop từ CopilotKit.
 
-1. **Execution:** AG-UI run, connect, stop; truyền messages/tools/state và lifecycle.
-2. **Conversation:** tạo chat, sidebar, tên, archive, xoá và transcript.
-3. **Recovery:** snapshot + watermark + tail khi reload, dựa trên shared storage.
+Nguồn chuẩn: [database](database-decisions.md), [ID](conversation-message-run-id-decisions.md), [kiến trúc](agent-chat-architecture.md). Không tạo bảng run/attempt, không yêu cầu conversation revision/title_source hoặc native thread theo branch.
 
-Nguồn event live bắt buộc là `from ag_ui_langgraph import LangGraphAgent`: worker consume `.run(validated_input)`, lưu các event AG-UI đã phát, gateway dùng `ag_ui.encoder.EventEncoder` để trả SSE. Không tự viết lại graph-event-to-AG-UI mapper. Tham khảo [phân chia trách nhiệm](./copilotkit-agui-integration.md).
+## 1. Nhóm API
 
-CopilotKit là tham chiếu method/path và cách gọi AG-UI, không phải toàn bộ API của nó đều cần cho chat này. Chỉ tham khảo contract; không cài hay chạy package CopilotKit. Không triển khai Agent Server REST chỉ để frontend dùng AG-UI. Không xây hai endpoint tạo run độc lập cùng thực thi một prompt.
+Các path tương đối với API base; không tạo hai implementation submit cùng thực thi một input.
 
-Các đường dẫn dưới đây tương đối với API base, ví dụ `/api`. FastAPI có thể phục vụ trực tiếp hoặc qua Next.js proxy. Không bắt buộc đặt tên base `/api/copilotkit` khi implementation là custom.
-
-## 2. Source CopilotKit xác nhận điều gì?
-
-| Quan sát | Bằng chứng local | Tác động tới dự án |
-|---|---|---|
-| Có run/connect/stop theo agent key | [fetch-router.ts](/home/lamhung/code/CopilotKit/packages/runtime/src/v2/runtime/core/fetch-router.ts:98) | Dùng làm cấu trúc execution API |
-| Thread list là GET, không phải POST search | [router threads](/home/lamhung/code/CopilotKit/packages/runtime/src/v2/runtime/core/fetch-router.ts:229) | Thay `POST /threads/search` bằng `GET /threads` |
-| Thread messages/events/state là ba tài nguyên khác nhau | [router inspect](/home/lamhung/code/CopilotKit/packages/runtime/src/v2/runtime/core/fetch-router.ts:163) | Không lấy events hoặc state làm transcript một cách mặc định |
-| Rename nhận `name`, có thể cập nhật `archived` | [handleUpdateThread](/home/lamhung/code/CopilotKit/packages/runtime/src/v2/runtime/handlers/intelligence/threads.ts:144) | Public title dùng field `name`, không bọc vào metadata tuỳ ý |
-| Thread subscribe trả join token | [handleSubscribeToThreads](/home/lamhung/code/CopilotKit/packages/runtime/src/v2/runtime/handlers/intelligence/threads.ts:183) | Không dùng route đó như SSE metadata của mình |
-| Stop có scope runId để tránh dừng nhầm run sau | [handle-stop.ts](/home/lamhung/code/CopilotKit/packages/runtime/src/v2/runtime/handlers/handle-stop.ts:15) | UI Stop luôn gửi runId đang xem |
-| Runtime discovery có agents và capability flags | [get-runtime-info.ts](/home/lamhung/code/CopilotKit/packages/runtime/src/v2/runtime/handlers/get-runtime-info.ts:163) | Dùng `/info` thay API authoring Assistants trong MVP |
-| Runner có run/connect/isRunning/stop | [agent-runner.ts](/home/lamhung/code/CopilotKit/packages/runtime/src/v2/runtime/runner/agent-runner.ts:79) | Backend cần shared execution service, không chỉ HTTP router |
-
-[Trang endpoint chính thức](https://docs.copilotkit.ai/backend/runtime-endpoints) là tham chiếu bổ sung. Source local được pin ở commit trên là bằng chứng cho các nhận xét cụ thể trong tài liệu này. Các route, payload extension, auth và retention dưới đây là thiết kế của dự án.
-
-Không copy mặc định local-store authorization hoặc nhánh Intelligence. Bản docs online và checkout có thể khác hành vi: ví dụ source stop hiện đã resolve identity/thread ở nhánh Intelligence; không dùng một mô tả security cũ để kết luận toàn bộ mọi version.
-
-## 3. Danh sách API đề xuất
-
-### 3.1. Execution và discovery
-
-| Method/path | Cần khi nào? | Contract |
-|---|---|---|
-| `GET /info` | Cần cho discovery/capabilities | JSON agent registry và tính năng thực sự hỗ trợ |
-| `POST /agent/{agentId}/run` | Cần để submit AG-UI input | Nhận RunAgentInput, enqueue durable run rồi trả SSE BaseEvent |
-| `POST /agent/{agentId}/connect` | Cần cho reload/reconnect bằng AG-UI adapter của mình | Attach thread, gửi accumulated snapshot + tail, không chạy prompt mới |
-| `POST /agent/{agentId}/stop/{threadId}` | Cần cho nút Stop | Durable stop intent, ưu tiên body `{runId}` |
-
-Đây là cấu trúc route của CopilotKit, không phải bốn endpoint bắt buộc của mọi implementation AG-UI. `/agent/{agentId}/run` có thể thay đường `/agent` hiện có khi refactor; giai đoạn migration chỉ proxy/alias về cùng service, không execute hai lần.
-
-### 3.2. Conversation và history
-
-| Method/path | Mức cần thiết | Nguồn/hành vi |
-|---|---|---|
-| `POST /threads` | Cần cho lifecycle chat rõ ràng | **Custom extension**, tạo owner mapping trước run |
-| `GET /threads?agentId=handy&limit=30&cursor=...` | Cần | Theo CopilotKit list route, pagination do backend quản lý |
-| `GET /threads/{threadId}` | Cần cho deep link/detail | **Custom extension**, thread summary và active-run summary |
-| `PATCH /threads/{threadId}` | Cần | Rename/archive, dùng `name`, `archived`, revision precondition |
-| `DELETE /threads/{threadId}` | Cần | Tombstone, cancel nếu cần, cleanup nền |
-| `GET /threads/{threadId}/messages?limit=30&before=...` | Cần | Transcript AG-UI messages; pagination/revision là extension |
-
-`POST /threads` và `GET /threads/{threadId}` **không phải** route create/get detail có sẵn trong fetch-router CopilotKit đã đọc. Chúng là bổ sung chủ động để quản lý ownership và chat chưa gửi prompt. Không giả rằng stock CopilotKit thread UI tự gọi hai extension này.
-
-Chỉ cần một cách archive: `PATCH {archived: true/false}`. Chưa cần thêm `POST /threads/{threadId}/archive` song song.
-
-### 3.3. Vận hành
-
-| Method/path | Hành vi |
+| Method/path | Trách nhiệm |
 |---|---|
-| `GET /health/live` | Process liveness |
-| `GET /health/ready` | Readiness theo service role |
+| GET /info | Agent cố định và capabilities thực sự đã triển khai |
+| POST /threads | Tạo conversation trong workspace đã authorize |
+| GET /threads | Sidebar theo user/workspace, pin/folder/archive, phân trang |
+| GET /threads/{threadId} | Metadata và summary assistant active nếu có |
+| PATCH /threads/{threadId} | Rename/pin/archive/folder theo allowlist backend |
+| DELETE /threads/{threadId} | Soft-delete theo policy; revoke shares nguồn |
+| GET /threads/{threadId}/messages | Lịch sử đúng parent path, cursor theo contract repository |
+| POST /agent/{agentId}/run | Start hoặc resume hợp lệ, trả AG-UI SSE |
+| POST /agent/{agentId}/connect | Read-only snapshot + tail, trả AG-UI SSE |
+| POST /agent/{agentId}/stop/{threadId} | Stop đúng message/invocation, JSON acknowledgement |
+| GET /health/live, /health/ready | Trạng thái service |
 
-Snapshot/recovery nằm trong POST connect. Không triển khai `/realtime/bootstrap`, `/realtime/events` hoặc user-feed transport adapter ở giai đoạn này. API upload/voice/feedback chỉ bổ sung khi có feature sản phẩm.
+agentId là registry key cấu hình, không phải tenant hoặc danh tính execution. Upload/share/copy dùng service theo database đã chốt; path chi tiết bổ sung khi triển khai feature, không tự chốt route ở tài liệu này.
 
-## 4. Contract execution đã chốt
+## 2. ID trên wire
 
-```text
-POST /agent/{agentId}/run
-  body: RunAgentInput
-  Accept: text/event-stream
-  response: SSE BaseEvent stream
+- threadId = conversations.id, ổn định suốt chat.
+- User/assistant SQL message có ID riêng.
+- runId riêng từng invocation start/resume; khác assistant message ID kể cả lần đầu.
+- Native checkpoint thread_id = assistant message ID; adapter ánh xạ public/native thread.
+- Protocol messageId/toolCallId trong content/events giữ riêng.
+- metadata.current_run_id giữ invocation hiện tại/gần nhất, không phải bảng run hoặc đầy đủ audit history.
 
-POST /agent/{agentId}/connect
-  body: input attach của AG-UI adapter phiên bản đã pin
-  Accept: text/event-stream
-  response: snapshot của thread được chọn rồi tail
-
-POST /agent/{agentId}/stop/{threadId}
-  body: {runId}
-  response: JSON acknowledgement của stop intent
-```
-
-`run` không trả `202 JSON` rồi yêu cầu browser tìm stream khác. Run handler nhận input, auth/idempotency, commit durable job và subscribe shared event feed để trả SSE trong chính response. Worker thực thi độc lập bằng LangGraphAgent.run(), disconnect chỉ đóng subscriber; HTTP route không tự consume native graph stream để emit một bộ event khác.
-
-`connect` là endpoint custom FastAPI, không phải CopilotKit Runtime handler. Client nối lại đúng thread/nhánh, nhận accumulated response đã sinh tới watermark W rồi chỉ nhận delta sau W. Không enqueue lại prompt, không gọi LangGraphAgent.run() hoặc LLM chỉ để đọc history.
-
-Frontend giữ `@ag-ui/client` hiện có. Plain HttpAgent một URL `/agent` không tự phát hiện route connect/stop: cần agent adapter nhỏ cho attach/detach/explicit stop, theo API của version được pin. Adapter này không phải CopilotKit và không cần xây user-feed multiplexing.
-
-### 4.1. Một stream cho chat đang chọn
-
-Run và connect là hai operation, không phải hai subscription text song song. Khi đổi thread hoặc bắt đầu run mới, detach consumer cũ đúng lifecycle rồi mở operation tương ứng. Chỉ một stream text hoạt động cho chat được chọn trong mỗi tab; nhiều tab có thể là nhiều subscriber độc lập.
-
-Title, tool và trạng thái của chat đang chọn dùng cùng AG-UI stream, title qua CUSTOM `thread.updated`. Không cam kết push realtime cho tất cả chat nền trong sidebar; sidebar lấy lại từ GET threads khi mở/chuyển chat hoặc refresh.
-
-### 4.2. Snapshot nhất quán trong connect
-
-1. Auth owner, agent binding và thread/nhánh.
-2. Đọc nhất quán public messages/state, partial prefix và watermark W từ shared live projection; hydrate durable history khi cần.
-3. Dùng models của ag_ui.core dựng restore events đúng schema/lifecycle, EventEncoder encode thành SSE; không chạy lại wrapper.
-4. Đọc shared Stream sau W và gửi các delta tiếp theo trong cùng HTTP response.
-5. Retention gap/epoch đổi thì dựng lại snapshot trong reconnect; không gửi suffix bị thiếu prefix.
-
-Active message phải giữ messageId. Không phát TEXT_MESSAGE_END chỉ vì vừa gửi prefix. Snapshot có thể dùng MESSAGES_SNAPSHOT/STATE_SNAPSHOT hoặc tái tạo active prefix bằng START + một CONTENT lớn; reducer/open-message bookkeeping phải được integration test, không mặc định mọi client version nhận snapshot là đủ.
-
-Snapshot và tail là bảo đảm do backend/adapter mình hiện thực. Không coi replay của InMemory runner hoặc checkpoint native tự đáp ứng atomic snapshot đang sinh.
-
-### 4.3. Title hoàn thành sau answer
-
-Khi còn stream, gửi CUSTOM update đã committed. Nếu title hoàn thành sau khi stream đã đóng, GET thread/GET threads trả title mới; UI có thể refresh metadata có giới hạn khi title còn pending. Không mở một global SSE chỉ vì title, không hứa mọi chat nền cập nhật tức thời.
-
-## 5. Wire DTO và quy tắc input
-
-### 5.1. Run
+Ví dụ RunAgentInput chuẩn:
 
 ```json
 {
-  "threadId": "thread-uuid",
-  "runId": "run-uuid",
+  "threadId": "conversation-uuid",
+  "runId": "invocation-uuid",
   "state": {},
-  "messages": [{"id": "user-message-uuid", "role": "user", "content": "Xin chào"}],
+  "messages": [{"id":"user-message-uuid","role":"user","content":"Xin chào"}],
   "tools": [],
   "context": [],
   "forwardedProps": {}
 }
 ```
 
-`agentId` là key cấu hình, hiện chỉ có `handy`; giữ để định tuyến nội bộ/mở rộng về sau, UI chưa cần bộ chọn agent. Nó không phải danh tính nhánh hoặc object runtime. Thread phải thuộc principal và agent binding hợp lệ. Native saver/Store hydrate server state; client state/messages không được ghi đè mọi dữ liệu đã lưu.
+Parent/target assistant/action binding phải được backend resolve/validate. Tên extension truyền thêm chúng trong request sẽ chốt với adapter; không dựa browser-supplied state để ghi đè canonical history hoặc mở tool.
 
-- Reconcile message IDs với durable transcript, chỉ nhận input mới và tool result/resume đã xác minh.
-- Không append toàn bộ history của payload vào checkpoint mỗi request.
-- Không cho arbitrary system message hoặc browser-supplied context nâng quyền tools.
-- Frontend tool result là input hợp lệ nếu khớp tool call đang chờ; không reject mọi role ngoài user một cách máy móc.
-- Ownership/tenant/credential namespace lấy từ authenticated server context.
-- Cùng `(tenant, owner, threadId, runId)` và payload chuẩn hoá tương đương là retry cùng operation; khác input phải conflict. Idempotency-Key nếu dùng thêm phải bind nhất quán với runId đó.
-- Hash input dùng schema-normalized fields và stable message/tool IDs, không đưa volatile transport cursor vào danh tính prompt.
-- Chỉ một invocation được mutate graph state của cùng thread. Duplicate retry attach lại run cũ, không tạo executor mới.
+## 3. Start và retry
 
-Các event trả cho AG-UI gồm `RUN_STARTED`, text/tool/state events và terminal lifecycle. Title dùng `CUSTOM` tên `thread.updated`, không tạo một event type chuẩn giả. Live events do LangGraphAgent emit; lưu BaseEvent trong envelope Redis có fence/revision/cursor. Gateway restore BaseEvent rồi EventEncoder.encode, không convert native LangGraph events lần nữa. Metadata title dùng CustomEvent của ag_ui.core vì đây là event nghiệp vụ ngoài graph.
+POST run trả SSE trong chính response, không yêu cầu browser chuyển sang một endpoint khác sau JSON ACK. Input được auth/authorize, reconcile stable message IDs và commit placeholder trước khi xác nhận đã nhận.
 
-### 5.2. Connect
+Worker consume LangGraphAgent độc lập HTTP subscriber. API subscribe shared output và encode bằng EventEncoder; không có mapper native graph-to-AG-UI thứ hai.
 
-Source [parseConnectRequest](/home/lamhung/code/CopilotKit/packages/runtime/src/v2/runtime/handlers/shared/agent-utils.ts:477) parse body qua RunAgentInput schema và đọc `lastSeenEventId`. Việc parse field này không chứng minh mọi runner đều dùng cursor; [runner interface](/home/lamhung/code/CopilotKit/packages/runtime/src/v2/runtime/runner/agent-runner.ts) không tự bảo đảm replay offset.
+Retry cùng operation dùng lại identity và payload đã chấp nhận; khác payload cùng identity phải conflict. Duplicate retry không tạo user/assistant/invocation mới. Regenerate là operation mới, tạo sibling assistant mới.
 
-Backend custom nên phân biệt `runId` của connect request với active execution ID từ server; connect **không enqueue một run mới**. Version/adapter quyết định chính xác shape connect input; không dùng một `{threadId}` tối giản rồi tuyên bố drop-in compatibility.
+Cơ chế idempotency key/hash/lifetime và binding với runId chưa triển khai; không tuyên bố current_run_id hoặc active unique đã tự giải quyết toàn bộ. Không tự thêm bảng run để triển khai API này.
 
-Snapshot + tail của mình cần watermark nhất quán và partial prefix. Plain native checkpoint state hoặc backlog compaction không đủ chứng minh yêu cầu này. Active message phải giữ messageId và lifecycle bookkeeping để delta sau snapshot không bị tạo bubble mới hoặc append hai lần.
+## 4. Pause/resume
 
-### 5.3. Stop
+- Graph interrupt: lưu partial content, action metadata và checkpoint/writes cùng transaction; SQL message requires_action.
+- Invocation có thể kết thúc bằng AG-UI interrupt outcome nhưng message chưa completed.
+- Người dùng trả lời gửi action_id/response qua phần input resume được SDK đã pin hỗ trợ; backend validate action và quyền hiện tại trước claim.
+- Claim chuyển running và current_run_id mới nguyên tử; response/activity được lưu trước execution.
+- Runtime mới resume checkpoint cùng assistant; không tạo SQL user message riêng cho câu trả lời bổ sung.
+- Pause tiếp tạo action_id mới. Không cho retry action cũ thực thi thêm lần nữa.
+- Hủy action làm message cancelled, giữ lịch sử và bỏ pending pointer. Duyệt từ chối tool có thể resume để assistant giải thích và completed.
 
-```http
-POST /agent/handy/stop/thread-uuid
-Content-Type: application/json
-```
+Payload resume chuẩn/extension và action_id binding phải được nối với frontend khi triển khai. Không nhận checkpoint pointer hoặc credential tùy ý từ client.
 
-```json
-{"runId": "run-uuid"}
-```
+## 5. Connect/reload
 
-Server kiểm tra owner, agent/thread membership và exact active run. Stop scope r1 không được dừng r2 vừa bắt đầu sau đó. Body sai key/JSON phải reject, không fallback thành stop thread-wide.
+POST connect không gọi LangGraphAgent.run()/LLM/tool. Public threadId vẫn là conversation, backend resolve message/lượt active.
 
-Contract custom đề xuất: `202 {accepted: true, runId, status: "cancel_requested"}` khi đang xử lý; `200 {accepted: false, runId, status: "already_terminal"}` nếu đã xong hoặc không còn là active run trong scope được phép. Không trả `stopped: true` chỉ vì đã ghi cancel intent. Status cuối đến qua AG-UI lifecycle hoặc feed metadata.
+1. Kiểm tra user/workspace/quyền đọc và scope.
+2. Đọc history PostgreSQL và live projection Redis theo contract nhất quán.
+3. Gửi accumulated snapshot kèm watermark, rồi tail sau watermark.
+4. Giữ stable message IDs; không append prefix hai lần hoặc END active message sớm.
+5. Gap/epoch đổi thì reset/hydrate phù hợp, không bỏ qua phần thiếu.
 
-Đây là response của backend custom; AG-UI adapter hiện có sẽ gọi explicit stop và đọc acknowledgement này, không dùng CopilotKit proxy. Detach/reload không gọi stop. Không lấy plain HttpAgent HTTP abort làm bằng chứng server đã cancel durable run.
+Nếu SDK cần runId cho request attach, đó là transport identity, không đổi execution current_run_id. Chỉ một consumer text cho chat đang chọn mỗi tab; detach consumer cũ khi chuyển chat. Không có global user feed hoặc public /realtime/* trong scope.
 
-## 6. Thread DTO theo kiểu CopilotKit
+Redis buffer còn thì hỗ trợ reconnect giữa câu. Không có cam kết cứu mọi token sau mất toàn bộ Redis/worker; PostgreSQL content được lưu ở các mốc terminal/pause. Proof mới kiểm chứng reload sau pause, chưa phải HTTP/Redis reconnect end-to-end.
 
-Dùng camelCase cho public DTO và `name` làm tên conversation; cột DB vẫn có thể là title. Ví dụ:
+## 6. Stop
 
-```json
-{
-  "id": "thread-uuid",
-  "name": "Thiết kế agent",
-  "agentId": "handy",
-  "archived": false,
-  "createdAt": "2026-10-26T07:00:00Z",
-  "updatedAt": "2026-10-26T07:01:00Z",
-  "revision": 5,
-  "activeRun": {"runId": "run-uuid", "status": "running"}
-}
-```
-
-Revision và activeRun là extension. GET thread trả metadata/summary, không dump internal graph state. GET list trả `{threads, nextCursor}`; sort ổn định `(updated_at, id)`, dedup khi sidebar nhận update realtime.
-
-`POST /threads` nhận `{agentId}` cùng optional `name`; trả `201` với DTO trên. Owner từ auth, server cấp ID. Retry create dùng Idempotency-Key scope owner+operation. Nếu custom UI muốn cấp ID trước khi POST, phải có cơ chế reservation/idempotency được xác định, không dựa client-generated ID làm quyền truy cập.
-
-```http
-PATCH /threads/thread-uuid
-If-Match: "5"
-Content-Type: application/json
-```
+Ví dụ body cho path chứa public conversation threadId:
 
 ```json
-{"agentId": "handy", "name": "Tên do người dùng đặt", "archived": false}
+{"messageId":"assistant-message-uuid","runId":"current-invocation-uuid"}
 ```
 
-`agentId` trong mutation, nếu nhận, chỉ để kiểm tra binding; không chuyển graph của thread qua agent khác. Allowlist `name/archived`; user rename đặt title source=user ở DB. Thiếu If-Match trả `428`, sai revision trả `412`. Auto-title task dùng conditional update để không ghi đè tên user.
+Xác minh ownership/scope, message thuộc conversation và exact current_run_id, rồi gửi tín hiệu đúng worker. Lệnh cũ không được dừng lượt resume/regenerate mới. HTTP abort/detach không tự cancel.
 
-DELETE trả `202` cho tombstone/cleanup nền. Xoá chat phải chặn run mới, xử lý run đang chạy và native persistence qua workflow idempotent, không xoá checkpoint dưới active writer.
+Acknowledgement chỉ nói request stop đã được nhận/chấp nhận hoặc lượt đã terminal; không báo đã dừng chỉ vì đã gửi tín hiệu. Trạng thái message cuối chỉ là completed/failed/cancelled; không thêm SQL cancel_requested/stopping ở tài liệu này. Durable cancel-intent/Redis coordination cần implementation contract riêng.
 
-GET messages trả `{messages, nextCursor}`; `messages` là AG-UI Message shape để hydrate client, còn cursor/revision là extension. Không trả DTO toolCalls rút gọn cho inspector rồi dùng nó như AG-UI Message chưa convert; hai schema phải có mapper nếu khác nhau.
+## 7. Conversation và history DTO
 
-## 7. Flow khi mở chat và gửi tin
+API có thể dùng name cho title, boolean archived/pinned suy từ timestamp, folderId từ folder_id. Không expose ORM/native checkpoint trực tiếp.
 
-```mermaid
-sequenceDiagram
-    participant FE as AG-UI client của mình
-    participant API as FastAPI custom
-    participant PG as Durable data
-    participant W as Detached worker
-    participant R as Redis projection và Stream
-    participant AG as LangGraphAgent
-    FE->>API: POST agent handy run với RunAgentInput
-    API->>PG: Commit durable run idempotently
-    PG->>W: Worker claim
-    W->>AG: run validated RunAgentInput
-    AG-->>W: AG-UI BaseEvent
-    W->>R: Store BaseEvent và update live projection
-    R-->>API: Shared events
-    API->>API: EventEncoder.encode stored events
-    API-->>FE: SSE AG-UI trong POST response
-    Note over FE,W: Browser đóng chỉ detach subscriber
-    W->>R: Tiếp tục sinh response
-    FE->>API: POST agent handy connect cho đúng thread
-    API->>R: Atomic read partial snapshot và W
-    R-->>API: Accumulated prefix và watermark
-    API-->>FE: AG-UI snapshot hoặc prefix events
-    API->>R: Read events sau W
-    R-->>API: Delta mới rồi live
-    API-->>FE: AG-UI tail cùng response connect
-```
+- Không bắt If-Match bằng conversation revision đã bị bỏ. Cơ chế precondition cho rename/auto-title chưa chốt thay thế.
+- Backend chỉ nhận các trường sửa được; không cho đổi owner/workspace hoặc current_run_id qua PATCH chung.
+- Sidebar theo user/workspace, keyset (updated_at,id); pin/folder theo index đã chốt.
+- History trả AG-UI shapes sau khi reconcile bundle và branch path. Không coi một SQL assistant row luôn bằng đúng một protocol message.
+- Activity user_interaction phải render response là lời user; context builder chuyển answered response thành HumanMessage đúng một lần.
+- Archive không xóa chat; folder một cấp và không cấp quyền chat.
+- Soft-delete chặn đọc/start mới và revoke shares nguồn. Backend xử lý execution đang sống theo workflow cần tích hợp; chưa có hard purge/export toàn hệ thống.
 
-Không có CopilotKit trong luồng runtime trên. Native checkpoint/Store vẫn do LangGraph quản lý. Redis là shared streaming view để API pod khác có thể attach; không cần sticky routing khi reconnect.
+## 8. Metadata, title và quyền
 
-Title task tự chạy từ prompt đầu; conditional update chống ghi đè tên user. History API phục vụ phân trang, không bắt buộc gọi thêm một public snapshot API trước connect.
+Title event có thể dùng CUSTOM thread.updated khi stream còn mở; sau đóng stream, đọc lại metadata từ GET thread/list. Không thêm global SSE chỉ vì title. Auto-title phải tránh ghi đè user rename nhưng cơ chế thay source/revision cần thiết kế trước khi bật.
 
-## 8. API không cần trong MVP
+List/history/start/resume/connect/stop/download/share/copy đều kiểm tra scope. Owner/Admin/Superuser không có bypass private chat. Role tool, source/file scope và identity provider được xác định ở server; UUID không thay authorization.
 
-| Endpoint/nhóm | Lý do bỏ hoặc để sau |
-|---|---|
-| `POST /threads/search` | Đã thay bằng GET threads query |
-| Public `POST /threads/{id}/runs` kiểu Agent Server | Không tạo thêm public submit path cạnh AG-UI run; queue service có thể là internal function |
-| `/assistants/*` authoring | MVP agent registry từ config, discovery qua info |
-| `GET /threads/{id}/events` | Endpoint CopilotKit này trả JSON event history, không phải SSE live; chỉ thêm cho inspect khi cần |
-| `GET /threads/{id}/state` | Chỉ thêm debug/shared-state use case rõ ràng; không thay live snapshot trong connect |
-| `/realtime/bootstrap`, `/realtime/events` | Đã bỏ khỏi phạm vi, connect chứa snapshot + tail |
-| `POST /threads/clear` | Không sao chép thao tác wipe local store vào production |
-| `POST /threads/subscribe` | CopilotKit dùng join token, không phải user SSE của mình |
-| `POST /threads/{id}/archive` | PATCH archived đã đủ, tránh duplicate API |
-| Inspector metadata/debug routes | Không cần cho người dùng chat thông thường |
-| Suggest/transcribe/upload/feedback | Chỉ thêm theo feature sản phẩm |
-| Store/memories HTTP, cron, A2A, MCP serving | Không cần để native LangGraph memory hoạt động |
+## 9. Nghiệm thu implementation
 
-Run list/get không bắt buộc cho UI cơ bản nếu thread summary, connect và stream đã có status. Có thể thêm admin/observability route sau; không cần copy mọi API run management của Agent Server.
+- Retry input không nhân message/execution; regenerate tạo sibling mới.
+- Thread public và native checkpoint mapping đúng; mọi lifecycle event thuộc đúng C1/Rn.
+- Connect/replay không gọi agent, snapshot/tail không mất hoặc trùng prefix.
+- Detached worker tiếp tục khi subscriber rời; stop nhắm đúng message/run.
+- Pending action sống qua reload; response/permission/action_id được revalidate, duplicate submit chỉ một claim.
+- Terminal outcome chỉ phát sau commit kết quả; interrupt không hiểu nhầm completed.
+- Không đưa raw state/secret vào public stream hoặc metadata có thể bị client sửa.
 
-## 9. Resume và ID mapping
-
-`threadId` là conversation/checkpointer identity. `runId` trên wire AG-UI là một protocol invocation có lifecycle riêng; continuation sau terminal interrupt dùng semantics của version đã pin. `attemptId` là retry nội bộ, logical turn ID nếu có là danh tính nghiệp vụ riêng.
-
-Không giữ custom REST `/resume` làm API browser mặc định rồi kỳ vọng CopilotKit tự gọi. Resume/HITL đi qua AG-UI input được version hỗ trợ và adapter chuyển sang native LangGraph Command. Nếu chỉ chat text ban đầu, defer approval endpoint tới khi có feature.
-
-Không dùng runId đã terminal để tạo thêm một lifecycle không có mapping. Với schema DB run-as-logical-turn ở thiết kế cũ, phải có invocation mapping trước khi triển khai frontend-tool continuation hoặc HITL.
-
-## 10. Info và phạm vi tương thích
-
-Dùng AppInfo của backend custom: agent registry, app/API version và capability run/connect/stop đã triển khai. Không giả CopilotKit RuntimeInfo và không cần phục vụ discovery của CopilotKit proxy vì không dùng proxy đó.
-
-Mục tiêu là backend custom lấy cảm hứng route, giữ AG-UI input/events; không triển khai CopilotKit UI/Runtime/Inspector/Intelligence. Chỉ advertise list/mutations/realtime capability khi endpoint, auth và response thực sự đáp ứng client tương ứng.
-
-Authz bắt buộc trên list/messages/run/connect/stop/patch/delete; opaque UUID không thay auth. Transcript, live view và Store đều phải đúng tenant/user scope.
-
-## 11. Tiêu chí nghiệm thu
-
-- POST run retry cùng identity không nhân run hoặc user input.
-- Live graph events chỉ do LangGraphAgent.run() emit; EventEncoder chỉ encode transport, không có mapper native thứ hai.
-- Connect/replay không gọi lại LangGraphAgent.run() và không execute LLM/tool.
-- POST run và POST connect đều trả AG-UI SSE, không dùng JSON ACK làm response tạo run của browser.
-- Reload không gửi prompt mới; snapshot prefix + tail không trùng text hoặc mất delta.
-- Chuyển thread/nhánh detach stream cũ, không phát terminal event của run A vào consumer run B.
-- Disconnect/detach không stop worker, nút Stop dừng đúng runId.
-- Sidebar/title rename thắng background title job.
-- Native context trim không xoá transcript UI.
-- Không tin client state/history/tool results để nâng quyền hoặc mutate checkpoint tuỳ ý.
-- User/tenant khác không list hoặc attach thread bằng ID.
-- Deployment nhiều pod sử dụng shared storage; in-memory runner không được coi là durable backend.
-
-Quyết định transport trên đã được người dùng chốt. Implementation và acceptance tests vẫn chưa được thực hiện; không có package CopilotKit nào được thêm vào dự án.
+Chưa triển khai các API mới. DDL và proof không thay HTTP auth, Redis reconnect, real provider hoặc load tests. Các feature RAG/memory/action receipts/audit nâng cao nằm trong [use cases](chat-use-cases-and-organization-access.md), chưa tự có trong schema hiện tại.

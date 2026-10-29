@@ -613,7 +613,7 @@ Không bên nào là hình mẫu để sao chép nguyên.
 
 ## 9. Áp dụng cho dự án
 
-Đối chiếu với [identity-chat-database-design.md](../chat_development/identity-chat-database-design.md) và [identity-chat-schema.sql](../chat_development/identity-chat-schema.sql).
+**Ghi chú 29/10/2026:** phần áp dụng bên dưới ghi nhận đánh giá trên thiết kế đề xuất cũ ngày 27/10, đã được thay thế và xóa theo yêu cầu người dùng. Các nhận xét về principal registry/branch index ở đây không phải quyết định hiện hành. Xem [database đã chốt giai đoạn 1–4](../chat_development/database-decisions.md).
 
 ### 9.1. Ba lựa chọn đã chốt được xác nhận thêm
 
@@ -650,7 +650,7 @@ Không bên nào là hình mẫu để sao chép nguyên.
 
 Nguyên tắc đã chốt *"xóa thread bằng native saver API, không tự ghi vào bảng native"* bị LibreChat mâu thuẫn trong thực tế: họ phải **tiêm `lc_owner` vào document do thư viện quản lý**, thêm hai khóa config `__librechat_checkpoint_owner` / `__librechat_legacy_checkpoint_id`, và thao tác `WRITES_IDX_MAP` trực tiếp — vì `@langchain/langgraph-checkpoint-mongodb` **không hỗ trợ xóa theo chủ sở hữu**.
 
-Xem [librechat.md §11](./librechat.md) và [langgraph-native-storage-findings.md](../chat_development/langgraph-native-storage-findings.md) §6.
+Xem [librechat.md §11](./librechat.md) và [ghi nhận native storage hiện hành](../chat_development/langgraph-native-storage-findings.md).
 
 ---
 

@@ -23,7 +23,7 @@ So sánh trực tiếp hai dự án: [openwebui-vs-librechat.md](./openwebui-vs-
 
 Phạm vi chính là dữ liệu phục vụ hội thoại: ownership, metadata/title, message, turn/run, tool, branch, context/memory, response đang sinh, reload, index và tính nhất quán. Các bảng quản trị, connector, billing và RAG chỉ được đề cập khi liên quan. Đây chưa phải bản DDL chốt cho dự án mình.
 
-Đề xuất tổng hợp cho dự án: [Thiết kế lưu trữ lâu dài cho production](../chat_development/production-data-storage-design.md). Tài liệu chọn Postgres app + native Saver/Store, bổ sung durable stream journal trước SSE và mô hình branch riêng; chưa triển khai hoặc benchmark.
+Thiết kế hiện hành cho dự án: [Database đã chốt giai đoạn 1–4](../chat_development/database-decisions.md). PostgreSQL giữ dữ liệu nghiệp vụ/checkpoint pause, Redis giữ live view/tail; không có bảng run/branch hoặc journal SQL bắt buộc trong baseline. Thiết kế tổng hợp cũ đã được thay thế.
 
 ## Đối chiếu nhanh
 
@@ -80,7 +80,7 @@ Các điểm dưới là định hướng rút ra từ khảo sát, chưa thay t
 - **Generation identity:** tham khảo LibreChat về việc phân biệt conversation lâu dài với generation đang chạy, kiểm tra generation khi attach/stop/publish/finalize và nối snapshot với live. Không dùng riêng conversation ID để nhận diện mọi lần chạy.
 - **Local cache và sync:** NextChat cho thấy lưu được partial ở trình duyệt chưa đủ cho reload rồi stream tiếp. Nếu có local cache, nó vẫn cần reconcile với state/cursor của server; snapshot sync không thay durable execution hoặc event protocol.
 
-Các lựa chọn đã thống nhất vẫn giữ nguyên: backend custom, không dùng CopilotKit; `from ag_ui_langgraph import LangGraphAgent` emit AG-UI; SSE run/connect; reload bằng snapshot + watermark + tail. Xem [API contract](../chat_development/chat-agent-api-contract.md) và [thiết kế nền tảng](../chat_development/langgraph-oss-agent-platform-design.md).
+Các lựa chọn đã thống nhất vẫn giữ nguyên: backend custom, không dùng CopilotKit; `from ag_ui_langgraph import LangGraphAgent` emit AG-UI; SSE run/connect; reload bằng snapshot + watermark + tail. Xem [API contract](../chat_development/chat-agent-api-contract.md) và [kiến trúc hiện hành](../chat_development/agent-chat-architecture.md).
 
 ## Cách đọc và mức kiểm chứng
 
@@ -88,4 +88,4 @@ Mỗi file có sơ đồ, bảng khóa/index và liên kết source tuyệt đ�
 
 Chưa chạy migration hoặc truy cập dữ liệu của các dự án nguồn. Chưa thực hiện EXPLAIN, load test, Redis failure hay kill-worker. Bộ tài liệu này phục vụ chọn mô hình và xác định invariant trước khi viết DDL của hệ thống mình.
 
-Review tiếp theo: [Mô hình bảng và truy vấn production](../chat_development/database-schema-review.md), đối chiếu use cases, ranh giới native LangGraph, catalogue bảng, constraints/indexes và tiêu chí nghiệm thu.
+Database sản phẩm dùng [bản đã chốt](../chat_development/database-decisions.md); [use cases](../chat_development/chat-use-cases-and-organization-access.md) phân biệt phạm vi hiện tại và mở rộng. Catalogue/migration đề xuất cũ không còn là baseline.

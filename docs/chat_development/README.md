@@ -1,26 +1,31 @@
-# Nhật ký phát triển (kinh nghiệm & quyết định kỹ thuật)
+# Tài liệu phát triển chat
 
-Tập hợp các ghi chú về những vấn đề thực tế gặp phải, cách chẩn đoán và giải pháp trong quá trình xây dựng `agent_project` (backend FastAPI + LangGraph, frontend Next.js + AI Elements, giao tiếp qua AG-UI protocol). Mục đích: để lần sau gặp vấn đề tương tự (hoặc đọc lại code) thì hiểu được **tại sao** code trông như vậy, không chỉ **cái gì**.
+Cập nhật: **29/10/2026**. Backend FastAPI + LangGraph OSS + LangGraphAgent/EventEncoder, frontend AG-UI hiện có. Không dùng CopilotKit runtime/SDK; source CopilotKit chỉ để tham khảo API.
 
-Quyết định hiện hành: **không dùng CopilotKit**, chỉ tham khảo cách thiết kế input/output API. Backend dùng `from ag_ui_langgraph import LangGraphAgent` để emit AG-UI, `EventEncoder` encode SSE; queue/replay/connect snapshot+tail do backend custom quản lý. Frontend giữ AG-UI client/UI hiện có.
+## Quyết định hiện hành
 
-- [`identity-chat-database-design.md`](./identity-chat-database-design.md) — thiết kế database cho người dùng, tổ chức, hội thoại và lịch sử, đối chiếu Open WebUI/LibreChat/Onyx: 7 quyết định thiết kế, DDL 19 bảng đã chạy sạch trên PG16, 9 bất biến kiểm bằng INSERT thật, access path đo trên 100.000 item và chi phí fork. Dùng bản này khi viết migration cho vùng identity/chat; vùng execution vẫn theo `database-schema-review.md`.
-- [`database-schema-review.md`](./database-schema-review.md) — review schema sau 32 use cases: catalogue bảng, branch paging, native LangGraph boundaries, indexes/access paths, transaction consistency và tiêu chí benchmark; ưu tiên bản này khi cụ thể hóa migration.
-- [`chat-use-cases-and-organization-access.md`](./chat-use-cases-and-organization-access.md) — 32 tình huống sử dụng: câu hỏi/hành động, UI, quyền tổ chức/tool/dữ liệu và dữ liệu cần lưu; ma trận quyền, sơ đồ kiểm tra tool và mô hình entity logic để làm đầu vào thiết kế database.
-- [`production-data-storage-design.md`](./production-data-storage-design.md) — đề xuất lưu trữ lâu dài sau nghiên cứu sáu dự án: Postgres app + native Saver/Store, journal response commit trước SSE, Redis có thể dựng lại, branch/native thread mapping, retention, backup và điều kiện nghiệm thu. Chưa triển khai; điều chỉnh lựa chọn Redis-only/optional journal và schema một thread/conversation của bản cũ.
-- [`../database_research/README.md`](../database_research/README.md) — nghiên cứu source và đối chiếu Codex, TrueForge, Onyx, Open WebUI, LibreChat, NextChat; ưu tiên bộ này khi nhận định schema cũ mâu thuẫn với snapshot mới.
-- [`chat-agent-api-contract.md`](./chat-agent-api-contract.md) — danh sách API hiện hành cho backend chat custom theo source CopilotKit: AG-UI run/connect/stop, GET threads, rename/history; đã chốt snapshot+tail trong connect, không dùng CopilotKit hoặc public realtime endpoints.
-- [`copilotkit-agui-integration.md`](./copilotkit-agui-integration.md) — ranh giới tham khảo API CopilotKit và implementation FastAPI/LangGraphAgent/EventEncoder; không còn ví dụ cài CopilotKit Runtime/provider.
-- [`langgraph-oss-agent-platform-design.md`](./langgraph-oss-agent-platform-design.md) — thiết kế chi tiết nền tảng tự vận hành dùng LangGraph OSS và native Postgres memory/storage, tham khảo kiến trúc Agent Server: durable queue, worker ownership, snapshot + SSE, recovery, title và multi-pod; không triển khai Agent Server.
-- [`langgraph-native-storage-findings.md`](./langgraph-native-storage-findings.md) — đo thật LangGraph trên Postgres và Redis: 6 bảng native sinh ra, tài liệu chính thức mô tả sai schema, checkpoint chứa **0 ký tự** response đang sinh dở, checkpoint phình ~18x transcript, native saver không nhận tham số `schema`.
-- [`../architecture/chat-schema-comparison.md`](../architecture/chat-schema-comparison.md) — đối chiếu schema với Onyx, TrueForge, Codex, open-webui, DeepSeek Harness; phát hiện lỗi mất event của outbox, transcript thiếu nhánh, `metadata_job` thiếu fencing.
-- [`chat-schema.sql`](./chat-schema.sql) — 9 bảng schema `app` cho chat (conversation, run, run_attempt, transcript_item, approval, tool_invocation, metadata_job, outbox_event, agent_definition); DDL đã chạy sạch trên PG17 và các invariant đã test.
-- [`agent-chat-architecture.md`](./agent-chat-architecture.md) — bản nền lịch sử ngày 23/10; phần global user feed đã được thay bằng connect snapshot+tail trong hai tài liệu hiện hành ở trên.
-- [`ag-ui-manual-wiring.md`](./ag-ui-manual-wiring.md) — nối tay `/agent` bằng LangGraphAgent + EventEncoder và phân biệt endpoint hiện tại với worker/replay đích.
-- [`reasoning-render-gap-bug.md`](./reasoning-render-gap-bug.md) — bug reasoning "có dữ liệu nhưng không hiển thị", cách tìm ra nguyên nhân thật (qua Network tab) thay vì đoán mò.
-- [`live-reasoning-summary.md`](./live-reasoning-summary.md) — dòng tóm tắt sống thay cho nhãn "Thinking..." tĩnh, để phân biệt model đang chạy hay bị treo.
-- [`raf-batched-reasoning-updates.md`](./raf-batched-reasoning-updates.md) — gộp nhiều lần `setState` liên tiếp vào 1 `requestAnimationFrame` khi reasoning stream quá nhanh.
-- [`math-rendering.md`](./math-rendering.md) — hành trình xử lý hiển thị công thức toán (singleDollarTextMath, delimiter `\(...\)`/`\[...\]`, so sánh với deepseek-harness, và kết luận không cần system prompt nhắc về toán).
-- [`npm-to-pnpm-migration.md`](./npm-to-pnpm-migration.md) — chuyển sang pnpm lộ ra 2 phantom dependency (`katex`, `remend`) mà npm's flat node_modules từng che giấu.
+- [Database đã chốt giai đoạn 1–4](database-decisions.md): **điểm vào chính** cho identity/workspace/quyền, conversation/message, file/share/copy và checkpoint. SQL gốc ở [database_decisions](../database_decisions/README.md).
+- [Quy ước conversation/message/run ID](conversation-message-run-id-decisions.md): public thread là conversation, native checkpoint thread là assistant message, runId riêng mỗi invocation, retry/reconnect và Stop đúng lượt.
+- [Kiến trúc chat hiện hành](agent-chat-architecture.md): PostgreSQL/Redis/worker/SSE theo phạm vi đã chốt và giới hạn vận hành.
+- [API contract](chat-agent-api-contract.md): start/resume/connect/stop, conversation/history DTO và phần backend chưa triển khai.
+- [32 use case và quyền tổ chức](chat-use-cases-and-organization-access.md): phân biệt hiện tại, backend cần hoàn thiện và feature để sau; không là catalogue bảng bắt buộc.
 
-Hai ghi chú `live-reasoning-summary.md` và `raf-batched-reasoning-updates.md` ban đầu nằm ở `frontend/docs/notes/` — gộp về đây để toàn bộ "kinh nghiệm phát triển" nằm một chỗ, tách khỏi code của từng app.
+Đã xóa DDL/catalogue database cũ và các đoạn mâu thuẫn. Không còn một baseline schema thứ hai trong thư mục này. Các SQL từng giai đoạn trong database_decisions giữ nguyên làm lịch sử và dependency áp dụng; đọc cấu trúc cuối sau toàn chuỗi.
+
+## LangGraph và AG-UI
+
+- [Tham khảo API CopilotKit, dùng LangGraphAgent](copilotkit-agui-integration.md): ranh giới wrapper/worker/gateway, không thêm package CopilotKit.
+- [Manual wiring endpoint](ag-ui-manual-wiring.md): snippet endpoint hiện tại và lý do kiểm soát auth/lifecycle bằng route custom.
+- [Native storage findings](langgraph-native-storage-findings.md): các quan sát Saver/Store/checkpoint, không phải DDL sản phẩm.
+- [Proof checkpoint sync/async](../experiments/langgraph-action-checkpoints/README.md): code tái lập và kết quả kiểm tra với database tạm/model mô phỏng.
+- [Khảo sát các dự án](../database_research/README.md): nguồn nghiên cứu, không thay quyết định sản phẩm hiện hành.
+
+## Kinh nghiệm frontend
+
+- [Reasoning có dữ liệu nhưng không hiển thị](reasoning-render-gap-bug.md).
+- [Dòng tóm tắt reasoning sống](live-reasoning-summary.md).
+- [Gộp cập nhật stream theo requestAnimationFrame](raf-batched-reasoning-updates.md).
+- [Hiển thị công thức toán](math-rendering.md).
+- [Chuyển npm sang pnpm](npm-to-pnpm-migration.md).
+
+Các ghi chú UI được giữ nguyên. Database và proof đã kiểm tra không có nghĩa backend auth, Redis reconnect, real LLM/MCP/S3, activity renderer hoặc production load đã được triển khai.

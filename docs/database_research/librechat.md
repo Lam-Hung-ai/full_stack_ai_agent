@@ -300,7 +300,7 @@ State cũng là LangGraph chuẩn: `Annotation.Root` với `messagesStateReducer
 
 Checkpointer tiêm vào lúc compile qua `compileOptions?.checkpointer`. Comment ở `Graph.ts:985-987` nói rõ mục đích: *"Graph instance, so the next Run gets its own checkpointer / the checkpointer was nulled before the caller could reach it."*
 
-Trùng với §8.2 của [thiết kế nền tảng](../chat_development/langgraph-oss-agent-platform-design.md): saver bind theo attempt, gắn chính connection giữ ownership lock, không trả connection còn lock về pool. Hai dự án đến cùng kết luận từ hai phía.
+Đây là ghi nhận về cách LibreChat cấp checkpointer cho Run. Dự án mình dùng [kiến trúc hiện hành](../chat_development/agent-chat-architecture.md) và [quy ước ID](../chat_development/conversation-message-run-id-decisions.md); không còn dùng bảng attempt/thiết kế ownership cũ như baseline bắt buộc.
 
 ### 11.4. Chỗ duy nhất họ bỏ qua cả hai tầng
 

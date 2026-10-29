@@ -1,0 +1,200 @@
+{
+  "generated_at": "2026-10-29T03:51:48.171825+00:00",
+  "result": "passed",
+  "checks": 30,
+  "python": "3.12.14 (main, Sep  1 2026, 14:16:52) [Clang 22.1.3 ]",
+  "versions": {
+    "langgraph": "1.2.16",
+    "langgraph-checkpoint": "4.3.0",
+    "langgraph-checkpoint-postgres": "3.2.0",
+    "langchain-core": "1.6.12",
+    "psycopg": "3.3.6",
+    "ag-ui-protocol": "1.0.0",
+    "ag-ui-langgraph": "0.0.47"
+  },
+  "scope": "Async LangGraph, AsyncPostgresSaver, real AG-UI adapter and SSE codec; fake streamed LLM; new process per invocation",
+  "limitations": [
+    "No real paid LLM/MCP/HTTP deployment",
+    "No subgraph/DeltaChannel conformance",
+    "No auto crash recovery or graph migrations"
+  ],
+  "results": [
+    {
+      "check": "async AG-UI normal completion writes no durable checkpoints"
+    },
+    {
+      "check": "real AG-UI adapter streams fake LLM text as SDK-valid SSE events"
+    },
+    {
+      "check": "SDK-validated stored bundle matches reduced SSE content"
+    },
+    {
+      "check": "async stream error without action writes no checkpoint"
+    },
+    {
+      "check": "LLM chunk error keeps partial text collected from SSE"
+    },
+    {
+      "check": "async question persists only interrupt boundary"
+    },
+    {
+      "check": "LLM-generated question is saved in message content at pause"
+    },
+    {
+      "check": "pending question widget is a valid AG-UI ActivityMessage"
+    },
+    {
+      "check": "empty answer rejected before claim and message remains waiting"
+    },
+    {
+      "check": "invalid input does not strand message in running"
+    },
+    {
+      "check": "reload after PostgreSQL restart preserves question and pending widget"
+    },
+    {
+      "check": "fresh async graph resumes with user answer as HumanMessage context"
+    },
+    {
+      "check": "answer stored in same assistant bundle with explicit user attribution, no duplicate widget"
+    },
+    {
+      "check": "no SQL user message needed; metadata preserves answer and content uses activity role"
+    },
+    {
+      "check": "stream resume does not duplicate question text or rerun question model"
+    },
+    {
+      "check": "async successful resume does not persist terminal checkpoint"
+    },
+    {
+      "check": "later-turn context rebuild keeps question, human answer and continuation in order"
+    },
+    {
+      "check": "JSON reload rebuilds identical context without checkpoint or metadata duplication"
+    },
+    {
+      "check": "old question answer cannot resume twice"
+    },
+    {
+      "check": "two async question rounds preserve both answers in same assistant content"
+    },
+    {
+      "check": "metadata retains both resolved question responses"
+    },
+    {
+      "check": "later-turn context includes both user answers exactly once from persisted activities"
+    },
+    {
+      "check": "AG-UI denial resumes without executing tool"
+    },
+    {
+      "check": "AG-UI approval executes authorized tool once"
+    },
+    {
+      "check": "role permission revoked while waiting prevents tool approval"
+    },
+    {
+      "check": "revoked permission leaves pending action intact and tool unexecuted"
+    },
+    {
+      "check": "cancel waiting action preserves content and clears resumable pointer"
+    },
+    {
+      "check": "cancelled action cannot resume"
+    },
+    {
+      "check": "waiting question blocks a new assistant turn"
+    },
+    {
+      "check": "concurrent duplicate answers allow exactly one resume"
+    }
+  ],
+  "samples": {
+    "question_pause": {
+      "status": "requires_action",
+      "content": [
+        {
+          "id": "lc_run--01a185c8-ca0b-73db-8879-445917c5272d",
+          "role": "assistant",
+          "name": "question_1",
+          "content": "Bạn muốn xuất kết quả dưới dạng nào?"
+        },
+        {
+          "id": "interaction:4ca953c9-bee8-49c9-bfce-144172298b24",
+          "role": "activity",
+          "activityType": "user_interaction",
+          "content": {
+            "action_id": "4ca953c9-bee8-49c9-bfce-144172298b24",
+            "kind": "user_question",
+            "status": "waiting",
+            "question_message_id": "lc_run--01a185c8-ca0b-73db-8879-445917c5272d"
+          }
+        }
+      ],
+      "metadata": {
+        "pending_action": {
+          "state": "waiting",
+          "action_id": "4ca953c9-bee8-49c9-bfce-144172298b24",
+          "checkpoint": {
+            "thread_id": "01a185c8-c66e-7ac5-b6fd-a037c8c07413",
+            "checkpoint_id": "1f1d34c0-6d6d-6f78-8001-c715cbc5ca84",
+            "checkpoint_ns": ""
+          },
+          "expires_at": null,
+          "interrupts": [
+            {
+              "payload": {
+                "kind": "user_question",
+                "question": "Bạn muốn xuất kết quả dưới dạng nào?",
+                "question_message_id": "lc_run--01a185c8-ca0b-73db-8879-445917c5272d"
+              },
+              "interrupt_id": "f0a73a48235663e250bb433a38f1aa6b"
+            }
+          ],
+          "graph_version": "async-agui-proof-v1"
+        }
+      }
+    },
+    "question_completed": {
+      "status": "completed",
+      "content": [
+        {
+          "id": "lc_run--01a185c8-ca0b-73db-8879-445917c5272d",
+          "role": "assistant",
+          "name": "question_1",
+          "content": "Bạn muốn xuất kết quả dưới dạng nào?"
+        },
+        {
+          "id": "interaction:4ca953c9-bee8-49c9-bfce-144172298b24",
+          "role": "activity",
+          "activityType": "user_interaction",
+          "content": {
+            "action_id": "4ca953c9-bee8-49c9-bfce-144172298b24",
+            "kind": "user_question",
+            "status": "answered",
+            "question_message_id": "lc_run--01a185c8-ca0b-73db-8879-445917c5272d",
+            "response": "CSV",
+            "actor_id": "01a185c8-bd70-7d20-aa3d-a9bf9586ba67"
+          }
+        },
+        {
+          "id": "lc_run--01a185c8-d2e3-7641-b015-28ea3ab09726",
+          "role": "assistant",
+          "content": "Đã nhận thông tin và hoàn thành yêu cầu."
+        }
+      ],
+      "metadata": {
+        "actions": [
+          {
+            "kind": "user_question",
+            "status": "answered",
+            "actor_id": "01a185c8-bd70-7d20-aa3d-a9bf9586ba67",
+            "response": "CSV",
+            "action_id": "4ca953c9-bee8-49c9-bfce-144172298b24"
+          }
+        ]
+      }
+    }
+  }
+}

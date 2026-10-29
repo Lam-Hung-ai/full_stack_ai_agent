@@ -1,0 +1,128 @@
+{
+  "generated_at": "2026-10-29T03:31:33.418124+00:00",
+  "result": "passed",
+  "checks": 27,
+  "python": "3.12.14 (main, Sep  1 2026, 14:16:52) [Clang 22.1.3 ]",
+  "versions": {
+    "langgraph": "1.2.16",
+    "langgraph-checkpoint": "4.3.0",
+    "langgraph-checkpoint-postgres": "3.2.0",
+    "langchain-core": "1.6.12",
+    "psycopg": "3.3.6"
+  },
+  "postgres": "PostgreSQL 18.6 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 16.2.1 20260810, 64-bit",
+  "execution": "fresh Python subprocess per invocation; PostgreSQL restart included",
+  "limitations": [
+    "No real LLM/MCP/HTTP/RBAC integration",
+    "Sync root graph and ordinary channels only",
+    "No subgraph/delta-channel/async conformance",
+    "No automatic crash recovery or TTL cleanup"
+  ],
+  "results": [
+    {
+      "check": "normal completion writes zero durable checkpoint/blob/write rows",
+      "counts": {
+        "checkpoints": 0,
+        "checkpoint_writes": 0,
+        "checkpoint_blobs": 0
+      }
+    },
+    {
+      "check": "error without action writes zero durable checkpoint rows",
+      "counts": {
+        "checkpoints": 0,
+        "checkpoint_writes": 0,
+        "checkpoint_blobs": 0
+      }
+    },
+    {
+      "check": "caught error preserves partial message content"
+    },
+    {
+      "check": "approval persists boundary checkpoint and pending writes",
+      "counts": {
+        "checkpoints": 1,
+        "checkpoint_writes": 1,
+        "checkpoint_blobs": 2
+      }
+    },
+    {
+      "check": "tool does not execute before approval"
+    },
+    {
+      "check": "message metadata alone stores action and checkpoint pointer with partial content"
+    },
+    {
+      "check": "waiting action has no automatic expiry"
+    },
+    {
+      "check": "PostgreSQL restart preserves paused message and checkpoint"
+    },
+    {
+      "check": "outsider cannot resume another user checkpoint"
+    },
+    {
+      "check": "fresh process resumes old non-expiring approval and executes tool once"
+    },
+    {
+      "check": "resume does not rerun completed prepare node"
+    },
+    {
+      "check": "successful resume adds no terminal checkpoint",
+      "counts": {
+        "checkpoints": 1,
+        "checkpoint_writes": 1,
+        "checkpoint_blobs": 2
+      }
+    },
+    {
+      "check": "completion clears pending action and retains last decision"
+    },
+    {
+      "check": "duplicate old approval cannot execute tool twice"
+    },
+    {
+      "check": "denial resumes graph without executing tool or cancelling whole answer"
+    },
+    {
+      "check": "second interrupt in same node creates new action and updates existing checkpoint writes"
+    },
+    {
+      "check": "previous question id cannot answer current question"
+    },
+    {
+      "check": "two interrupts inside one node preserve earlier response across fresh processes",
+      "answers": [
+        "alpha",
+        "beta"
+      ]
+    },
+    {
+      "check": "node code before interrupt runs again on each resume; not call-stack restoration"
+    },
+    {
+      "check": "two-question completion creates no extra durable checkpoint"
+    },
+    {
+      "check": "approval then question resumes same assistant message without repeating completed tool"
+    },
+    {
+      "check": "parallel sibling completed before pause"
+    },
+    {
+      "check": "pending writes preserve completed parallel sibling; no repeated side effect"
+    },
+    {
+      "check": "checkpoint and message waiting-state rollback together on failed pause commit"
+    },
+    {
+      "check": "requires_action remains active for one-assistant-per-conversation rule"
+    },
+    {
+      "check": "snapshot idle guard blocks conversation waiting for action"
+    },
+    {
+      "check": "no pending-actions application table created"
+    }
+  ]
+}
