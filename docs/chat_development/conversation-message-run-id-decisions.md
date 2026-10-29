@@ -1,223 +1,108 @@
-# Quyết định ID: conversation, message, AG-UI run và checkpoint
+# Quyết định ID: conversation, message và checkpoint
 
-Ngày chốt: **29/10/2026**, Asia/Ho_Chi_Minh.
+Cập nhật quyết định: **29/10/2026**, Asia/Ho_Chi_Minh.
 
-Trạng thái: **đã được người dùng đồng ý**. Đây là hợp đồng để điều chỉnh backend/frontend, PostgreSQL metadata và Redis. Chưa triển khai adapter/API ứng dụng hoặc đổi schema trong lần ghi tài liệu này.
+Trạng thái: đã chốt hướng thiết kế; chưa triển khai adapter/backend/frontend/Redis. Bản này thay quyết định trước lưu current_run_id và yêu cầu stop theo invocation. Đọc cùng [API](chat-agent-api-contract.md), [ChatAgent](chat-agent-client-decisions.md) và [database](database-decisions.md).
 
-Tài liệu này ưu tiên hơn các đoạn đồng nhất conversation/checkpointer thread hoặc run/message trong tài liệu cũ. Database nền giữ các quyết định [giai đoạn 1–4](../database_decisions/README.md); không thêm bảng runs/attempts/mapping chỉ để chứa các ID dưới đây.
+## 1. Hai ID nghiệp vụ chính
 
-## 1. Ba danh tính chính
-
-| Danh tính | Ý nghĩa | Vòng đời |
+| ID | Vai trò | Vòng đời |
 |---|---|---|
-| `conversations.id` | Một cuộc hội thoại, dùng trong sidebar, URL, history, share và quyền truy cập | Giữ nguyên trong suốt chat |
-| `messages.id` | Một câu hỏi user hoặc toàn bộ một lượt trả lời assistant | Giữ nguyên khi assistant pause/resume |
-| AG-UI `run_id` | Một lần start/resume tạo luồng event có lifecycle riêng | Mới cho mỗi lần thực thi mới; retry cùng request không tạo lại |
+| conversations.id | Danh tính chat, URL, sidebar, history và quyền | Suốt cuộc hội thoại |
+| messages.id | Danh tính user message hoặc toàn bộ một lượt assistant | Assistant giữ nguyên qua pause/resume |
 
-Các ID được dùng độc lập, không cố ý gán cùng giá trị. Tài nguyên database dùng UUID như schema đã chốt; trên AG-UI/API biểu diễn thành string. Dùng cùng kiểu UUID không có nghĩa cùng thực thể.
+Mỗi conversation chỉ có một assistant pending/running/requires_action tối đa. Các conversation khác nhau được phép thực thi độc lập. Resume claim trạng thái nguyên tử, không cho hai execution của cùng assistant chạy đồng thời.
 
-- **`RunAgentInput.thread_id = conversations.id`.**
-- **`RunAgentInput.run_id` khác `messages.id`**, kể cả lần chạy đầu tiên.
-- Một assistant message có thể tương ứng nhiều run_id vì có nhiều lần pause/resume.
-- User message có ID riêng, không đại diện một lần agent execution.
+- Public AG-UI RunAgentInput.thread_id = conversations.id.
+- Native LangGraph configurable.thread_id = assistant messages.id.
+- Regenerate tạo assistant sibling mới, không dùng lại message terminal.
+- Edit tạo user sibling mới và assistant mới, không sửa message terminal.
 
-Không thêm một lớp logical run riêng: message assistant chính là danh tính bền vững của lượt trả lời trong sản phẩm hiện tại.
+## 2. UUIDv7 thống nhất
 
-## 2. Ví dụ trọn vòng đời
+Mọi ID do ứng dụng tự tạo ở frontend và backend dùng UUIDv7: conversation, user/assistant message, các bản ghi database, action và ID protocol do adapter mình chủ động tạo.
+
+Frontend dùng helper UUIDv7 thống nhất, không dùng crypto.randomUUID() vì hàm đó tạo UUIDv4. String trong TypeScript phải được validate phù hợp ở backend; không dùng thời gian trong UUID thay permission hoặc parent topology.
+
+ID do provider/LangGraph tự sinh như tool-call/checkpoint/interrupt giữ theo contract thư viện; không sửa ID làm hỏng tham chiếu.
+
+## 3. runId chỉ thuộc AG-UI
+
+RunAgentInput và lifecycle AG-UI vẫn có runId theo SDK. Adapter sử dụng UUIDv7 khi ứng dụng chủ động tạo ID này. Có thể có ID riêng cho mỗi lần start/resume để đáp ứng lifecycle protocol.
+
+Ứng dụng không quản lý runId như một thực thể nghiệp vụ:
+
+- Không nhận runId trong DTO gửi/edit/regenerate/resume/stop.
+- Không lưu messages.metadata.current_run_id.
+- Không thêm cột run_id hoặc bảng runs/attempts.
+- Không dùng runId làm khóa nghiệp vụ Redis hoặc điều kiện chọn execution cho stop.
+- runId có thể xuất hiện trong event protocol, kể cả event được transport buffer, nhưng không là execution ledger trong database.
+
+Backend tạo RunAgentInput nội bộ từ DTO nghiệp vụ và dữ liệu authoritative. HttpAgent có thể tự dựng runId khi gọi pipeline; adapter cần kiểm chứng lifecycle với ID protocol server sử dụng. Không giả bỏ trường HTTP đã tự giải quyết tương thích SDK.
+
+## 4. Ví dụ pause/resume
 
 ```text
 Conversation C1
 ├─ User U1
 └─ Assistant A1
-    ├─ Start  R1 -> đang xử lý
-    ├─ Pause    -> hỏi người dùng, A1.requires_action
-    ├─ Resume R2 -> xử lý tiếp rồi chờ duyệt tool
-    ├─ Resume R3 -> hoàn tất A1
-    └─ A1.completed
+    ├─ running
+    ├─ requires_action -> hỏi người dùng
+    ├─ running         -> resume cùng A1
+    ├─ requires_action -> chờ duyệt tool
+    └─ completed       -> resume và hoàn tất cùng A1
 
-Regenerate từ U1
-└─ Assistant A2
-    └─ Start R4 -> A2.completed
+Regenerate từ U1 -> Assistant A2 (sibling A1)
 ```
 
-| Lần thực thi | AG-UI thread_id | AG-UI run_id | SQL assistant message | Native checkpoint thread_id |
-|---|---|---|---|---|
-| Start đầu | C1 | R1 | A1 | A1 |
-| Resume câu hỏi | C1 | R2 | A1 | A1 |
-| Resume duyệt tool | C1 | R3 | A1 | A1 |
-| Regenerate | C1 | R4 | A2 | A2 |
+Public thread luôn C1, checkpoint thread của A1 luôn A1. runId trong từng lifecycle protocol không thay danh tính A1 và không lưu riêng vào PostgreSQL.
 
-Pause không tạo conversation/message assistant mới. Regenerate tạo sibling mới cùng parent U1, giữ nguyên A1 và nội dung cũ. Các run R1/R2/R3 không phải ba dòng message.
+Pending action/interrupt, response/actor và checkpoint pointers vẫn nằm trong metadata/content đã chốt giai đoạn 4. Bỏ current_run_id không bỏ các thông tin phục vụ resume.
 
-## 3. AG-UI Message ID bên trong content
+## 5. Protocol message IDs trong content
 
-`messages.content` là bundle đầy đủ AG-UI Message[] cho một logical UI message đã chốt ở giai đoạn 2. Một dòng A1 có thể chứa nhiều protocol messages:
+Một SQL assistant A1 chứa bundle AG-UI Message[] gồm nhiều protocol messages như assistant text, tool result và activity user_interaction.
 
-```text
-SQL message A1
-├─ AG-UI assistant P1: text + tool call
-├─ AG-UI tool      P2: kết quả tool
-├─ AG-UI activity  P3: người dùng trả lời câu hỏi
-└─ AG-UI assistant P4: phần trả lời tiếp
+Mỗi protocol message có ID riêng; toolCallId nối lời gọi và kết quả tool. Không đổi tất cả ID thành A1 hoặc runId. Giữ tham chiếu ổn định khi lưu/hydrate/resume và remap khi copy conversation.
+
+Activity trả lời người dùng giữ actor/response; context builder chuyển answered response thành HumanMessage đúng một lần.
+
+## 6. Checkpoint và quyền
+
+Adapter ánh xạ public conversation C1 sang native assistant A1 trước khi gọi saver, nhưng lifecycle AG-UI vẫn mang public C1. Native checkpoint_ns/checkpoint_id do runtime quản lý. Backend tự resolve từ assistant/action đã authorize, không nhận pointer tùy ý từ client.
+
+Start dựng context theo parent path; resume lấy checkpoint của đúng assistant đang requires_action. Không lấy latest checkpoint toàn conversation thay cho pointer A1.
+
+## 7. Stop theo assistant
+
+```http
+POST /api/v1/conversations/{conversationId}/messages/{assistantMessageId}/stop
 ```
 
-P1/P2/P3/P4 có ID riêng. `TEXT_MESSAGE_START.messageId` dùng ID protocol message tương ứng; không tự đổi mọi messageId thành run_id hoặc A1.
+Không body. Backend kiểm tra ownership/workspace và message thuộc conversation.
 
-Giữ stable protocol IDs khi snapshot/reconnect/resume để client merge đúng và không nối lặp. Tool call ID cũng là danh tính riêng, nối toolCalls với toolCallId; không dùng run_id thay thế.
+- pending/running: yêu cầu dừng assistant hiện tại, giữ partial content và kết thúc cancelled.
+- requires_action: hủy toàn bộ lượt đang chờ, giữ content và vô hiệu pending pointer.
+- Terminal: không chạy lại hoặc tác động assistant khác.
 
-Activity user_interaction ghi rõ actor và response; khi dựng model context, response đã answered được ánh xạ thành HumanMessage, không diễn giải thành lời assistant.
+Stop nghĩa dừng assistant này kể cả vừa resume. Chấp nhận stop đến muộn có thể dừng lần resume hiện tại của cùng assistant. Regenerate có assistant ID mới nên stop A1 không dừng A2. Không có bảo đảm nhắm invocation cũ/mới.
 
-## 4. Hai nghĩa thread_id cần ánh xạ rõ
+HTTP abort/detach không phải lệnh stop. Từ chối tool nhưng tiếp tục assistant dùng resume chuẩn AG-UI.
 
-| Trường | Giá trị | Mục đích |
-|---|---|---|
-| Public AG-UI `thread_id` | Conversation C1 | Frontend mở và theo dõi đúng cuộc hội thoại |
-| Native LangGraph saver `configurable.thread_id` | Assistant message A1 | Cách ly checkpoint của lượt trả lời đang pause/resume |
-| Native `checkpoint_ns` | Namespace graph, root thường rỗng | Phân biệt graph/subgraph theo contract của runtime |
-| Native `checkpoint_id` | ID checkpoint do LangGraph quản lý | Chọn đúng state để tiếp tục |
+## 8. Redis và lỗi mạng
 
-Backend/adapter phải chuyển public C1 sang native A1 trước khi gọi graph/saver, đồng thời giữ event trả frontend thuộc public thread C1 và run hiện tại. Không lấy latest checkpoint toàn conversation rồi coi đó là state của A1.
+Scope nghiệp vụ Redis/worker theo workspace/conversation/assistant message. Claim trạng thái bảo đảm một assistant active mỗi conversation; không có bảo đảm exactly-once hoặc recovery tự động chỉ nhờ các ID này.
 
-Khi start lượt mới, dựng context từ parent path đã authorize. Khi resume action, nạp state từ checkpoint pointer của A1. Việc trùng tên thread_id ở hai API không cho phép truyền nguyên một giá trị qua mọi lớp mà không xét scope.
+Không expose cursor trong connect: luôn lấy snapshot mới nhất rồi tail nếu đang chạy. Sequence/watermark nội bộ dùng nối snapshot/tail, không dùng runId làm thứ tự.
 
-Client không được tùy ý quyết định namespace/checkpoint pointer. Backend resolve từ message và metadata thuộc conversation đã xác thực. UUID không phải bằng chứng quyền.
+Tạm bỏ requestId/Idempotency-Key và cơ chế dedup submit chuyên biệt; frontend không tự retry mutation, lỗi mạng thì đọc trạng thái/connect. Không hứa chống mọi submit trùng.
 
-## 5. PostgreSQL giữ gì
+Phần nhiều SSE/chuyển conversation/hiển thị chéo UI tạm hoãn, chưa chốt chính sách chỉ giữ một stream hoặc quản lý nhiều instance.
 
-Không thêm bảng runs. Giữ schema message có metadata ở giai đoạn 4:
+## 9. Nguồn nghiên cứu và phạm vi kiểm chứng
 
-```json
-{
-  "current_run_id": "R2",
-  "pending_action": {
-    "action_id": "Q1",
-    "state": "resuming",
-    "graph_version": "graph-v1",
-    "expires_at": null,
-    "checkpoint": {
-      "thread_id": "A1",
-      "checkpoint_ns": "",
-      "checkpoint_id": "CP1"
-    },
-    "interrupts": [
-      {"interrupt_id": "I1", "payload": {"kind": "user_question"}}
-    ],
-    "response": "CSV"
-  }
-}
-```
+Quan sát LibreChat trước đây: responseMessageId ổn định qua resume; native thread dùng conversationId cùng checkpoint namespace/generation scope riêng. Các field tên runId của SDK họ không mặc nhiên là AG-UI runId. Đây là tham khảo, không yêu cầu mình sao chép generation machinery.
 
-Đây là ví dụ khi R2 đã claim action Q1; không phải JSON đầy đủ của mọi trạng thái.
+[Proof checkpoint/AG-UI](../experiments/langgraph-action-checkpoints/README.md) đã thử pause/resume cùng message, lifecycle AG-UI, response có actor, cancel và concurrent answers. Proof từng dùng public thread_id = assistant ID; chưa kiểm chứng đầy đủ adapter C1 public/A1 native hoặc contract API/ChatAgent hiện tại.
 
-- `messages.id = A1`: cố định.
-- `metadata.current_run_id`: run_id của lần thực thi hiện tại/gần nhất. Chỉ backend cập nhật; thay đổi trong transaction claim/start.
-- `pending_action.action_id`: lần chờ cụ thể, khác run_id. Pause tiếp tạo action mới.
-- `pending_action.checkpoint.thread_id = A1`: phạm vi state thực thi, không phải public C1.
-- Response/decision đã giải quyết lưu theo contract metadata.actions/activity của giai đoạn 4.
-- Terminal A1 vẫn bất biến; không đổi current_run_id của A1 sau completed/failed/cancelled. Regenerate tạo A2.
-
-current_run_id không tự là lịch sử đầy đủ mọi invocation. Nếu cần audit toàn bộ hoặc recovery nhiều attempt sau này, phải thiết kế riêng theo nhu cầu; không hứa JSON này thay mọi dạng execution ledger.
-
-## 6. Start, pause, resume và reconnect
-
-### Start
-
-1. Authenticate user/workspace/conversation và kiểm tra parent tường minh.
-2. Tạo user U1, placeholder assistant A1 và nhận diện request theo cơ chế idempotency sẽ triển khai.
-3. Run R1 độc lập với A1; lưu current_run_id trong transaction start/claim.
-4. Public input có threadId C1, runId R1. Adapter bind native checkpoint thread A1.
-5. Stream events mang public lifecycle R1; protocol message IDs giữ danh tính riêng.
-
-### Pause
-
-Lưu content/attachments/file links đã có, metadata pending action và checkpoint/writes trong cùng transaction theo giai đoạn 4. Message A1 chuyển requires_action. Kết thúc invocation R1 bằng semantics interrupt của AG-UI đã pin; chưa đánh dấu A1 completed.
-
-### Resume
-
-1. User gửi action_id Q1 và response; backend kiểm tra action hiện tại, quyền và graph_version.
-2. Claim nguyên tử message đang requires_action; lưu response, gán current_run_id R2 mới, chuyển running.
-3. Runtime mới dùng checkpoint A1/namespace/checkpoint ID đã lưu.
-4. Public lifecycle mới có threadId C1, runId R2; nội dung tiếp tục thuộc A1.
-5. Không chèn lại user message U1 hoặc tạo assistant mới chỉ vì resume.
-
-### Reconnect/đọc lịch sử
-
-Reconnect là attach/read, không phải start/resume execution. Không tạo run mới, không đổi current_run_id và không gọi LLM/tool. Backend trả snapshot + tail cho conversation/message/lượt đang hoạt động, hoặc bản terminal đã lưu.
-
-Một connect request nếu SDK cần request runId riêng thì đó chỉ là danh tính transport của request attach; không được ghi nó đè current_run_id của execution. Cần phân biệt trong adapter/version được triển khai.
-
-## 7. Retry mạng khác thực thi mới
-
-“run_id mới mỗi lần thực thi” không có nghĩa mỗi HTTP retry đều được tạo run_id mới.
-
-- Retry cùng start request: dùng lại operation identity và payload đã chấp nhận; trả/attach R1 và A1 đã có.
-- Retry cùng action response: không claim thêm R3 vì R2 đã claim. Trả kết quả đã nhận hoặc trạng thái đang thực hiện theo API, không chạy lại.
-- Resume một pause mới thực sự: run_id mới, action_id phải khớp lần chờ mới.
-- Người dùng bấm regenerate: assistant message mới và run_id mới.
-
-Tài liệu này chốt ý nghĩa ID; cơ chế idempotency key/hash/lifetime cụ thể vẫn cần implementation contract. `current_run_id` hoặc unique một active assistant không tự đáp ứng chống submit trùng sau terminal.
-
-## 8. Redis và event routing
-
-Redis tổ chức dữ liệu live theo workspace/conversation/message và mang run_id của invocation. Ví dụ tên key minh họa, không phải Redis schema cuối:
-
-```text
-chat:{workspace:C1:A1}:head
-chat:{workspace:C1:A1}:snapshot
-chat:{workspace:C1:A1}:events
-```
-
-Cùng hash tag nếu dùng Redis Cluster và cần thao tác nguyên tử nhiều key. Metadata của snapshot/event envelope xác định conversation_id, assistant_message_id, run_id và cursor/epoch theo contract streaming sẽ thiết kế. Không tạo key mới rồi bỏ prefix cũ mỗi lần resume; snapshot nội dung A1 phải tiếp tục từ phần đã có hoặc hydrate PostgreSQL.
-
-- run_id giúp phân biệt writer/invocation và tín hiệu điều khiển cũ.
-- Message A1 giúp gom toàn bộ nội dung của nhiều lần resume.
-- Conversation C1 giúp định tuyến về chat đúng trên UI.
-- Không dùng run_id làm thứ tự event. Cần watermark/sequence riêng cho snapshot+tail.
-- Không loại bỏ mọi event lịch sử R1 chỉ vì current_run_id đã là R2; prefix hợp lệ vẫn cần để dựng content. Chặn writer cũ và replay event hợp lệ là hai việc khác nhau.
-- Check current_run_id đơn lẻ không phải cơ chế fencing hoặc bảo đảm exactly-once. Backend/Redis phải có kiểm tra quyền ghi nguyên tử theo contract thực thi.
-
-Redis không là nguồn quyền độc lập. Start/resume/stop/read vẫn kiểm tra scope và quyền authoritative.
-
-## 9. Stop phải nhắm đúng invocation
-
-Thông tin nhận diện stop gồm public conversation và **cả message_id lẫn run_id**. Ví dụ body minh họa:
-
-```json
-{
-  "messageId": "A1",
-  "runId": "R2"
-}
-```
-
-Backend xác minh A1 thuộc conversation/workspace đã authorize, đang thực thi và current_run_id đúng R2, rồi chuyển tín hiệu stop cho đúng execution. Worker/finalizer phải kiểm tra scope trước ghi kết quả.
-
-Stop R1 đến muộn khi A1 đang chạy R2 không được dừng R2. Stop A1 không được dừng A2 vừa regenerate. Đã terminal thì trả trạng thái phù hợp, không phát sinh execution mới.
-
-Hủy khi requires_action dùng action_id hiện tại để vô hiệu chính lần chờ đó; không coi một HTTP abort/detach là lệnh hủy. Chưa bổ sung durable cancel-intent schema hoặc auto-recovery trong tài liệu này.
-
-## 10. So với cách LibreChat
-
-Mã nguồn LibreChat đã đối chiếu cho thấy:
-
-- Native thread_id là conversationId.
-- runId truyền vào SDK agent là responseMessageId, giữ lại khi HITL resume.
-- streamId lookup theo conversationId.
-- Có job epoch/generation, checkpoint namespace và execution scope để phân biệt các lần thực thi và chống event/job cũ.
-
-Đó là SDK/lifecycle riêng, không đồng nghĩa mọi field tên runId trong source đều có cùng nghĩa hoặc là AG-UI RunAgentInput.run_id.
-
-Dự án mình giữ ý tưởng assistant response ID bền vững, nhưng dùng run_id riêng để biểu diễn invocation trực tiếp. Không copy thêm bảng/job epoch chỉ để giống implementation LibreChat.
-
-## 11. Phạm vi đã kiểm chứng và công việc tích hợp còn lại
-
-[Proof checkpoint/AG-UI](../experiments/langgraph-action-checkpoints/README.md) đã kiểm chứng giữ cùng message qua nhiều resume, run_id mới mỗi invocation và lưu response có actor trong activity. **Proof trước dùng public thread_id = assistant ID** để thử checkpoint; chưa kiểm chứng bản adapter hoàn chỉnh public thread C1 ↔ native checkpoint A1 với frontend/API ứng dụng.
-
-Cần thực hiện khi tích hợp:
-
-- Adapter public/native thread mapping và kiểm thử event lifecycle giữ đúng C1/Rn.
-- Binding current_run_id, request dedupe và exact stop, bao gồm request/event đến muộn.
-- Redis accumulated snapshot/tail qua nhiều invocation của một A1; reconnect không tạo execution mới.
-- Giữ riêng protocol message/tool IDs; renderer và context builder đọc activity đúng actor.
-- Share/copy tạo conversation/message IDs mới và remap tham chiếu cần thiết; không copy active run_id, pending action hoặc checkpoint pointer của nguồn.
-
-Chưa sửa SQL, backend, frontend hoặc Redis trong lần ghi nhận này. Không thay policy bỏ qua worker crash hoặc mở rộng thành bảng run/attempt. Những phần cũ dùng native thread theo branch/conversation, runId bằng messageId hoặc chỉ stop theo thread phải đọc lại theo quyết định này.
+SQL metadata là JSONB nên bỏ current_run_id khỏi contract không đòi xóa cột/bảng. Không sửa SQL, SDK proof hoặc code ứng dụng trong lần cập nhật tài liệu này. Không thêm crash recovery, execution audit hoặc bảng run.

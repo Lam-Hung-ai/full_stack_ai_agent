@@ -87,7 +87,7 @@ Các cột: `id`, `conversation_id`, `parent_message_id`, `role`, `content`, `at
 - Không xóa message riêng. Edit/regenerate tạo sibling, giữ bản cũ.
 - Content là **AG-UI Message[] đầy đủ cho một logical UI message**, không phải raw SSE event log. Assistant bundle có thể gồm assistant/tool/reasoning/activity; không đưa system/developer prompt nội bộ vào public transcript.
 - Attachments là contract ứng dụng cho citation/artifact/tool output, cho phép lặp toàn bộ output đã có trong content. Backend ghi đồng thời; context chỉ lấy tool output một lần.
-- Metadata là JSON object do backend quản lý: current_run_id, pending_action/checkpoint pointer và response/decision theo giai đoạn 4. Metadata không tự cấp quyền.
+- Metadata là JSON object do backend quản lý: pending_action/checkpoint pointer và response/decision theo giai đoạn 4. Metadata không tự cấp quyền.
 - SQL chỉ kiểm tra hình dạng ngoài; backend validate đầy đủ bằng SDK AG-UI đã pin và kiểm tra tool/file references.
 - Sibling hiển thị theo `(created_at,id)`, context đi theo parent. Chưa có bảo đảm hiệu năng phân trang ancestor path rất dài; không dùng sort thời gian để thay đường nhánh.
 
@@ -112,11 +112,11 @@ Lỗi/dừng sau nửa câu vẫn giữ phần đã sinh. Worker chết đột n
 |---|---|
 | Public AG-UI thread_id | conversations.id |
 | SQL assistant message ID | Giữ nguyên qua mọi pause/resume của lượt trả lời |
-| AG-UI run_id | ID riêng mỗi start/resume mới; khác message ID kể cả lần đầu |
+| AG-UI run_id | Chỉ phục vụ SDK/protocol; không là ID nghiệp vụ hoặc trường database |
 | Native checkpoint thread_id | SQL assistant message ID |
 | AG-UI protocol message/tool IDs trong content | Giữ riêng, stable khi replay/merge |
 
-`messages.metadata.current_run_id` giữ invocation hiện tại/gần nhất. Redis scope theo workspace/conversation/message và kèm run_id. Stop nhận messageId + runId, không dừng nhầm invocation mới. Retry cùng request không phải execution mới.
+Không lưu `messages.metadata.current_run_id`; không thêm cột/bảng run. Redis scope theo workspace/conversation/assistant message; stop theo message ID, không runId. Chấp nhận stop tác động lần resume hiện tại của cùng assistant. ID do ứng dụng tạo ở frontend/backend dùng UUIDv7; ID provider/checkpointer giữ theo thư viện. Input API không tự retry mutation. Xem [API hiện hành](chat-agent-api-contract.md).
 
 Adapter phải ánh xạ public conversation thread sang native assistant thread. Proof trước chưa tích hợp mapping này với frontend/API ứng dụng. Không thêm bảng run chỉ để có mapping ID. Chi tiết: [quyết định ID](conversation-message-run-id-decisions.md).
 
@@ -177,7 +177,7 @@ Phase 3 không có SQL. Các bước phase 2 từ chối dữ liệu cũ cần b
 
 ## 12. Những phần chưa chốt implementation hoặc ngoài phạm vi
 
-- Idempotency submit/hash/lifetime, exact stop coordination và Redis snapshot/tail/watermark.
+- Exact stop coordination và Redis snapshot/tail/watermark. API hiện tạm bỏ dedup submit chuyên biệt/requestId/Idempotency-Key; xem [API contract](chat-agent-api-contract.md).
 - Title background chống ghi đè user sau khi bỏ source/revision; không tự đưa cột cũ trở lại.
 - Tìm kiếm nội dung, performance nhánh rất dài, RLS/runtime roles và kiểm thử auth.
 - RAG/source ACL/dependencies, native Store/memory, integration credential bindings và external operation receipts.

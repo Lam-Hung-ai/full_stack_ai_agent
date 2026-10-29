@@ -42,7 +42,7 @@ Search nội dung, nguồn/kết nối, memory, feedback và audit UI là featur
 | C02 | Hỏi tiếp theo nhánh đang chọn | Hiện tại: context đi theo parent đã authorize, giữ câu cũ |
 | C03 | Đóng/mở trang giữa câu trả lời | Backend: worker tách HTTP, Redis snapshot + watermark + tail; không hứa khôi phục prefix khi Redis/worker mất |
 | C04 | Stop và giữ phần trả lời dở | Hiện tại cho status/partial; backend chuyển tín hiệu theo messageId + runId, ACK không đồng nghĩa đã dừng |
-| C05 | Retry mạng không nhân lượt, regenerate tạo phương án mới | Regenerate đã chốt; backend còn cần idempotency identity/hash và replay/attach operation cũ |
+| C05 | Retry mạng không nhân lượt, regenerate tạo phương án mới | Regenerate đã chốt. Hiện không tự retry mutation, lỗi mạng thì đọc trạng thái/connect; chưa bảo đảm dedup mọi submit. Identity/hash để mở rộng sau nếu cần |
 | C06 | Edit câu cũ, chọn nhánh khác hoặc copy chat | Hiện tại cho parent/sibling và copy snapshot; không exact native checkpoint fork theo branch |
 | C07 | Đổi tên thủ công thắng tên tự sinh | Backend: chưa chốt conditional update thay thế source/revision đã bỏ |
 | C08 | Hai tab giữ hai nhánh, không trộn context | Hiện tại có parent tường minh và busy qua active unique; state nhánh per-tab và integration test còn cần |

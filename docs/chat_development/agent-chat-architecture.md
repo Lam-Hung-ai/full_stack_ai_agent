@@ -4,6 +4,8 @@ Cập nhật: **29/10/2026**, Asia/Ho_Chi_Minh. Tài liệu đích để chỉnh
 
 Nguồn chuẩn: [database giai đoạn 1–4](database-decisions.md), [quy ước ID](conversation-message-run-id-decisions.md), [API](chat-agent-api-contract.md). Các sơ đồ cũ về run/attempt/journal bắt buộc, native thread theo branch và global user feed đã được thay bằng phạm vi dưới đây.
 
+Chi tiết áp dụng nguồn web để mở rộng storage, pool và execution: [thiết kế lưu trữ và scale](production-data-storage-design.md). Các đề xuất vận hành trong đó chưa là thay đổi schema đã duyệt.
+
 ## 1. Component
 
 | Component | Trách nhiệm |
@@ -30,25 +32,25 @@ Conversation C1 = public AG-UI threadId
     Start R1 -> pause -> Resume R2 -> pause -> Resume R3 -> terminal
 ```
 
-AG-UI runId mới cho mỗi invocation, metadata.current_run_id ghi invocation hiện tại. Regenerate tạo A2. Không dùng runId làm message ID hoặc cursor event. Adapter phải giữ public C1 trong lifecycle events nhưng bind saver theo A1.
+AG-UI runId chỉ phục vụ adapter/protocol; không lưu metadata.current_run_id hoặc dùng làm khóa nghiệp vụ. Regenerate tạo A2. Không dùng runId làm message ID hoặc cursor event. Adapter phải giữ public C1 trong lifecycle events nhưng bind saver theo A1.
 
 ## 3. Nhận câu hỏi và sinh câu trả lời
 
 1. Xác thực user/workspace, kiểm tra parent và quyền; không tin tenant/tool/context từ browser.
 2. Lưu user và placeholder assistant, tuân transaction gắn file và user completed trước commit.
-3. Claim assistant cho runId hiện tại; chỉ một assistant pending/running/requires_action trong conversation.
+3. Claim trạng thái assistant nguyên tử; chỉ một assistant pending/running/requires_action trong conversation.
 4. Dựng context từ parent path đã lưu, quyền/skill/tool hiện tại; runtime mới cho invocation.
 5. Worker consume LangGraphAgent.run(); HTTP chỉ subscribe output. Không consume thêm native graph stream song song để tự tạo một bộ events khác.
 6. Tích lũy text/tools/public state trong Redis; publish bằng EventEncoder ở gateway.
 7. Hoàn tất/lỗi bắt được/stop: transaction ghi content/attachments/file links/status cuối trước khi thông báo kết quả durable.
 
-Không update JSONB mỗi token. Idempotency request và claim/writer ownership cần backend hiện thực; unique một active assistant không tự chống request trùng sau terminal.
+Không update JSONB mỗi token. Hiện tạm bỏ requestId/Idempotency-Key, không tự retry mutation; đọc trạng thái và connect khi lỗi mạng theo [API contract](chat-agent-api-contract.md). Claim/writer ownership vẫn cần backend hiện thực; unique một active assistant không tự chống request trùng sau terminal.
 
 ## 4. Pause/resume
 
 Interrupt -> lưu checkpoint/writes + content + requires_action + metadata trong cùng transaction -> nhả invocation. Redis không phải bản duy nhất của pending action.
 
-Người dùng trả lời/duyệt -> kiểm tra action_id/quyền/graph_version -> claim chuyển running, lưu response + runId mới -> dựng graph mới -> resume native checkpoint của cùng assistant.
+Người dùng trả lời/duyệt -> kiểm tra action_id/quyền/graph_version -> claim chuyển running, lưu response -> dựng graph mới -> resume native checkpoint của cùng assistant.
 
 Activity user_interaction giữ tác giả/response để render và rebuild context như HumanMessage. Từ chối tool không mặc nhiên hủy cả lượt. Hủy action thì cancelled, giữ partial và vô hiệu pending pointer.
 
@@ -66,7 +68,7 @@ Shared Redis làm nền cho reconnect qua pod khác; chưa có implementation/te
 
 ## 6. Stop, lỗi và giới hạn
 
-Stop nhắm conversation + messageId + runId, kiểm tra exact current_run_id; không dừng invocation mới bằng lệnh cũ. Detach/browser abort không phải stop.
+Stop nhắm conversation + assistant messageId, không body/runId; dừng lượt assistant hiện tại kể cả vừa resume. Chấp nhận lệnh muộn có thể dừng lần resume mới của cùng assistant. Detach/browser abort không phải stop.
 
 Worker xử lý lỗi/dừng có handler ghi partial. Worker chết bất ngờ, hoặc chết sau claim trước finalize, chưa có auto-recovery; có thể còn message pending/running. Không thêm attempt/recovery/journal như chức năng mặc định.
 

@@ -1,130 +1,162 @@
-# API chat AG-UI theo database đã chốt
+# API chat đã chốt
 
-Cập nhật: **29/10/2026**, Asia/Ho_Chi_Minh. Đây là contract để triển khai/refactor, chưa khẳng định các endpoint dưới đây đã tồn tại.
+Ngày chốt: **29/10/2026**, Asia/Ho_Chi_Minh.
 
-Dùng FastAPI custom, LangGraph OSS, `ag_ui_langgraph.LangGraphAgent`, EventEncoder và frontend AG-UI hiện có. Không dùng CopilotKit runtime/SDK hoặc LangGraph Agent Server. Chỉ tham khảo cách chia run/connect/stop từ CopilotKit.
+Trạng thái: quyết định thiết kế để triển khai/refactor; chưa triển khai các route dưới đây. Thay thế contract cũ theo `/threads` và `/agent/{agentId}/run|connect|stop`.
 
-Nguồn chuẩn: [database](database-decisions.md), [ID](conversation-message-run-id-decisions.md), [kiến trúc](agent-chat-architecture.md). Không tạo bảng run/attempt, không yêu cầu conversation revision/title_source hoặc native thread theo branch.
+Nguồn liên quan: [database](database-decisions.md), [ID](conversation-message-run-id-decisions.md), [ChatAgent](chat-agent-client-decisions.md), [kiến trúc](agent-chat-architecture.md).
 
-## 1. Nhóm API
+## 1. Nguyên tắc
 
-Các path tương đối với API base; không tạo hai implementation submit cùng thực thi một input.
+- Input HTTP là DTO nghiệp vụ riêng; response streaming dùng AG-UI events/SSE.
+- Backend tự dựng RunAgentInput từ request đã kiểm tra và history đúng nhánh. Không yêu cầu browser gửi toàn bộ history/state/tools/context.
+- Một agent cố định; chưa cần agentId trên URL hoặc endpoint discovery `/info`.
+- Base API là `/api/v1`. Tên tài nguyên HTTP là conversations; public AG-UI threadId vẫn bằng conversations.id.
+- Resume tái sử dụng cấu trúc ResumeEntry của AG-UI, không tự tạo envelope answer/approval khác.
+- Không thêm bảng run, request hoặc pending_actions để phục vụ các endpoint này.
 
-| Method/path | Trách nhiệm |
-|---|---|
-| GET /info | Agent cố định và capabilities thực sự đã triển khai |
-| POST /threads | Tạo conversation trong workspace đã authorize |
-| GET /threads | Sidebar theo user/workspace, pin/folder/archive, phân trang |
-| GET /threads/{threadId} | Metadata và summary assistant active nếu có |
-| PATCH /threads/{threadId} | Rename/pin/archive/folder theo allowlist backend |
-| DELETE /threads/{threadId} | Soft-delete theo policy; revoke shares nguồn |
-| GET /threads/{threadId}/messages | Lịch sử đúng parent path, cursor theo contract repository |
-| POST /agent/{agentId}/run | Start hoặc resume hợp lệ, trả AG-UI SSE |
-| POST /agent/{agentId}/connect | Read-only snapshot + tail, trả AG-UI SSE |
-| POST /agent/{agentId}/stop/{threadId} | Stop đúng message/invocation, JSON acknowledgement |
-| GET /health/live, /health/ready | Trạng thái service |
+## 2. Danh sách endpoint
 
-agentId là registry key cấu hình, không phải tenant hoặc danh tính execution. Upload/share/copy dùng service theo database đã chốt; path chi tiết bổ sung khi triển khai feature, không tự chốt route ở tài liệu này.
+Các path dưới đây tương đối với `/api/v1`.
 
-## 2. ID trên wire
+| Method/path | Chức năng | Response |
+|---|---|---|
+| POST /conversations | Tạo chat trong workspace | JSON |
+| GET /conversations | Sidebar theo workspace, lọc pin/folder/archive và phân trang | JSON |
+| GET /conversations/{id} | Metadata, con trỏ nhánh đã lưu và assistant active nếu có | JSON |
+| PATCH /conversations/{id} | Rename, pin, archive, chuyển folder theo allowlist | JSON |
+| DELETE /conversations/{id} | Xóa mềm và revoke share nguồn | JSON hoặc empty theo convention chung |
+| GET /conversations/{id}/messages | History theo nhánh và dữ liệu chuyển nhánh | JSON |
+| POST /conversations/{id}/messages | Gửi câu hỏi mới, chạy assistant | AG-UI SSE |
+| POST /conversations/{id}/messages/{userMessageId}/edit | Tạo nhánh từ câu hỏi đã sửa | AG-UI SSE |
+| POST /conversations/{id}/messages/{assistantMessageId}/regenerate | Tạo câu trả lời khác | AG-UI SSE |
+| POST /conversations/{id}/messages/{assistantMessageId}/resume | Tiếp tục assistant đang chờ | AG-UI SSE |
+| POST /conversations/{id}/connect | Hydrate mới nhất, rồi theo dõi execution đang chạy | AG-UI SSE |
+| POST /conversations/{id}/messages/{assistantMessageId}/stop | Dừng execution hoặc hủy lượt đang chờ | JSON acknowledgement |
 
-- threadId = conversations.id, ổn định suốt chat.
-- User/assistant SQL message có ID riêng.
-- runId riêng từng invocation start/resume; khác assistant message ID kể cả lần đầu.
-- Native checkpoint thread_id = assistant message ID; adapter ánh xạ public/native thread.
-- Protocol messageId/toolCallId trong content/events giữ riêng.
-- metadata.current_run_id giữ invocation hiện tại/gần nhất, không phải bảng run hoặc đầy đủ audit history.
+GET metadata và history tách riêng vì history có thể dài. Con trỏ nhánh đã lưu không thay parent tường minh trong request gửi; lựa chọn nhánh per-tab vẫn ở client.
 
-Ví dụ RunAgentInput chuẩn:
+Folder, upload/download, share/copy, auth/workspace/RBAC dùng REST API riêng theo database đã chốt; chi tiết route/payload của các nhóm đó chưa chốt trong lần thảo luận này. Health endpoints thuộc vận hành service, không phải API agent discovery.
+
+## 3. Gửi câu hỏi mới
+
+Kiểu input frontend, cấu hình instance và mapping từng method được định nghĩa tại [ChatAgent input](chat-agent-client-decisions.md#7-input-cấu-hình-instance).
+
+```http
+POST /api/v1/conversations/{id}/messages
+```
 
 ```json
 {
-  "threadId": "conversation-uuid",
-  "runId": "invocation-uuid",
-  "state": {},
-  "messages": [{"id":"user-message-uuid","role":"user","content":"Xin chào"}],
-  "tools": [],
-  "context": [],
-  "forwardedProps": {}
+  "parentMessageId": "previous-assistant-id",
+  "message": {
+    "id": "new-user-message-id",
+    "text": "Phân tích tài liệu này",
+    "fileIds": ["stored-file-id"]
+  }
 }
 ```
 
-Parent/target assistant/action binding phải được backend resolve/validate. Tên extension truyền thêm chúng trong request sẽ chốt với adapter; không dựa browser-supplied state để ghi đè canonical history hoặc mở tool.
+- Lượt đầu có parentMessageId null; các lượt sau chỉ rõ parent đã authorize.
+- Client tạo UUIDv7 user message để hiển thị optimistic. Server tạo UUIDv7 assistant message. runId chỉ phục vụ adapter/protocol AG-UI, không là input nghiệp vụ hoặc trường metadata database.
+- fileIds là file đã upload. Backend kiểm tra ownership/workspace và liên kết qua message_files; không nhận bucket/object_key do browser tùy ý chỉ định.
+- Input text/fileIds là DTO gửi hiện tại; backend dựng canonical AG-UI content. Không thay cấu trúc JSONB content/attachments đã chốt.
+- Không append mù danh sách messages từ browser hoặc dùng browser tools để quyết định quyền tool.
 
-## 3. Start và retry
+## 4. Sửa câu hỏi và regenerate
 
-POST run trả SSE trong chính response, không yêu cầu browser chuyển sang một endpoint khác sau JSON ACK. Input được auth/authorize, reconcile stable message IDs và commit placeholder trước khi xác nhận đã nhận.
+Edit chỉ nhận đích là user message và body cùng hình dạng message ở mục 3, chứa ID mới, text mới và danh sách fileIds đầy đủ của phiên bản mới. Mảng fileIds rỗng nghĩa không đính kèm file.
 
-Worker consume LangGraphAgent độc lập HTTP subscriber. API subscribe shared output và encode bằng EventEncoder; không có mapper native graph-to-AG-UI thứ hai.
+Backend tạo user message mới cùng parent với câu hỏi cũ, rồi assistant mới. Không sửa message terminal, không xóa nhánh cũ.
 
-Retry cùng operation dùng lại identity và payload đã chấp nhận; khác payload cùng identity phải conflict. Duplicate retry không tạo user/assistant/invocation mới. Regenerate là operation mới, tạo sibling assistant mới.
+Regenerate chỉ nhận đích là assistant message, body rỗng. Backend tạo assistant mới cùng parent với assistant cũ; dựng context từ parent path, không tiếp tục checkpoint của câu trả lời cũ.
 
-Cơ chế idempotency key/hash/lifetime và binding với runId chưa triển khai; không tuyên bố current_run_id hoặc active unique đã tự giải quyết toàn bộ. Không tự thêm bảng run để triển khai API này.
+## 5. Resume
 
-## 4. Pause/resume
-
-- Graph interrupt: lưu partial content, action metadata và checkpoint/writes cùng transaction; SQL message requires_action.
-- Invocation có thể kết thúc bằng AG-UI interrupt outcome nhưng message chưa completed.
-- Người dùng trả lời gửi action_id/response qua phần input resume được SDK đã pin hỗ trợ; backend validate action và quyền hiện tại trước claim.
-- Claim chuyển running và current_run_id mới nguyên tử; response/activity được lưu trước execution.
-- Runtime mới resume checkpoint cùng assistant; không tạo SQL user message riêng cho câu trả lời bổ sung.
-- Pause tiếp tạo action_id mới. Không cho retry action cũ thực thi thêm lần nữa.
-- Hủy action làm message cancelled, giữ lịch sử và bỏ pending pointer. Duyệt từ chối tool có thể resume để assistant giải thích và completed.
-
-Payload resume chuẩn/extension và action_id binding phải được nối với frontend khi triển khai. Không nhận checkpoint pointer hoặc credential tùy ý từ client.
-
-## 5. Connect/reload
-
-POST connect không gọi LangGraphAgent.run()/LLM/tool. Public threadId vẫn là conversation, backend resolve message/lượt active.
-
-1. Kiểm tra user/workspace/quyền đọc và scope.
-2. Đọc history PostgreSQL và live projection Redis theo contract nhất quán.
-3. Gửi accumulated snapshot kèm watermark, rồi tail sau watermark.
-4. Giữ stable message IDs; không append prefix hai lần hoặc END active message sớm.
-5. Gap/epoch đổi thì reset/hydrate phù hợp, không bỏ qua phần thiếu.
-
-Nếu SDK cần runId cho request attach, đó là transport identity, không đổi execution current_run_id. Chỉ một consumer text cho chat đang chọn mỗi tab; detach consumer cũ khi chuyển chat. Không có global user feed hoặc public /realtime/* trong scope.
-
-Redis buffer còn thì hỗ trợ reconnect giữa câu. Không có cam kết cứu mọi token sau mất toàn bộ Redis/worker; PostgreSQL content được lưu ở các mốc terminal/pause. Proof mới kiểm chứng reload sau pause, chưa phải HTTP/Redis reconnect end-to-end.
-
-## 6. Stop
-
-Ví dụ body cho path chứa public conversation threadId:
-
-```json
-{"messageId":"assistant-message-uuid","runId":"current-invocation-uuid"}
+```http
+POST /api/v1/conversations/{id}/messages/{assistantMessageId}/resume
 ```
 
-Xác minh ownership/scope, message thuộc conversation và exact current_run_id, rồi gửi tín hiệu đúng worker. Lệnh cũ không được dừng lượt resume/regenerate mới. HTTP abort/detach không tự cancel.
+Body có trường `resume: ResumeEntry[]`, dùng đúng kiểu/validation của phiên bản SDK AG-UI được pin. Không định nghĩa thêm response.type answer/approval của ứng dụng.
 
-Acknowledgement chỉ nói request stop đã được nhận/chấp nhận hoặc lượt đã terminal; không báo đã dừng chỉ vì đã gửi tín hiệu. Trạng thái message cuối chỉ là completed/failed/cancelled; không thêm SQL cancel_requested/stopping ở tài liệu này. Durable cancel-intent/Redis coordination cần implementation contract riêng.
+- requires_action là trạng thái message trong PostgreSQL; resume là input tiếp tục execution. Hai khái niệm không thay nhau.
+- Backend đối chiếu interruptId với interrupts đang chờ của assistant/action hiện tại, kiểm tra quyền và graph compatibility trước claim.
+- action_id có thể giữ nội bộ trong metadata; backend resolve checkpoint pointer, không nhận pointer/namespace từ client.
+- Claim requires_action -> running nguyên tử, ghi response/activity; cùng assistant message ID.
+- Không tạo SQL user message mới chỉ vì người dùng trả lời câu hỏi bổ sung. Lưu activity có actor/response; context builder ánh xạ câu trả lời thành HumanMessage đúng một lần.
+- Từ chối tool có thể resume để assistant giải thích. Hủy toàn bộ lượt chờ dùng stop.
 
-## 7. Conversation và history DTO
+Tên field chi tiết bên trong ResumeEntry theo SDK đã pin; không sao chép schema tự chế để tránh lệch protocol.
 
-API có thể dùng name cho title, boolean archived/pinned suy từ timestamp, folderId từ folder_id. Không expose ORM/native checkpoint trực tiếp.
+## 6. Connect không có cursor
 
-- Không bắt If-Match bằng conversation revision đã bị bỏ. Cơ chế precondition cho rename/auto-title chưa chốt thay thế.
-- Backend chỉ nhận các trường sửa được; không cho đổi owner/workspace hoặc current_run_id qua PATCH chung.
-- Sidebar theo user/workspace, keyset (updated_at,id); pin/folder theo index đã chốt.
-- History trả AG-UI shapes sau khi reconcile bundle và branch path. Không coi một SQL assistant row luôn bằng đúng một protocol message.
-- Activity user_interaction phải render response là lời user; context builder chuyển answered response thành HumanMessage đúng một lần.
-- Archive không xóa chat; folder một cấp và không cấp quyền chat.
-- Soft-delete chặn đọc/start mới và revoke shares nguồn. Backend xử lý execution đang sống theo workflow cần tích hợp; chưa có hard purge/export toàn hệ thống.
+```http
+POST /api/v1/conversations/{id}/connect
+```
 
-## 8. Metadata, title và quyền
+Không body, không cursor. Server kiểm tra quyền. Có assistant active thì hydrate nhánh chứa assistant đó; pending/running thì stream tiếp, requires_action thì trả thông tin chờ và đóng stream. Không có assistant active thì hydrate nhánh hiện hành đã lưu rồi đóng stream. Người dùng muốn xem nhánh cũ sử dụng API history; connect không nhận thêm input chọn nhánh.
 
-Title event có thể dùng CUSTOM thread.updated khi stream còn mở; sau đóng stream, đọc lại metadata từ GET thread/list. Không thêm global SSE chỉ vì title. Auto-title phải tránh ghi đè user rename nhưng cơ chế thay source/revision cần thiết kế trước khi bật.
+| Trạng thái assistant | Hành vi |
+|---|---|
+| pending/running | Snapshot mới nhất rồi stream tiếp |
+| requires_action | Snapshot, thông tin interrupt đang chờ, đóng stream |
+| completed/failed/cancelled hoặc không có execution active | Snapshot đã lưu rồi đóng stream |
 
-List/history/start/resume/connect/stop/download/share/copy đều kiểm tra scope. Owner/Admin/Superuser không có bypass private chat. Role tool, source/file scope và identity provider được xác định ở server; UUID không thay authorization.
+Connect chỉ đọc/attach: không gọi agent/LLM/tool, không tạo execution mới, không tự resume interrupt.
 
-## 9. Nghiệm thu implementation
+Snapshot thay thế projection tương ứng trên UI; không append prefix lần nữa. Backend vẫn dùng sequence/watermark nội bộ khi nối snapshot với Redis tail để không mất/lặp event, nhưng không đưa cursor vào input public.
 
-- Retry input không nhân message/execution; regenerate tạo sibling mới.
-- Thread public và native checkpoint mapping đúng; mọi lifecycle event thuộc đúng C1/Rn.
-- Connect/replay không gọi agent, snapshot/tail không mất hoặc trùng prefix.
-- Detached worker tiếp tục khi subscriber rời; stop nhắm đúng message/run.
-- Pending action sống qua reload; response/permission/action_id được revalidate, duplicate submit chỉ một claim.
-- Terminal outcome chỉ phát sau commit kết quả; interrupt không hiểu nhầm completed.
-- Không đưa raw state/secret vào public stream hoặc metadata có thể bị client sửa.
+Mất Redis/worker có thể mất phần chưa lưu; PostgreSQL lưu ở terminal/pause theo giới hạn đã chốt. Không hứa reconnect cứu mọi token.
 
-Chưa triển khai các API mới. DDL và proof không thay HTTP auth, Redis reconnect, real provider hoặc load tests. Các feature RAG/memory/action receipts/audit nâng cao nằm trong [use cases](chat-use-cases-and-organization-access.md), chưa tự có trong schema hiện tại.
+## 7. Stop và hủy lượt chờ
+
+Không body. Conversation ID và assistant message ID trên URL xác định lượt cần dừng.
+
+Backend kiểm tra quyền, message thuộc conversation và trạng thái hiện tại. pending/running thì gửi tín hiệu dừng lượt đó; requires_action thì hủy toàn bộ lượt, chuyển cancelled, giữ content và vô hiệu pending pointer. Đã terminal thì không chạy lại hay tác động lượt khác. Không có endpoint cancel-action riêng.
+
+Stop mang nghĩa dừng assistant này, kể cả nó vừa resume. Chấp nhận lệnh đến muộn có thể dừng lần resume mới của cùng assistant; không bảo đảm phân biệt invocation cũ/mới. Regenerate có assistant ID khác nên stop message cũ không tác động message mới.
+
+Acknowledgement xác nhận đã nhận/chấp nhận yêu cầu hoặc message đã terminal, không khẳng định worker đã dừng chỉ vì đã phát tín hiệu.
+
+Ngắt HTTP/detach chỉ rời stream, không tự stop. Từ chối một tool rồi tiếp tục assistant dùng resume, khác hủy toàn bộ lượt.
+
+## 8. ID và stream
+
+- conversationId = public AG-UI threadId.
+- SQL user/assistant message IDs độc lập.
+- Một assistant giữ nguyên ID qua nhiều pause/resume. runId chỉ nằm ở RunAgentInput/lifecycle AG-UI theo yêu cầu SDK; không dùng làm khóa nghiệp vụ, input stop, trường metadata hoặc khóa Redis ứng dụng.
+- Mọi ID do ứng dụng tự tạo ở frontend/backend dùng UUIDv7. ID do LangGraph/provider sinh (checkpoint/tool-call) giữ theo thư viện, không ép đổi tham chiếu.
+- Native LangGraph configurable.thread_id = assistant message ID. Adapter ánh xạ public/native thread, lifecycle events vẫn mang conversationId/runId public.
+- Protocol messageId/toolCallId riêng, ổn định khi hydrate/resume; một SQL assistant row có thể chứa nhiều protocol messages.
+
+Không chốt bộ custom event chat.execution riêng ở mọi thay đổi. Ưu tiên lifecycle/messages/activity chuẩn của AG-UI. Cần bổ sung liên kết SQL assistant ID và trạng thái nghiệp vụ ở metadata/event phù hợp khi tích hợp; vị trí wire cụ thể chưa chốt. RUN_FINISHED hoặc stream đóng không tự có nghĩa SQL assistant completed: interrupt có thể là requires_action.
+
+## 9. Xử lý mạng đơn giản trong phạm vi hiện tại
+
+- Tạm bỏ Idempotency-Key, requestId/clientRequestId và cơ chế dedup submit chuyên biệt khỏi API.
+- Frontend khóa thao tác khi submit/đang chờ response, không tự retry gửi/sửa/regenerate/resume.
+- Khi lỗi mạng: đọc lại trạng thái conversation; connect để lấy nội dung mới nhất nếu thao tác đã được tiếp nhận. Nếu chưa xác định được kết quả, UI thể hiện chưa xác định thay vì tự gửi lại.
+- PostgreSQL giữ một assistant pending/running/requires_action tối đa mỗi conversation; claim resume kiểm tra trạng thái/interrupt nguyên tử.
+- Đây không phải bảo đảm chống mọi request trùng, đặc biệt request đến lại sau terminal. Chấp nhận giới hạn này hiện tại, không thêm bảng để giải quyết.
+
+Quyết định này thay yêu cầu cũ về retry luôn attach đúng operation. Assistant message là danh tính bền vững của lượt; runId chỉ ở lớp protocol. Connect không tạo execution mới.
+
+## 10. Quyền, lỗi và điều kiện thực thi
+
+List/create có workspace scope. Mọi read/edit/start/resume/connect/stop/file/share/copy đều kiểm tra quyền authoritative. Owner/Admin/Superuser không tự đọc chat riêng.
+
+Không nhận owner/workspace/checkpoint qua PATCH chung. Auto-title phải tránh ghi đè tên user; cơ chế cụ thể vẫn cần thiết kế trước khi bật.
+
+Lỗi trước stream trả HTTP status phù hợp (401/403/404/409/validation); proxy giữ đúng status. Lỗi sau khi execution bắt đầu được bắt, lưu partial content và failed rồi phát outcome tương ứng. Stop giữ partial và cancelled. Terminal/pause outcome công bố sau commit dữ liệu liên quan.
+
+Worker tiêu thụ LangGraphAgent độc lập subscriber, tích lũy Redis và lưu PostgreSQL ở các mốc đã chốt. Không giữ transaction trong khi chờ model. Bỏ qua recovery khi worker chết đột ngột theo phạm vi hiện tại.
+
+## 11. Chưa triển khai
+
+Chưa thay backend/frontend/SQL. Các việc còn lại gồm DTO/OpenAPI chi tiết, history pagination/branch selection, metadata liên kết SQL message, adapter public/native thread, Redis snapshot/tail và HTTP integration tests. Không tuyên bố proof checkpoint hiện có đã kiểm chứng toàn bộ API này.
+
+## 12. History và chuyển conversation trên UI
+
+GET messages phải giữ được SQL messageId, parentMessageId, role, status, bundle AG-UI content, file liên quan và thông tin các nhánh khác để chuyển nhánh. Một SQL assistant có thể chứa nhiều protocol messages; DTO không được flatten rồi làm mất liên kết SQL assistant ID cần cho edit/regenerate/resume/stop. Cấu trúc phân trang/branch DTO chi tiết sẽ chốt khi triển khai, không thêm bảng branch.
+
+Việc có giữ nhiều SSE khi chuyển conversation, detach/subscription, callback đến muộn và cách tránh hiển thị chéo chat **tạm hoãn thảo luận**, chưa chốt chính sách frontend trong giai đoạn này. Không coi đề xuất chỉ giữ một SSE là quyết định đã duyệt.

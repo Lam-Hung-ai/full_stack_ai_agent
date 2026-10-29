@@ -1,6 +1,6 @@
 # Tham khảo API CopilotKit, triển khai bằng LangGraphAgent và AG-UI
 
-Cập nhật: **29/10/2026**. Không dùng CopilotKit Runtime, React SDK, provider, runner hoặc Intelligence. Chỉ tham khảo cách chia API run/connect/stop và discovery từ source CopilotKit.
+Cập nhật: **29/10/2026**. Không dùng CopilotKit Runtime, React SDK, provider, runner hoặc Intelligence. Chỉ tham khảo cách tách thực thi/connect/stop từ source CopilotKit. API hiện hành dùng DTO nghiệp vụ riêng và routes conversations; chưa cần discovery /info.
 
 Nguồn chuẩn cho dữ liệu: [database đã chốt](database-decisions.md), [quy ước ID](conversation-message-run-id-decisions.md), [API](chat-agent-api-contract.md), [kiến trúc](agent-chat-architecture.md). Không có bảng Postgres runs/attempts hoặc yêu cầu native Store trong baseline.
 
@@ -12,7 +12,7 @@ Nguồn chuẩn cho dữ liệu: [database đã chốt](database-decisions.md), 
 | LangGraph OSS | Graph và interrupt/state |
 | ag_ui_langgraph.LangGraphAgent | Chuyển native events sang AG-UI |
 | ag_ui.encoder.EventEncoder | Encode BaseEvent thành SSE |
-| Frontend @ag-ui/client hiện có | Nhận events, render messages/activity, attach/detach |
+| Frontend ChatAgent kế thừa HttpAgent | Input nghiệp vụ riêng, tái sử dụng HTTP/SSE và subscriber của @ag-ui/client |
 | PostgreSQL + Redis | Lịch sử/checkpoint bền vững và shared live buffer theo phạm vi đã chốt |
 
 ## 2. Luồng chạy
@@ -25,8 +25,8 @@ sequenceDiagram
     participant W as Execution worker
     participant AG as LangGraphAgent
     participant R as Redis live view/tail
-    FE->>API: POST run
-    API->>DB: Auth, lưu/claim message và current_run_id
+    FE->>API: POST gửi/edit/regenerate/resume (DTO riêng)
+    API->>DB: Auth, lưu/claim trạng thái message
     API->>W: Điều phối invocation
     W->>AG: run(validated input), bind native thread
     AG-->>W: AG-UI BaseEvents
@@ -42,9 +42,9 @@ Cơ chế queue/claim/writer ownership chưa được chọn đầy đủ; mũi 
 
 Clone wrapper mutable theo invocation; không dùng chung state của một LangGraphAgent cho nhiều request đồng thời. Một graph execution chỉ có một nguồn emit AG-UI, không stream native song song rồi tự map thêm bộ events khác.
 
-Public threadId là conversation; native checkpoint thread là assistant message; mỗi start/resume có runId riêng. Adapter cần xử lý mapping này. Proof trước đã thử AG-UI async nhưng chưa nối public/native mapping vào app frontend.
+Public threadId là conversation; native checkpoint thread là assistant message; runId chỉ phục vụ protocol AG-UI, không lưu current_run_id hoặc dùng làm khóa nghiệp vụ. Adapter cần xử lý mapping này. Proof trước đã thử AG-UI async nhưng chưa nối public/native mapping vào app frontend.
 
-Giữ message/tool IDs ổn định. Context/historical activity không được coi là quyền thực thi tool. Server reconcile input mới với lịch sử, không append lại toàn bộ browser messages vào state một cách máy móc.
+Giữ message/tool IDs ổn định. Context/historical activity không được coi là quyền thực thi tool. Server dựng input từ DTO nghiệp vụ và lịch sử đúng nhánh. Xem [quyết định ChatAgent](chat-agent-client-decisions.md).
 
 ## 4. Persistence và replay
 
