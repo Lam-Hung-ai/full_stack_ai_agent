@@ -137,3 +137,5 @@ Loại: `BẮT ĐẦU`, `KẾT THÚC`, `LỖI`, `SỬA`, `THAY ĐỔI`, `QUYẾT
 | 30/10/2026 | Sau S9 | RỦI RO | RR-05, RR-11, RR-12, RR-17, RR-18 | Bốn mục đã xử lý; RR-18 còn copy trong request và chưa purge dòng | — |
 | 30/10/2026 | Sau S9 | KẾT THÚC | — | Backend 135 test, frontend 61 test xanh; lint, typecheck, build sạch; kiểm thử thật composer, stop, huỷ lượt chờ, cleanup | — |
 | 30/10/2026 | Sau S9 | PHÁT HÀNH | — | Commit sửa lỗi rà soát trên `chat` | `9151e03` |
+| 30/10/2026 | S10 | QUYẾT ĐỊNH | Q-09 → Q-12, QD-31 | PO chốt phạm vi S10: dời T03 và xoá tài khoản; export zip; tệp CSV/MD/TXT/XLSX; tìm theo tên và nội dung | — |
+| 30/10/2026 | S10 | THAY ĐỔI | TD-017 | Thêm S10 "Mở rộng chat" vào lộ trình (11 nc) | — |
