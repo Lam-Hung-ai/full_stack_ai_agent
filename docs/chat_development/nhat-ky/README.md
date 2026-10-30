@@ -95,3 +95,9 @@ Loại: `BẮT ĐẦU`, `KẾT THÚC`, `LỖI`, `SỬA`, `THAY ĐỔI`, `QUYẾT
 | 30/10/2026 | S4 | THAY ĐỔI | TD-010 | Route resume, event pause, biến `TOOLS_REQUIRING_APPROVAL`; tài liệu API §5 | CH-S4-BE-01 → FE-01, DOC-02 |
 | 30/10/2026 | S4 | RỦI RO | RR-16, RR-06 | Checkpoint không được dọn; mapping C1/A1 đã kiểm chứng | CH-S4-BE-04 |
 | 30/10/2026 | S4 | KẾT THÚC | — | Xong 8/8 task; backend 77 test, frontend 41 test xanh; 4 kịch bản chạy thật đạt | — |
+| 30/10/2026 | S4 | PHÁT HÀNH | — | Commit Sprint 4 trên `chat` | `f3a3008` |
+| 30/10/2026 | — | QUYẾT ĐỊNH | QD-23 | Người dùng chốt Q-08: một SSE mỗi tab, quay lại thì connect | — |
+| 30/10/2026 | S5 | BẮT ĐẦU | — | Bắt đầu Sprint 5 | CH-S5-DOC-01 |
+| 30/10/2026 | S5 | THAY ĐỔI | TD-011 | Route connect, live store Redis, stop qua Redis, `REDIS_URL`; tài liệu API §6, §7 | CH-S5-BE-01 → FE-01, DOC-02 |
+| 30/10/2026 | S5 | RỦI RO | RR-14, RR-02, RR-10 | Mở lại thấy phần đang sinh (đã xử lý); cập nhật giảm thiểu | — |
+| 30/10/2026 | S5 | KẾT THÚC | — | Xong 7/7 task; backend 84 test, frontend 42 test xanh; 3 kịch bản chạy thật đạt | — |

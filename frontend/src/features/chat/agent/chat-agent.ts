@@ -79,6 +79,27 @@ export class ChatAgent extends HttpAgent {
     return this.runOperation({ path: `/messages/${assistantMessageId}/resume`, body: { resume } }, resume);
   }
 
+  /**
+   * Follow the chat as it is now (API §6): a snapshot, then the running turn
+   * if there is one. Read only; one stream per tab (QD-23).
+   */
+  attach(): Promise<RunAgentResult> {
+    this.pendingInterrupts = [];
+    // HttpAgent renews its controller in runAgent only.
+    this.abortController = new AbortController();
+    return this.connectAgent();
+  }
+
+  protected connect(): ReturnType<HttpAgent["run"]> {
+    const request = () =>
+      this.fetch(`${this.url}/connect`, {
+        method: "POST",
+        headers: { ...this.headers, Accept: "text/event-stream" },
+        signal: this.abortController.signal,
+      });
+    return transformHttpEventStream(runHttpRequest(request), this.debugLogger);
+  }
+
   /** Answer the question of `assistantMessageId` again, beside that answer. */
   regenerate({ assistantMessageId }: { assistantMessageId: string }): Promise<RunAgentResult> {
     return this.runOperation({ path: `/messages/${assistantMessageId}/regenerate` });

@@ -62,6 +62,11 @@ class OpenSpans:
             if span in self._open:
                 self._open.remove(span)
 
+    @property
+    def idle(self) -> bool:
+        """Nothing open: a safe point to snapshot the turn (agent/live.py)."""
+        return not self._open
+
     def closing_events(self) -> list[BaseEvent]:
         """END events for everything still open, innermost first."""
         events: list[BaseEvent] = []

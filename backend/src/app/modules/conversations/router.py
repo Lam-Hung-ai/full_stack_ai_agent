@@ -1,6 +1,8 @@
+from collections.abc import AsyncIterator
 from typing import Annotated
 from uuid import UUID
 
+from ag_ui.core import BaseEvent
 from ag_ui.encoder import EventEncoder
 from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import StreamingResponse
@@ -10,6 +12,7 @@ from app.common.dependencies.workspace import CurrentWorkspace
 from app.common.schemas.pagination import PageParams, page_params
 from app.database.session import SessionDep, SessionLocal
 from app.modules.agent.dependencies import RunnerDep
+from app.modules.conversations.connect import ConnectService
 from app.modules.conversations.schemas import (
     ConversationCreate,
     ConversationListResponse,
@@ -225,11 +228,37 @@ async def stop_message(
     )
 
 
+@router.post(
+    "/conversations/{conversation_id}/connect",
+    response_class=StreamingResponse,
+    responses=TURN_RESPONSES,
+)
+async def connect(
+    conversation_id: UUID,
+    request: Request,
+    user: CurrentUser,
+    session: SessionDep,
+    runner: RunnerDep,
+) -> StreamingResponse:
+    """The latest state of the chat, then the running turn if there is one.
+    Read only: no model is called and nothing is started or resumed."""
+    events = await ConnectService(session, live=runner.live).open(
+        user=user, conversation_id=conversation_id
+    )
+    return _event_stream(events, request)
+
+
 def _turn_stream(turn: StartedTurn, request: Request) -> StreamingResponse:
+    return _event_stream(turn.stream.subscribe(), request)
+
+
+def _event_stream(
+    source: AsyncIterator[BaseEvent], request: Request
+) -> StreamingResponse:
     encoder = EventEncoder(accept=request.headers.get("accept", ""))
 
     async def events():
-        async for event in turn.stream.subscribe():
+        async for event in source:
             yield encoder.encode(event)
 
     return StreamingResponse(

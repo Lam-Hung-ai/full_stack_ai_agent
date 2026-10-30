@@ -11,6 +11,9 @@ RUN_FINISHED / RUN_ERROR is published only after that write commits, so a
 client that saw the end can reload and find the same result. A turn that
 stops on an interrupt ends as `requires_action`; its checkpoint is handed to
 the finalizer to be stored in the same transaction (agent/checkpoints.py).
+
+Every event is also mirrored to Redis (agent/live.py) so `connect` can show a
+running turn from any process, and stop requests reach the owning process.
 """
 
 import asyncio
@@ -18,7 +21,7 @@ import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from ag_ui.core import (
     BaseEvent,
@@ -37,6 +40,7 @@ from langgraph.types import Interrupt
 from app.modules.agent.bundle import AguiMessage, BundleBuilder
 from app.modules.agent.checkpoints import TurnSaver, thread_config
 from app.modules.agent.lifecycle import OpenSpans
+from app.modules.agent.live import LiveStore, LiveView
 from app.modules.agent.tools import ToolGuard, current_tool_guard
 
 logger = logging.getLogger(__name__)
@@ -97,19 +101,66 @@ class RunStream:
                 return
 
 
+class _Channel:
+    """Where one turn's events go: local subscribers first, then Redis. A
+    Redis failure only degrades the live view; the turn goes on."""
+
+    def __init__(
+        self, stream: RunStream, live: LiveStore | None, assistant_id: UUID
+    ) -> None:
+        self.stream = stream
+        self.live = live
+        self.assistant_id = assistant_id
+        self.seq = 0
+
+    async def publish(
+        self, event: BaseEvent, *, snapshot: list[AguiMessage] | None = None
+    ) -> None:
+        """`snapshot` is the bundle when this event leaves nothing open."""
+        await self.stream.publish(event)
+        if self.live is None:
+            return
+        try:
+            self.seq += 1
+            entry = await self.live.append(self.assistant_id, self.seq, event)
+            if snapshot is not None:
+                await self.live.save_view(
+                    self.assistant_id, LiveView(snapshot, entry, self.seq)
+                )
+        except Exception:
+            logger.warning("Live view of %s stopped", self.assistant_id, exc_info=True)
+            self.live = None
+
+    async def close(self) -> None:
+        await self.stream.close()
+        if self.live is not None:
+            try:
+                await self.live.end(self.assistant_id)
+            except Exception:
+                logger.warning("Could not expire live keys of %s", self.assistant_id)
+
+
 class Runner:
     def __init__(
         self,
         *,
         agent_factory: AgentFactory,
         max_concurrent: int,
+        live: LiveStore | None = None,
     ) -> None:
         self._agent_factory = agent_factory
         self._slots = asyncio.Semaphore(max_concurrent)
+        self._live = live
+        #: Names this process as a turn's owner in Redis.
+        self.process_id = str(uuid4())
         self._streams: dict[UUID, RunStream] = {}
         self._tasks: dict[UUID, asyncio.Task[None]] = {}
         #: Turns saving their outcome; cancelling now would lose the end events.
         self._finishing: set[UUID] = set()
+
+    @property
+    def live(self) -> LiveStore | None:
+        return self._live
 
     def start(
         self,
@@ -149,15 +200,42 @@ class Runner:
     def stream(self, assistant_id: UUID) -> RunStream | None:
         return self._streams.get(assistant_id)
 
-    async def stop(self, assistant_id: UUID, *, timeout: float) -> bool:
-        """Cancel a turn of this process and wait up to `timeout` for it to be
-        saved as cancelled. False when no such turn runs here."""
+    async def stop(
+        self, assistant_id: UUID, *, timeout: float
+    ) -> Literal["local", "remote", "orphan"]:
+        """Stop a turn wherever it runs. Here: cancel it and wait up to
+        `timeout` for it to be saved. Another process owns it: signal that
+        process ("remote"; the caller watches the database). Nobody owns it:
+        "orphan", for the caller to cancel in place."""
         task = self._tasks.get(assistant_id)
-        if task is None:
-            return False
-        self._cancel(assistant_id, task)
-        await asyncio.wait({task}, timeout=timeout)
-        return True
+        if task is not None:
+            self._cancel(assistant_id, task)
+            await asyncio.wait({task}, timeout=timeout)
+            return "local"
+        if self._live is not None:
+            try:
+                if await self._live.owned(assistant_id):
+                    await self._live.request_stop(assistant_id)
+                    return "remote"
+            except Exception:
+                logger.warning("Could not reach Redis to stop %s", assistant_id)
+        return "orphan"
+
+    async def listen_for_stops(self) -> None:
+        """Cancel turns of this process that another process was asked to
+        stop. Runs for the life of the app; reconnects after Redis errors."""
+        if self._live is None:
+            return
+        while True:
+            try:
+                async for assistant_id in self._live.stop_requests():
+                    if task := self._tasks.get(assistant_id):
+                        self._cancel(assistant_id, task)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.warning("Stop channel lost; retrying", exc_info=True)
+                await asyncio.sleep(1)
 
     async def shutdown(self, timeout: float) -> None:
         """Let running turns finish within `timeout`, then cancel the rest
@@ -198,6 +276,8 @@ class Runner:
             else {message.id for message in run_input.messages}
         )
         spans = OpenSpans()
+        channel = _Channel(stream, self._live, assistant_id)
+        heartbeat = asyncio.create_task(self._own(assistant_id))
         saver = TurnSaver()
         # Tasks the graph spawns copy this context, so tool calls see the guard.
         current_tool_guard.set(tool_guard)
@@ -222,10 +302,12 @@ class Runner:
                         continue
                     if event.type == EventType.RUN_ERROR:
                         raise RuntimeError(getattr(event, "message", "run error"))
-                    await stream.publish(event)
+                    await channel.publish(
+                        event, snapshot=builder.bundle() if spans.idle else None
+                    )
                     if event.type == EventType.RUN_STARTED:
                         started = True
-                        await stream.publish(self._status_event(announce, "running"))
+                        await channel.publish(self._status_event(announce, "running"))
             state = await agent.graph.aget_state(thread_config(native_thread))
             interrupts = [item for task in state.tasks for item in task.interrupts]
             if interrupts and saver.has_pause(native_thread):
@@ -240,9 +322,10 @@ class Runner:
             logger.exception("Assistant turn %s failed", assistant_id)
         finally:
             self._finishing.add(assistant_id)
+            heartbeat.cancel()
             try:
                 await self._finish(
-                    stream=stream,
+                    channel=channel,
                     status=status,
                     content=builder.bundle(),
                     finalize=finalize,
@@ -258,10 +341,24 @@ class Runner:
                 self._tasks.pop(assistant_id, None)
                 self._finishing.discard(assistant_id)
 
+    async def _own(self, assistant_id: UUID) -> None:
+        """Keep this process named as the turn's owner while it runs."""
+        if self._live is None:
+            return
+        interval = self._live.settings.owner_ttl / 3
+        while True:
+            try:
+                await self._live.claim(assistant_id, self.process_id)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.warning("Could not claim live ownership of %s", assistant_id)
+            await asyncio.sleep(interval)
+
     async def _finish(
         self,
         *,
-        stream: RunStream,
+        channel: _Channel,
         status: TurnStatus,
         content: list[AguiMessage],
         finalize: Finalizer,
@@ -277,30 +374,30 @@ class Runner:
             announced = await asyncio.shield(finalize(status, content, pause))
         except Exception:
             logger.exception("Could not save assistant turn %s", announce)
-            await stream.publish(
+            await channel.publish(
                 RunErrorEvent(
                     message="The answer could not be saved.", code="persist_failed"
                 )
             )
-            await stream.close()
+            await channel.close()
             return
         if not started:
             # Stopped while waiting for a slot: still give subscribers a
             # complete lifecycle so the client can show the outcome.
-            await stream.publish(
+            await channel.publish(
                 RunStartedEvent(thread_id=run_input.thread_id, run_id=run_input.run_id)
             )
         for event in [*spans.closing_events(), *announced]:
-            await stream.publish(event)
-        await stream.publish(self._status_event(announce, status))
+            await channel.publish(event)
+        await channel.publish(self._status_event(announce, status))
         if status == "failed":
-            await stream.publish(
+            await channel.publish(
                 RunErrorEvent(
                     message="The agent could not finish.", code="agent_run_failed"
                 )
             )
         else:
-            await stream.publish(
+            await channel.publish(
                 finished
                 or RunFinishedEvent(
                     thread_id=run_input.thread_id,
@@ -310,7 +407,7 @@ class Runner:
                     else None,
                 )
             )
-        await stream.close()
+        await channel.close()
 
     @staticmethod
     def _status_event(announce: dict[str, Any], status: str) -> CustomEvent:

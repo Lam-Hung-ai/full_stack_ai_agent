@@ -64,7 +64,7 @@ Activity user_interaction giữ tác giả/response để render và rebuild con
 - Tab tự giữ nhánh đang xem; request gửi parent tường minh, không đổi context của invocation đã bắt đầu.
 - Chuyển workspace không thay scope của message/execution cũ. Quyền đọc/stream phải được kiểm tra theo scope server.
 
-Shared Redis làm nền cho reconnect qua pod khác; chưa có implementation/test multi-pod end-to-end. Không suy ra detached execution hoặc snapshot+tail chỉ vì đã dùng LangGraphAgent.
+Shared Redis làm nền cho reconnect qua pod khác; chưa có implementation/test multi-pod end-to-end. S5 đã triển khai (`backend/src/app/modules/agent/live.py`): stream event `chat:{assistant}:events` giới hạn độ dài, view ở điểm an toàn kèm watermark và số thứ tự event, khoá `owner` có heartbeat, kênh `chat:stop`; test dùng fakeredis, chạy thật một process. Không suy ra detached execution hoặc snapshot+tail chỉ vì đã dùng LangGraphAgent.
 
 ## 6. Stop, lỗi và giới hạn
 

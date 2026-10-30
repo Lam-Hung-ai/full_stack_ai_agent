@@ -133,6 +133,15 @@ class MessageRepository:
         )
         return (await self._session.execute(statement)).first() is not None
 
+    async def get_active(self, *, conversation_id: UUID) -> RowMapping | None:
+        """The whole active assistant row, if any (one per conversation)."""
+        statement = select(messages).where(
+            messages.c.conversation_id == conversation_id,
+            messages.c.role == "assistant",
+            messages.c.status.in_(ACTIVE_STATUSES),
+        )
+        return (await self._session.execute(statement)).mappings().one_or_none()
+
     async def active_assistant(self, *, conversation_id: UUID) -> RowMapping | None:
         statement = select(messages.c.id, messages.c.status).where(
             messages.c.conversation_id == conversation_id,

@@ -1,14 +1,17 @@
+import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.common import redis
 from app.common.exceptions.handlers import install_handlers
 from app.common.logging import configure_logging
 from app.common.request_context import RequestIdMiddleware
 from app.config.settings import get_settings
 from app.modules.agent.agui import turn_agent
+from app.modules.agent.live import LiveStore
 from app.modules.agent.runner import Runner
 from app.modules.auth.router import router as auth_router
 from app.modules.conversations.router import router as conversations_router
@@ -22,12 +25,21 @@ configure_logging()
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
-    app.state.runner = Runner(
-        agent_factory=turn_agent, max_concurrent=settings.max_concurrent_turns
+    client = redis.create_redis()
+    runner = Runner(
+        agent_factory=turn_agent,
+        max_concurrent=settings.max_concurrent_turns,
+        live=LiveStore(client),
     )
+    app.state.runner = runner
+    stops = asyncio.create_task(runner.listen_for_stops(), name="turn-stop-listener")
     yield
     # Let running turns finish and save before the process exits.
-    await app.state.runner.shutdown(timeout=settings.shutdown_grace_seconds)
+    await runner.shutdown(timeout=settings.shutdown_grace_seconds)
+    stops.cancel()
+    with suppress(asyncio.CancelledError):
+        await stops
+    await client.aclose()
 
 
 app = FastAPI(title="Agent Backend", version="0.1.0", lifespan=lifespan)

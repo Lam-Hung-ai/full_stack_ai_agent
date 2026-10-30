@@ -139,4 +139,30 @@ describe("ChatAgent", () => {
       resume: [{ interruptId: "i1", status: "resolved", payload: { answer: "CSV" } }],
     });
   });
+
+  it("attaches through connect without a body", async () => {
+    const fetchMock = vi.fn(async () =>
+      sse([
+        { type: "RUN_STARTED", threadId: "c1", runId: "r" },
+        {
+          type: "MESSAGES_SNAPSHOT",
+          messages: [{ id: "u1", role: "user", content: "hỏi" }],
+        },
+        { type: "TEXT_MESSAGE_START", messageId: "m1", role: "assistant" },
+        { type: "TEXT_MESSAGE_CONTENT", messageId: "m1", delta: "đang" },
+        { type: "TEXT_MESSAGE_END", messageId: "m1" },
+        { type: "RUN_FINISHED", threadId: "c1", runId: "r" },
+      ]),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const agent = new ChatAgent({ conversationId: "c1" });
+    agent.abortRun(); // a previous stream was left when switching away
+
+    await agent.attach();
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/v1/conversations/c1/connect");
+    expect(init.body).toBeUndefined();
+    expect(agent.messages.map((m) => m.id)).toEqual(["u1", "m1"]);
+  });
 });

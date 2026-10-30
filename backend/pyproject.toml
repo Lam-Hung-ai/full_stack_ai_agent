@@ -30,6 +30,7 @@ dependencies = [
     "argon2-cffi>=25.1.0",
     "email-validator>=2.2",
     "uuid-utils>=0.11",
+    "redis>=6.4",
 ]
 
 [project.scripts]
@@ -46,6 +47,7 @@ module-name = "app"
 
 [dependency-groups]
 dev = [
+    "fakeredis>=2.31",
     "httpx>=0.28.1",
     "pyrefly>=1.2.0",
     "pytest>=9.1.1",

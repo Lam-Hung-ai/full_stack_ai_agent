@@ -41,9 +41,10 @@ function questionRow(id: string, text: string, siblingIds: string[]): RowView {
  *
  * Which branch is shown is per tab (API §2): `anchor` opens the branch
  * through a message, null the saved one. A turn this tab streams is drawn
- * over that branch until the saved branch holds its answer. While a turn
- * started elsewhere is still running, the history is polled until it is
- * saved; live reconnect comes with sprint S5.
+ * over that branch until the saved branch holds its answer. A turn started
+ * elsewhere (another tab, before a reload) is followed through `attach`;
+ * when its live data is gone the history is polled until it is saved.
+ * Leaving the conversation drops the stream; the turn goes on (QD-23).
  */
 export function useConversationChat(conversationId: string) {
   const queryClient = useQueryClient();
@@ -212,6 +213,28 @@ export function useConversationChat(conversationId: string) {
     },
     [saved, startTurn],
   );
+
+  // Follow a turn that runs without this tab, once per assistant row.
+  const attachedRef = useRef<string | null>(null);
+  const attach = useCallback(
+    async (row: RowView) => {
+      const index = saved.findIndex((item) => item.id === row.id);
+      await startTurn(
+        { kept: saved.slice(0, index), question: null, questionId: "", continued: row },
+        (agent) => agent.attach(),
+        [],
+      );
+    },
+    [saved, startTurn],
+  );
+  useEffect(() => {
+    const last = saved.at(-1);
+    if (!agentReady || runningRef.current || !last || !isActive(last)) return;
+    if (attachedRef.current === last.id) return;
+    attachedRef.current = last.id;
+    // Deferred: starting the stream sets state.
+    queueMicrotask(() => void attach(last));
+  }, [agentReady, attach, saved]);
 
   const regenerate = useCallback(
     async (assistantMessageId: string) => {

@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
@@ -391,13 +392,25 @@ class TurnService:
         )
         target = await self._target(conversation_id, message_id, "assistant")
         if target["status"] in ACTIVE_STATUSES:
-            if not await self._runner.stop(message_id, timeout=STOP_WAIT_SECONDS):
-                # Nothing runs it in this process: it waits for the user, or a
-                # restart orphaned it (RR-01, RR-10). Cancel it in place.
+            where = await self._runner.stop(message_id, timeout=STOP_WAIT_SECONDS)
+            if where == "orphan":
+                # No process runs it: it waits for the user, or a restart
+                # orphaned it (RR-01, RR-10). Cancel it in place.
                 await self._cancel_in_place(target)
                 await self._session.commit()
+            elif where == "remote":
+                await self._await_end(conversation_id, message_id)
             target = await self._target(conversation_id, message_id, "assistant")
         return StopResponse(id=message_id, status=target["status"])
+
+    async def _await_end(self, conversation_id: UUID, message_id: UUID) -> None:
+        """Watch the row while another process saves the stopped turn."""
+        deadline = asyncio.get_running_loop().time() + STOP_WAIT_SECONDS
+        while asyncio.get_running_loop().time() < deadline:
+            message = await self._target(conversation_id, message_id, "assistant")
+            if message["status"] not in ACTIVE_STATUSES:
+                return
+            await asyncio.sleep(0.1)
 
     async def _cancel_in_place(self, target: RowMapping) -> None:
         pending = target["metadata"].get("pending_action")

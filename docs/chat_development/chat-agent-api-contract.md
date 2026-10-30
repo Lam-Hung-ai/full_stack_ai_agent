@@ -134,11 +134,15 @@ Snapshot thay thế projection tương ứng trên UI; không append prefix lầ
 
 Mất Redis/worker có thể mất phần chưa lưu; PostgreSQL lưu ở terminal/pause theo giới hạn đã chốt. Không hứa reconnect cứu mọi token.
 
+Từ S5 (TD-011): stream của connect là `RUN_STARTED` (run riêng của connect), `CUSTOM chat.assistant` nếu có assistant active, `MESSAGES_SNAPSHOT` (nhánh đã lưu + view live), rồi với lượt đang chạy là các event sau watermark tới `RUN_FINISHED`/`RUN_ERROR` của lượt. View chỉ được ghi ở điểm không còn step/message/tool call nào mở, nên phần đuôi không có END thiếu START. Không có dữ liệu live, hoặc stream đã bị cắt mất event sau watermark (phát hiện bằng số thứ tự event), thì chỉ gửi snapshot đã lưu rồi đóng; client poll history tới khi lượt lưu xong. Một SSE mỗi tab (QD-23): rời conversation là ngắt stream, quay lại thì connect.
+
 ## 7. Stop và hủy lượt chờ
 
 Không body. Conversation ID và assistant message ID trên URL xác định lượt cần dừng.
 
 Backend kiểm tra quyền, message thuộc conversation và trạng thái hiện tại. pending/running thì gửi tín hiệu dừng lượt đó; requires_action thì hủy toàn bộ lượt, chuyển cancelled, giữ content và vô hiệu pending pointer. Đã terminal thì không chạy lại hay tác động lượt khác. Không có endpoint cancel-action riêng.
+
+Từ S5, process nhận stop mà không chạy lượt đó thì phát tín hiệu qua Redis tới process đang giữ khoá sở hữu của lượt và chờ trạng thái đổi; không còn process nào sở hữu thì huỷ tại chỗ.
 
 Stop mang nghĩa dừng assistant này, kể cả nó vừa resume. Chấp nhận lệnh đến muộn có thể dừng lần resume mới của cùng assistant; không bảo đảm phân biệt invocation cũ/mới. Regenerate có assistant ID khác nên stop message cũ không tác động message mới.
 

@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     #: Tools that pause the turn for the user's approval before they run.
     tools_requiring_approval: list[str] = []
 
+    #: Live view of running turns, stop signals across processes (S5).
+    redis_url: str = "redis://localhost:6379/0"
+
     allowed_origins: list[str] = ["http://localhost:3000"]
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     log_format: Literal["json", "text"] = "json"
