@@ -144,3 +144,4 @@ Loại: `BẮT ĐẦU`, `KẾT THÚC`, `LỖI`, `SỬA`, `THAY ĐỔI`, `QUYẾT
 | 30/10/2026 | S10 | QUYẾT ĐỊNH | QD-32 | Chi tiết tên chat, index tìm kiếm, `create_file`, export | CH-S10-BE-01 → BE-05 |
 | 30/10/2026 | S10 | THAY ĐỔI | TD-018 | Route search và export, migration tìm kiếm, tool `create_file`, `openpyxl` | CH-S10-DB-01 → FE-03 |
 | 30/10/2026 | S10 | KẾT THÚC | — | Xong 12/12 task; backend 152 test, frontend 68 test xanh; kịch bản 1–4 đạt; use case 16 Đạt, 4 Một phần, 12 Sau | — |
+| 30/10/2026 | S10 | PHÁT HÀNH | — | Commit Sprint 10 trên `chat` | `230f1c9` |
