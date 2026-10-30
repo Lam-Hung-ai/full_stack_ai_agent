@@ -27,7 +27,21 @@ class AuthorizationRepository:
     async def member_has(self, *, member_id: UUID, resource: str, action: str) -> bool:
         """Union of grants from the member's active role assignments."""
         statement = (
-            select(permissions.c.id)
+            self._granted(member_id)
+            .where(permissions.c.resource == resource, permissions.c.action == action)
+            .limit(1)
+        )
+        return (await self._session.execute(statement)).first() is not None
+
+    async def member_actions(self, *, member_id: UUID, resource: str) -> set[str]:
+        statement = self._granted(member_id).where(permissions.c.resource == resource)
+        return set((await self._session.execute(statement)).scalars())
+
+    @staticmethod
+    def _granted(member_id: UUID):
+        return (
+            select(permissions.c.action)
+            .distinct()
             .select_from(assignments)
             .join(
                 roles,
@@ -38,9 +52,5 @@ class AuthorizationRepository:
             .where(
                 assignments.c.member_id == member_id,
                 assignments.c.is_active.is_(True),
-                permissions.c.resource == resource,
-                permissions.c.action == action,
             )
-            .limit(1)
         )
-        return (await self._session.execute(statement)).first() is not None

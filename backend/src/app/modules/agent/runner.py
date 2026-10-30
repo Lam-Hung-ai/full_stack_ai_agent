@@ -23,11 +23,15 @@ from ag_ui.core import (
     EventType,
     RunAgentInput,
     RunErrorEvent,
+    RunFinishedCancelledOutcome,
     RunFinishedEvent,
+    RunStartedEvent,
 )
 from ag_ui_langgraph import LangGraphAgent
 
 from app.modules.agent.bundle import AguiMessage, BundleBuilder
+from app.modules.agent.lifecycle import OpenSpans
+from app.modules.agent.tools import ToolGuard, current_tool_guard
 
 logger = logging.getLogger(__name__)
 
@@ -76,13 +80,15 @@ class Runner:
     def __init__(
         self,
         *,
-        agent_factory: Callable[[], LangGraphAgent],
+        agent_factory: Callable[[frozenset[str]], LangGraphAgent],
         max_concurrent: int,
     ) -> None:
         self._agent_factory = agent_factory
         self._slots = asyncio.Semaphore(max_concurrent)
         self._streams: dict[UUID, RunStream] = {}
         self._tasks: dict[UUID, asyncio.Task[None]] = {}
+        #: Turns saving their outcome; cancelling now would lose the end events.
+        self._finishing: set[UUID] = set()
 
     def start(
         self,
@@ -90,6 +96,8 @@ class Runner:
         assistant_id: UUID,
         run_input: RunAgentInput,
         announce: dict[str, Any],
+        tools: frozenset[str],
+        tool_guard: ToolGuard,
         on_running: Callable[[], Awaitable[None]],
         finalize: Finalizer,
     ) -> RunStream:
@@ -101,6 +109,8 @@ class Runner:
                 stream=stream,
                 run_input=run_input,
                 announce=announce,
+                tools=tools,
+                tool_guard=tool_guard,
                 on_running=on_running,
                 finalize=finalize,
             ),
@@ -111,16 +121,30 @@ class Runner:
     def stream(self, assistant_id: UUID) -> RunStream | None:
         return self._streams.get(assistant_id)
 
+    async def stop(self, assistant_id: UUID, *, timeout: float) -> bool:
+        """Cancel a turn of this process and wait up to `timeout` for it to be
+        saved as cancelled. False when no such turn runs here."""
+        task = self._tasks.get(assistant_id)
+        if task is None:
+            return False
+        self._cancel(assistant_id, task)
+        await asyncio.wait({task}, timeout=timeout)
+        return True
+
     async def shutdown(self, timeout: float) -> None:
         """Let running turns finish within `timeout`, then cancel the rest
         (they are saved as cancelled with their partial content)."""
-        tasks = list(self._tasks.values())
+        tasks = dict(self._tasks)
         if not tasks:
             return
-        _, pending = await asyncio.wait(tasks, timeout=timeout)
-        for task in pending:
+        await asyncio.wait(tasks.values(), timeout=timeout)
+        for assistant_id, task in tasks.items():
+            self._cancel(assistant_id, task)
+        await asyncio.gather(*tasks.values(), return_exceptions=True)
+
+    def _cancel(self, assistant_id: UUID, task: asyncio.Task[None]) -> None:
+        if assistant_id not in self._finishing and not task.done():
             task.cancel()
-        await asyncio.gather(*pending, return_exceptions=True)
 
     async def _execute(
         self,
@@ -129,16 +153,22 @@ class Runner:
         stream: RunStream,
         run_input: RunAgentInput,
         announce: dict[str, Any],
+        tools: frozenset[str],
+        tool_guard: ToolGuard,
         on_running: Callable[[], Awaitable[None]],
         finalize: Finalizer,
     ) -> None:
         public_thread = run_input.thread_id
         builder = BundleBuilder({message.id for message in run_input.messages})
-        agent = self._agent_factory().clone()
+        spans = OpenSpans()
+        # Tasks the graph spawns copy this context, so tool calls see the guard.
+        current_tool_guard.set(tool_guard)
+        agent: LangGraphAgent | None = None
         finished: BaseEvent | None = None
         started = False
         status: TurnStatus = "failed"
         try:
+            agent = self._agent_factory(tools).clone()
             async with self._slots:
                 await on_running()
                 # ID decisions §1: the native thread is the assistant row; the
@@ -148,6 +178,7 @@ class Runner:
                     if getattr(event, "thread_id", None) is not None:
                         event = event.model_copy(update={"thread_id": public_thread})
                     builder.apply(event)
+                    spans.apply(event)
                     if event.type == EventType.RUN_FINISHED:
                         finished = event
                         continue
@@ -164,6 +195,7 @@ class Runner:
         except Exception:
             logger.exception("Assistant turn %s failed", assistant_id)
         finally:
+            self._finishing.add(assistant_id)
             try:
                 await self._finish(
                     stream=stream,
@@ -174,11 +206,14 @@ class Runner:
                     started=started,
                     finished=finished,
                     run_input=run_input,
+                    spans=spans,
                 )
             finally:
-                await self._forget_native_thread(agent, assistant_id)
+                if agent is not None:
+                    await self._forget_native_thread(agent, assistant_id)
                 self._streams.pop(assistant_id, None)
                 self._tasks.pop(assistant_id, None)
+                self._finishing.discard(assistant_id)
 
     async def _finish(
         self,
@@ -191,6 +226,7 @@ class Runner:
         started: bool,
         finished: BaseEvent | None,
         run_input: RunAgentInput,
+        spans: OpenSpans,
     ) -> None:
         try:
             # Shielded: a shutdown cancellation must not abort the final write.
@@ -204,8 +240,15 @@ class Runner:
             )
             await stream.close()
             return
-        if started:
-            await stream.publish(self._status_event(announce, status))
+        if not started:
+            # Stopped while waiting for a slot: still give subscribers a
+            # complete lifecycle so the client can show the outcome.
+            await stream.publish(
+                RunStartedEvent(thread_id=run_input.thread_id, run_id=run_input.run_id)
+            )
+        for event in spans.closing_events():
+            await stream.publish(event)
+        await stream.publish(self._status_event(announce, status))
         if status == "failed":
             await stream.publish(
                 RunErrorEvent(
@@ -216,7 +259,11 @@ class Runner:
             await stream.publish(
                 finished
                 or RunFinishedEvent(
-                    thread_id=run_input.thread_id, run_id=run_input.run_id
+                    thread_id=run_input.thread_id,
+                    run_id=run_input.run_id,
+                    outcome=RunFinishedCancelledOutcome()
+                    if status == "cancelled"
+                    else None,
                 )
             )
         await stream.close()

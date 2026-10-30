@@ -2,7 +2,7 @@ from typing import Annotated
 from uuid import UUID
 
 from ag_ui.encoder import EventEncoder
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import StreamingResponse
 
 from app.common.dependencies.auth import CurrentUser
@@ -15,12 +15,21 @@ from app.modules.conversations.schemas import (
     ConversationListResponse,
     ConversationResponse,
     ConversationUpdate,
+    EditMessage,
     HistoryResponse,
     SendMessage,
+    StopResponse,
 )
-from app.modules.conversations.service import ConversationService, TurnService
+from app.modules.conversations.service import (
+    ConversationService,
+    StartedTurn,
+    TurnService,
+)
 
 router = APIRouter(tags=["Conversations"])
+
+#: The turn routes stream AG-UI events; errors before the turn starts are JSON.
+TURN_RESPONSES: dict[int | str, dict] = {200: {"content": {"text/event-stream": {}}}}
 
 
 @router.post(
@@ -48,9 +57,18 @@ async def list_conversations(
     user: CurrentUser,
     session: SessionDep,
     params: Annotated[PageParams, Depends(page_params)],
+    archived: Annotated[bool, Query(description="Archived chats only")] = False,
+    folder_id: Annotated[UUID | None, Query(description="Chats of one folder")] = None,
+    unfiled: Annotated[bool, Query(description="Chats outside any folder")] = False,
 ) -> ConversationListResponse:
+    """Pinned chats come first, then the most recently updated."""
     return await ConversationService(session).list(
-        user=user, workspace=workspace, params=params
+        user=user,
+        workspace=workspace,
+        params=params,
+        archived=archived,
+        folder_id=folder_id,
+        unfiled=unfiled,
     )
 
 
@@ -70,7 +88,7 @@ async def update_conversation(
     user: CurrentUser,
     session: SessionDep,
 ) -> ConversationResponse:
-    return await ConversationService(session).rename(
+    return await ConversationService(session).update(
         user=user, conversation_id=conversation_id, data=data
     )
 
@@ -88,17 +106,23 @@ async def delete_conversation(
 
 @router.get("/conversations/{conversation_id}/messages", response_model=HistoryResponse)
 async def get_history(
-    conversation_id: UUID, user: CurrentUser, session: SessionDep
+    conversation_id: UUID,
+    user: CurrentUser,
+    session: SessionDep,
+    from_message_id: Annotated[
+        UUID | None,
+        Query(description="Open the branch through this message instead"),
+    ] = None,
 ) -> HistoryResponse:
     return await ConversationService(session).history(
-        user=user, conversation_id=conversation_id
+        user=user, conversation_id=conversation_id, from_message_id=from_message_id
     )
 
 
 @router.post(
     "/conversations/{conversation_id}/messages",
     response_class=StreamingResponse,
-    responses={200: {"content": {"text/event-stream": {}}}},
+    responses=TURN_RESPONSES,
 )
 async def send_message(
     conversation_id: UUID,
@@ -116,6 +140,68 @@ async def send_message(
     turn = await TurnService(session, runner=runner, session_factory=SessionLocal).send(
         user=user, conversation_id=conversation_id, data=data
     )
+    return _turn_stream(turn, request)
+
+
+@router.post(
+    "/conversations/{conversation_id}/messages/{message_id}/edit",
+    response_class=StreamingResponse,
+    responses=TURN_RESPONSES,
+)
+async def edit_message(
+    conversation_id: UUID,
+    message_id: UUID,
+    data: EditMessage,
+    request: Request,
+    user: CurrentUser,
+    session: SessionDep,
+    runner: RunnerDep,
+) -> StreamingResponse:
+    """Answer a new version of a user question; the old branch stays."""
+    turn = await TurnService(session, runner=runner, session_factory=SessionLocal).edit(
+        user=user, conversation_id=conversation_id, message_id=message_id, data=data
+    )
+    return _turn_stream(turn, request)
+
+
+@router.post(
+    "/conversations/{conversation_id}/messages/{message_id}/regenerate",
+    response_class=StreamingResponse,
+    responses=TURN_RESPONSES,
+)
+async def regenerate_message(
+    conversation_id: UUID,
+    message_id: UUID,
+    request: Request,
+    user: CurrentUser,
+    session: SessionDep,
+    runner: RunnerDep,
+) -> StreamingResponse:
+    """Answer the same question again beside the given assistant message."""
+    turn = await TurnService(
+        session, runner=runner, session_factory=SessionLocal
+    ).regenerate(user=user, conversation_id=conversation_id, message_id=message_id)
+    return _turn_stream(turn, request)
+
+
+@router.post(
+    "/conversations/{conversation_id}/messages/{message_id}/stop",
+    response_model=StopResponse,
+)
+async def stop_message(
+    conversation_id: UUID,
+    message_id: UUID,
+    user: CurrentUser,
+    session: SessionDep,
+    runner: RunnerDep,
+) -> StopResponse:
+    """Stop an assistant turn, keeping what it produced so far."""
+    return await TurnService(session, runner=runner, session_factory=SessionLocal).stop(
+        user=user, conversation_id=conversation_id, message_id=message_id
+    )
+
+
+def _turn_stream(turn: StartedTurn, request: Request) -> StreamingResponse:
     encoder = EventEncoder(accept=request.headers.get("accept", ""))
 
     async def events():

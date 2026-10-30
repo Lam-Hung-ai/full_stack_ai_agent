@@ -1,30 +1,17 @@
-from datetime import datetime, timezone
 from functools import lru_cache
 
 from langchain.agents import create_agent
 from langchain_core.language_models import BaseChatModel
-from langchain_core.tools import tool
 from langchain_openrouter import ChatOpenRouter
 from langgraph.checkpoint.memory import InMemorySaver
 
 from app.config.settings import get_settings
+from app.modules.agent.tools import TOOLS, ToolPermissionMiddleware
 
 SYSTEM_PROMPT = (
     "You are a helpful assistant exposed through a FastAPI + LangGraph backend. "
     "Use the available tools when they help answer the question."
 )
-
-
-@tool
-def get_current_time() -> str:
-    """Return the current UTC date and time.
-
-    Use this when asked what time or date it is.
-    """
-    return datetime.now(timezone.utc).isoformat()
-
-
-TOOLS = [get_current_time]
 
 
 def build_model() -> BaseChatModel:
@@ -42,14 +29,17 @@ def build_model() -> BaseChatModel:
     )
 
 
-@lru_cache(maxsize=1)
-def get_agent():
+@lru_cache(maxsize=16)
+def get_agent(tool_names: frozenset[str]):
+    """One compiled graph per set of allowed tools; members with the same
+    grants share it. Unknown names are ignored."""
     # AG-UI requires a checkpointer for thread-based runs. Each assistant turn
     # gets its own native thread, deleted when the turn ends; the Postgres
     # saver that keeps paused turns arrives in sprint S4.
     return create_agent(
         model=build_model(),
-        tools=TOOLS,
+        tools=[TOOLS[name] for name in sorted(tool_names & TOOLS.keys())],
         system_prompt=SYSTEM_PROMPT,
+        middleware=[ToolPermissionMiddleware()],
         checkpointer=InMemorySaver(),
     )

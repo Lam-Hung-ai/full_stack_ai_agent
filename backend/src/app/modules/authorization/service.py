@@ -24,6 +24,22 @@ class AuthorizationService:
             member_id=workspace.member_id, resource=resource, action=action
         )
 
+    async def allowed_actions(
+        self, workspace: WorkspaceContext, resource: str
+    ) -> frozenset[str]:
+        """Every action of `resource` the workspace context may perform."""
+        if workspace.kind == "personal":
+            return frozenset(
+                action for name, action in PERSONAL_ALLOWED if name == resource
+            )
+        if workspace.member_id is None:
+            return frozenset()
+        return frozenset(
+            await self._authorization.member_actions(
+                member_id=workspace.member_id, resource=resource
+            )
+        )
+
     async def require(
         self, workspace: WorkspaceContext, resource: str, action: str
     ) -> None:

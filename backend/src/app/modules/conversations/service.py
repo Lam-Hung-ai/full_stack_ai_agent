@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from typing import Any
 from uuid import UUID
 
@@ -10,10 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from uuid_utils.compat import uuid7
 
 from app.common.dependencies.auth import Principal
-from app.common.exceptions.handlers import fail
+from app.common.exceptions.handlers import DomainError, fail
 from app.common.schemas.pagination import PageParams, Pagination
+from app.config.security import now
 from app.modules.agent.bundle import AguiMessage
 from app.modules.agent.runner import Runner, RunStream, TurnStatus
+from app.modules.agent.tools import TOOL_RESOURCE, TOOLS
 from app.modules.authorization.service import AuthorizationService
 from app.modules.conversations.context import branch_messages
 from app.modules.conversations.repository import (
@@ -22,21 +25,29 @@ from app.modules.conversations.repository import (
     MessageRepository,
 )
 from app.modules.conversations.schemas import (
+    ACTIVE_STATUSES,
     ActiveAssistant,
+    ChatMessageInput,
     ConversationCreate,
     ConversationListItem,
     ConversationListResponse,
     ConversationResponse,
     ConversationUpdate,
+    EditMessage,
     HistoryResponse,
     MessageResponse,
     SendMessage,
+    StopResponse,
 )
+from app.modules.conversations.tree import MessageTree
+from app.modules.folders.service import FolderService
 from app.modules.workspaces.schemas import WorkspaceContext
 from app.modules.workspaces.service import WorkspaceService
 
 TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled"})
 TITLE_LENGTH = 60
+#: How long a stop request waits for the turn to save its partial answer.
+STOP_WAIT_SECONDS = 5.0
 
 type SessionFactory = Callable[[], AsyncSession]
 
@@ -67,11 +78,21 @@ class ConversationService:
         return ConversationResponse.model_validate(dict(row))
 
     async def list(
-        self, *, user: Principal, workspace: WorkspaceContext, params: PageParams
+        self,
+        *,
+        user: Principal,
+        workspace: WorkspaceContext,
+        params: PageParams,
+        archived: bool = False,
+        folder_id: UUID | None = None,
+        unfiled: bool = False,
     ) -> ConversationListResponse:
         rows, total = await self._conversations.list_for_owner(
             workspace_id=workspace.id,
             owner_user_id=user.id,
+            archived=archived,
+            folder_id=folder_id,
+            unfiled=unfiled,
             limit=params.page_size,
             offset=params.offset,
         )
@@ -86,14 +107,36 @@ class ConversationService:
         row = await self.require_owned(user=user, conversation_id=conversation_id)
         return await self._response(row)
 
-    async def rename(
+    async def update(
         self, *, user: Principal, conversation_id: UUID, data: ConversationUpdate
     ) -> ConversationResponse:
-        await self.require_owned(user=user, conversation_id=conversation_id, lock=True)
-        row = await self._conversations.update(
-            conversation_id=conversation_id, title=data.title
+        row = await self.require_owned(
+            user=user, conversation_id=conversation_id, lock=True
         )
-        await self._session.commit()
+        fields = data.model_fields_set
+        values: dict[str, Any] = {}
+        if data.title is not None:
+            values["title"] = data.title
+        # Pinning again keeps the original time, so the order does not jump.
+        if data.pinned is not None and data.pinned != (row["pinned_at"] is not None):
+            values["pinned_at"] = now() if data.pinned else None
+        if data.archived is not None and data.archived != (
+            row["archived_at"] is not None
+        ):
+            values["archived_at"] = now() if data.archived else None
+        if "folder_id" in fields:
+            if data.folder_id is not None:
+                await FolderService(self._session).require_owned(
+                    user=user,
+                    folder_id=data.folder_id,
+                    workspace_id=row["workspace_id"],
+                )
+            values["folder_id"] = data.folder_id
+        if values:
+            row = await self._conversations.update(
+                conversation_id=conversation_id, **values
+            )
+            await self._session.commit()
         return await self._response(row)
 
     async def delete(self, *, user: Principal, conversation_id: UUID) -> None:
@@ -103,10 +146,23 @@ class ConversationService:
         await self._session.commit()
 
     async def history(
-        self, *, user: Principal, conversation_id: UUID
+        self,
+        *,
+        user: Principal,
+        conversation_id: UUID,
+        from_message_id: UUID | None = None,
     ) -> HistoryResponse:
+        """The saved current branch, or with `from_message_id` the branch
+        through that message down its newest children. Reading never moves
+        the saved pointer: which branch a tab shows is the client's (API §2)."""
         row = await self.require_owned(user=user, conversation_id=conversation_id)
-        leaf = row["current_message_id"]
+        tree = MessageTree(await self._messages.links(conversation_id=conversation_id))
+        if from_message_id is None:
+            leaf = row["current_message_id"]
+        elif from_message_id in tree:
+            leaf = tree.latest_leaf(from_message_id)
+        else:
+            fail(404, "message_not_found")
         path = (
             await self._messages.branch(conversation_id=conversation_id, leaf_id=leaf)
             if leaf
@@ -114,12 +170,23 @@ class ConversationService:
         )
         return HistoryResponse(
             current_message_id=leaf,
-            data=[MessageResponse.model_validate(dict(message)) for message in path],
+            data=[
+                MessageResponse.model_validate(
+                    {**dict(message), "sibling_ids": tree.siblings(message["id"])}
+                )
+                for message in path
+            ],
         )
 
     async def require_owned(
         self, *, user: Principal, conversation_id: UUID, lock: bool = False
     ) -> RowMapping:
+        row, _ = await self.owned(user=user, conversation_id=conversation_id, lock=lock)
+        return row
+
+    async def owned(
+        self, *, user: Principal, conversation_id: UUID, lock: bool = False
+    ) -> tuple[RowMapping, WorkspaceContext]:
         """Chats are private to their owner (decisions §1), and the owner must
         still belong to the chat's workspace. Anything else looks like 404."""
         row = await self._conversations.get_for_owner(
@@ -127,10 +194,10 @@ class ConversationService:
         )
         if row is None:
             fail(404, "conversation_not_found")
-        await WorkspaceService(self._session).context(
+        workspace = await WorkspaceService(self._session).context(
             user_id=user.id, workspace_id=row["workspace_id"]
         )
-        return row
+        return row, workspace
 
     async def _response(self, row: RowMapping) -> ConversationResponse:
         active = await self._messages.active_assistant(conversation_id=row["id"])
@@ -152,7 +219,10 @@ class StartedTurn:
 
 
 class TurnService:
-    """Starts assistant turns and records their outcome."""
+    """Starts assistant turns, stops them and records their outcome.
+
+    Sending, editing and regenerating differ only in where the new rows hang
+    in the tree (database §6); all three end in `_launch`."""
 
     def __init__(
         self, session: AsyncSession, *, runner: Runner, session_factory: SessionFactory
@@ -166,42 +236,164 @@ class TurnService:
     async def send(
         self, *, user: Principal, conversation_id: UUID, data: SendMessage
     ) -> StartedTurn:
-        conversation = await ConversationService(self._session).require_owned(
+        conversation, workspace = await self._open(user, conversation_id)
+        text = _question_text(data.message)
+        await self._check_parent(conversation_id, data.parent_message_id)
+        title = (
+            _fallback_title(text)
+            if conversation["title"] == DEFAULT_TITLE and data.parent_message_id is None
+            else None
+        )
+        return await self._ask(
+            user,
+            workspace,
+            conversation_id,
+            parent_id=data.parent_message_id,
+            message=data.message,
+            text=text,
+            title=title,
+        )
+
+    async def edit(
+        self,
+        *,
+        user: Principal,
+        conversation_id: UUID,
+        message_id: UUID,
+        data: EditMessage,
+    ) -> StartedTurn:
+        """A new user message beside the edited one (same parent), then a new
+        answer; the old version and everything under it stay (API §4)."""
+        _, workspace = await self._open(user, conversation_id)
+        text = _question_text(data.message)
+        original = await self._target(conversation_id, message_id, "user")
+        return await self._ask(
+            user,
+            workspace,
+            conversation_id,
+            parent_id=original["parent_message_id"],
+            message=data.message,
+            text=text,
+        )
+
+    async def regenerate(
+        self, *, user: Principal, conversation_id: UUID, message_id: UUID
+    ) -> StartedTurn:
+        """A new answer beside the old one, from the question's branch; the old
+        answer's checkpoint is not continued (API §4)."""
+        _, workspace = await self._open(user, conversation_id)
+        original = await self._target(conversation_id, message_id, "assistant")
+        await self._ensure_idle(conversation_id)
+        question_id = original["parent_message_id"]
+        history = await self._messages.branch(
+            conversation_id=conversation_id, leaf_id=question_id
+        )
+        return await self._launch(
+            user,
+            workspace,
+            conversation_id,
+            user_message_id=question_id,
+            messages=branch_messages(history),
+        )
+
+    async def stop(
+        self, *, user: Principal, conversation_id: UUID, message_id: UUID
+    ) -> StopResponse:
+        """Stop this assistant only (API §7). A finished one is left as is."""
+        await ConversationService(self._session).require_owned(
+            user=user, conversation_id=conversation_id
+        )
+        target = await self._target(conversation_id, message_id, "assistant")
+        if target["status"] in ACTIVE_STATUSES:
+            if not await self._runner.stop(message_id, timeout=STOP_WAIT_SECONDS):
+                # No turn runs it in this process: a restart orphaned it
+                # (RR-01, RR-10). Cancel in place so the chat can go on.
+                await self._messages.set_status(
+                    message_id=message_id, status="cancelled"
+                )
+                await self._session.commit()
+            target = await self._target(conversation_id, message_id, "assistant")
+        return StopResponse(id=message_id, status=target["status"])
+
+    async def _open(
+        self, user: Principal, conversation_id: UUID
+    ) -> tuple[RowMapping, WorkspaceContext]:
+        # Locked until commit: turns of one chat start one at a time.
+        return await ConversationService(self._session).owned(
             user=user, conversation_id=conversation_id, lock=True
         )
-        text = data.message.text.strip()
-        if data.message.file_ids:
-            fail(400, "file_attachments_unavailable")
-        if not text:
-            fail(422, "empty_message")
-        await self._check_parent(conversation_id, data.parent_message_id)
-        if await self._messages.exists(message_id=data.message.id):
-            fail(409, "message_id_conflict")
+
+    async def _target(
+        self, conversation_id: UUID, message_id: UUID, role: str
+    ) -> RowMapping:
+        message = await self._messages.get(
+            conversation_id=conversation_id, message_id=message_id
+        )
+        if message is None or message["role"] != role:
+            fail(404, "message_not_found")
+        return message
+
+    async def _ensure_idle(self, conversation_id: UUID) -> None:
         if await self._messages.active_assistant(conversation_id=conversation_id):
             fail(409, "assistant_active")
 
+    async def _ask(
+        self,
+        user: Principal,
+        workspace: WorkspaceContext,
+        conversation_id: UUID,
+        *,
+        parent_id: UUID | None,
+        message: ChatMessageInput,
+        text: str,
+        title: str | None = None,
+    ) -> StartedTurn:
+        """Insert the user's question under `parent_id` and answer it."""
+        if await self._messages.exists(message_id=message.id):
+            fail(409, "message_id_conflict")
+        await self._ensure_idle(conversation_id)
         history = (
             await self._messages.branch(
-                conversation_id=conversation_id, leaf_id=data.parent_message_id
+                conversation_id=conversation_id, leaf_id=parent_id
             )
-            if data.parent_message_id
+            if parent_id
             else []
         )
-        user_content: list[AguiMessage] = [
-            {"id": str(data.message.id), "role": "user", "content": text}
+        question: list[AguiMessage] = [
+            {"id": str(message.id), "role": "user", "content": text}
         ]
         await self._messages.insert(
-            message_id=data.message.id,
+            message_id=message.id,
             conversation_id=conversation_id,
-            parent_message_id=data.parent_message_id,
+            parent_message_id=parent_id,
             role="user",
             status="completed",
-            content=user_content,
+            content=question,
         )
+        return await self._launch(
+            user,
+            workspace,
+            conversation_id,
+            user_message_id=message.id,
+            messages=branch_messages(history) + question,
+            title=title,
+        )
+
+    async def _launch(
+        self,
+        user: Principal,
+        workspace: WorkspaceContext,
+        conversation_id: UUID,
+        *,
+        user_message_id: UUID,
+        messages: list[AguiMessage],
+        title: str | None = None,
+    ) -> StartedTurn:
+        """Insert the pending answer, make it the saved branch, commit, run."""
         try:
             assistant = await self._messages.insert(
                 conversation_id=conversation_id,
-                parent_message_id=data.message.id,
+                parent_message_id=user_message_id,
                 role="assistant",
                 status="pending",
                 content=[],
@@ -212,42 +404,48 @@ class TurnService:
             await self._session.rollback()
             fail(409, "assistant_active")
         updates: dict[str, Any] = {"current_message_id": assistant["id"]}
-        if conversation["title"] == DEFAULT_TITLE and data.parent_message_id is None:
-            updates["title"] = _fallback_title(text)
+        if title:
+            updates["title"] = title
         await self._conversations.update(conversation_id=conversation_id, **updates)
+        tools = await AuthorizationService(self._session).allowed_actions(
+            workspace, TOOL_RESOURCE
+        )
         await self._session.commit()
 
+        assistant_id = assistant["id"]
         run_input = RunAgentInput.model_validate(
             {
                 "threadId": str(conversation_id),
                 "runId": str(uuid7()),
                 "state": {},
-                "messages": branch_messages(history) + user_content,
+                "messages": messages,
                 "tools": [],
                 "context": [],
                 "forwardedProps": {},
             }
         )
         stream = self._runner.start(
-            assistant_id=assistant["id"],
+            assistant_id=assistant_id,
             run_input=run_input,
             announce={
                 "conversationId": str(conversation_id),
-                "userMessageId": str(data.message.id),
-                "assistantMessageId": str(assistant["id"]),
+                "userMessageId": str(user_message_id),
+                "assistantMessageId": str(assistant_id),
             },
-            on_running=lambda: self._record(assistant["id"], "running"),
+            tools=tools.intersection(TOOLS),
+            tool_guard=partial(self._tool_allowed, user.id, workspace.id),
+            on_running=lambda: self._record(assistant_id, "running"),
             finalize=lambda status, content: self._record(
-                assistant["id"], status, content
+                assistant_id, status, content
             ),
         )
-        return StartedTurn(data.message.id, assistant["id"], stream)
+        return StartedTurn(user_message_id, assistant_id, stream)
 
     async def _check_parent(
         self, conversation_id: UUID, parent_id: UUID | None
     ) -> None:
         if parent_id is None:
-            # A null parent starts the tree; later roots come from edits (S3).
+            # A null parent starts the tree; later roots come from edits.
             if await self._messages.has_any(conversation_id=conversation_id):
                 fail(409, "parent_required")
             return
@@ -261,6 +459,22 @@ class TurnService:
         ):
             fail(409, "invalid_parent")
 
+    async def _tool_allowed(
+        self, user_id: UUID, workspace_id: UUID, tool_name: str
+    ) -> bool:
+        """Checked right before each tool call, on fresh data: membership or a
+        grant may have been revoked since the turn started."""
+        async with self._session_factory() as session:
+            try:
+                workspace = await WorkspaceService(session).context(
+                    user_id=user_id, workspace_id=workspace_id
+                )
+            except DomainError:
+                return False
+            return await AuthorizationService(session).can(
+                workspace, TOOL_RESOURCE, tool_name
+            )
+
     async def _record(
         self,
         assistant_id: UUID,
@@ -273,3 +487,12 @@ class TurnService:
                 message_id=assistant_id, status=status, content=content
             )
             await session.commit()
+
+
+def _question_text(message: ChatMessageInput) -> str:
+    if message.file_ids:
+        fail(400, "file_attachments_unavailable")
+    text = message.text.strip()
+    if not text:
+        fail(422, "empty_message")
+    return text

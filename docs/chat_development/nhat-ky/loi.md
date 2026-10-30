@@ -14,6 +14,8 @@ Lỗi ở đây là **hành vi sai** so với quyết định đã chốt (datab
 | L-04 | Cao | Baseline chỉ dump schema nên mất 5 dòng danh mục `permissions` mà SQL giai đoạn 1 seed; tổ chức tạo sau đó không có grant nào, chủ tổ chức không tạo được chat | Rà S2, 29/10 | Đã xác minh | CH-S2-BE-01 | Đã sửa (S2) |
 | L-05 | Trung bình | Câu trả lời hiện ra một lần lúc kết thúc thay vì stream: lớp nén gzip của Next gom cả response `text/event-stream` đi qua rewrite | Chạy thật S2, 30/10 | Đã xác minh | CH-S2-FE-02 | Đã sửa (S2) |
 | L-06 | Thấp | Tải lại trang thì reasoning của mọi lượt cũ mở bung rồi mới tự đóng | Chạy thật S2, 30/10 | Đã xác minh | CH-S2-FE-02 | Đã sửa (S2) |
+| L-07 | Cao | Sau khi thêm registry tool, mọi lượt chat treo: tập tool truyền cho `lru_cache` là `set` (không hash được) nên runner ném lỗi trước khối `try`, stream không bao giờ đóng | Test S3, 30/10 | Đã xác minh | CH-S3-BE-05 | Đã sửa (S3) |
+| L-08 | Trung bình | Bấm dừng thì câu trả lời giữ đúng nhưng UI báo "Mất kết nối": runner phát `RUN_FINISHED` khi step/text message còn mở, verifier của `@ag-ui/client` từ chối | Chạy thật S3, 30/10 | Đã xác minh | CH-S3-BE-03 | Đã sửa (S3) |
 
 Giá trị cột *Xác minh*:
 - **Đã xác minh:** đã đọc code/tài liệu hoặc chạy thử và chắc chắn.
@@ -50,6 +52,20 @@ Giá trị cột *Xác minh*:
 - **Đo:** gọi thẳng backend, 257 event về rải trong 0,57–3,15 giây; qua Next, 359 event về cùng lúc ở giây 6,19.
 - **Cách sửa:** `compress: false`; nén để reverse proxy production lo, proxy đó cũng không được buffer event stream (RR-13).
 - **Trạng thái:** Đã sửa (S2).
+
+### L-07: Lượt chat treo khi lỗi trước khối try
+- **Vị trí:** `backend/src/app/modules/conversations/service.py::_launch` (`frozenset & dict.keys()` trả về `set`), `modules/agent/runner.py::_execute`.
+- **Thực tế:** `get_agui_agent(tools)` ném `TypeError: unhashable type` khi dựng agent, nằm ngoài `try/finally` nên không lưu trạng thái, không đóng stream; request SSE chờ mãi.
+- **Cách sửa:** dùng `frozenset.intersection`; dựng agent bên trong `try` để mọi lỗi đều đi qua `_finish` (lưu `failed`, phát `RUN_ERROR`, đóng stream).
+- **Test chặn tái phát:** toàn bộ `tests/api/conversations/test_turns.py` (treo trước khi sửa).
+- **Trạng thái:** Đã sửa (S3).
+
+### L-08: Stop làm UI báo mất kết nối
+- **Vị trí:** `backend/src/app/modules/agent/runner.py::_finish`.
+- **Thực tế:** console `AGUIError: Cannot send 'RUN_FINISHED' while steps are still active: model`; hook coi là lỗi mạng.
+- **Cách sửa:** `modules/agent/lifecycle.py` theo dõi span đang mở (step, text, reasoning, tool call) và phát event END cho chúng, trong cùng ra trước, rồi mới phát trạng thái cuối và `RUN_FINISHED` có `outcome: {type: "cancelled"}`.
+- **Test chặn tái phát:** `tests/unit/test_lifecycle.py`, `tests/api/conversations/test_stop.py::test_stop_keeps_the_partial_answer`.
+- **Trạng thái:** Đã sửa (S3).
 
 ## Mẫu ghi
 

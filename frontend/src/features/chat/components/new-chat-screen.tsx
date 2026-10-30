@@ -28,7 +28,7 @@ export function NewChatScreen() {
 
   return (
     <div className="mx-auto flex h-full w-full max-w-3xl flex-col p-4">
-      <ChatMessages empty={<ChatEmptyState />} isBusy={false} messages={[]} />
+      <ChatMessages empty={<ChatEmptyState />} isBusy={false} rows={[]} />
       {create.isError && (
         <Alert variant="destructive">
           <AlertDescription>Không tạo được cuộc trò chuyện. Vui lòng thử lại.</AlertDescription>

@@ -36,7 +36,9 @@ Các path dưới đây tương đối với `/api/v1`.
 
 Tạo và liệt kê lấy workspace từ path (QD-10, QD-12); các route còn lại suy workspace từ conversation và kiểm membership. Field JSON của DTO dùng `snake_case` như mọi REST API của backend; event AG-UI giữ `camelCase` của protocol (QD-19). GET metadata và history tách riêng vì history có thể dài. Con trỏ nhánh đã lưu không thay parent tường minh trong request gửi; lựa chọn nhánh per-tab vẫn ở client.
 
-Folder, upload/download, share/copy, auth/workspace/RBAC dùng REST API riêng theo database đã chốt. Đã có từ S1 (TD-007): `/auth/{register,login,refresh,session,logout,logout-all}`, `GET /users/me`, `GET /workspaces`, `GET /workspaces/{id}`; payload theo OpenAPI của backend. Các nhóm còn lại chốt khi tới sprint tương ứng. Health endpoints thuộc vận hành service, không phải API agent discovery.
+Folder, upload/download, share/copy, auth/workspace/RBAC dùng REST API riêng theo database đã chốt. Đã có từ S1 (TD-007): `/auth/{register,login,refresh,session,logout,logout-all}`, `GET /users/me`, `GET /workspaces`, `GET /workspaces/{id}`. Từ S3 (TD-009): `GET/POST /workspaces/{id}/folders`, `PATCH/DELETE /folders/{id}`; xoá folder chuyển chat trong đó về danh sách chung. Payload theo OpenAPI của backend.
+
+Sidebar (`GET /workspaces/{id}/conversations`) nhận `archived=true` (chỉ chat đã lưu trữ), `folder_id` (chat của một folder) hoặc `unfiled=true` (chat ngoài folder); mặc định là mọi chat chưa lưu trữ. Chat ghim lên đầu, rồi theo `updated_at` giảm dần. `PATCH /conversations/{id}` nhận `title`, `pinned`, `archived`, `folder_id` (null là bỏ khỏi folder); field bỏ trống giữ nguyên, field khác bị từ chối. Các nhóm còn lại chốt khi tới sprint tương ứng. Health endpoints thuộc vận hành service, không phải API agent discovery.
 
 ## 3. Gửi câu hỏi mới
 
@@ -65,11 +67,22 @@ POST /api/v1/conversations/{id}/messages
 
 ## 4. Sửa câu hỏi và regenerate
 
+```http
+POST /api/v1/conversations/{id}/messages/{userMessageId}/edit
+POST /api/v1/conversations/{id}/messages/{assistantMessageId}/regenerate
+```
+
 Edit chỉ nhận đích là user message và body cùng hình dạng message ở mục 3, chứa ID mới, text mới và danh sách fileIds đầy đủ của phiên bản mới. Mảng fileIds rỗng nghĩa không đính kèm file.
+
+```json
+{ "message": { "id": "new-user-message-id", "text": "Câu hỏi đã sửa", "file_ids": [] } }
+```
 
 Backend tạo user message mới cùng parent với câu hỏi cũ, rồi assistant mới. Không sửa message terminal, không xóa nhánh cũ.
 
 Regenerate chỉ nhận đích là assistant message, body rỗng. Backend tạo assistant mới cùng parent với assistant cũ; dựng context từ parent path, không tiếp tục checkpoint của câu trả lời cũ.
+
+Cả hai trả AG-UI SSE như mục 3; event `chat.assistant` mang `userMessageId` là câu hỏi mới (edit) hoặc câu hỏi đang được trả lời lại (regenerate). Đích sai vai trò hoặc không thuộc conversation trả 404 `message_not_found`; đang có assistant active trả 409 `assistant_active`. Lượt mới thành nhánh đã lưu của conversation (QD-20).
 
 ## 5. Resume
 
@@ -118,6 +131,8 @@ Stop mang nghĩa dừng assistant này, kể cả nó vừa resume. Chấp nhậ
 
 Acknowledgement xác nhận đã nhận/chấp nhận yêu cầu hoặc message đã terminal, không khẳng định worker đã dừng chỉ vì đã phát tín hiệu.
 
+Từ S3 (QD-20), response là `{ "id": "<assistant id>", "status": "<trạng thái hiện tại>" }`. Backend chờ tối đa 5 giây để lượt lưu `cancelled` kèm partial; quá hạn thì `status` vẫn là `running`. Assistant active mà không có lượt nào chạy trong process (process đã khởi động lại) được chuyển thẳng `cancelled`. Stream của lượt bị dừng đóng các span đang mở, phát `chat.assistant` với `cancelled` rồi `RUN_FINISHED` có `outcome: {"type": "cancelled"}`.
+
 Ngắt HTTP/detach chỉ rời stream, không tự stop. Từ chối một tool rồi tiếp tục assistant dùng resume, khác hủy toàn bộ lượt.
 
 ## 8. ID và stream
@@ -157,6 +172,8 @@ Chưa thay backend/frontend/SQL. Các việc còn lại gồm DTO/OpenAPI chi ti
 
 ## 12. History và chuyển conversation trên UI
 
-GET messages phải giữ được SQL messageId, parentMessageId, role, status, bundle AG-UI content, file liên quan và thông tin các nhánh khác để chuyển nhánh. Một SQL assistant có thể chứa nhiều protocol messages; DTO không được flatten rồi làm mất liên kết SQL assistant ID cần cho edit/regenerate/resume/stop. Cấu trúc phân trang/branch DTO chi tiết sẽ chốt khi triển khai, không thêm bảng branch.
+GET messages phải giữ được SQL messageId, parentMessageId, role, status, bundle AG-UI content, file liên quan và thông tin các nhánh khác để chuyển nhánh. Một SQL assistant có thể chứa nhiều protocol messages; DTO không được flatten rồi làm mất liên kết SQL assistant ID cần cho edit/regenerate/resume/stop. Không thêm bảng branch.
+
+Từ S3 (QD-20): mỗi dòng có `sibling_ids` (các phiên bản cùng parent, cũ trước, gồm cả chính nó). Không tham số thì trả nhánh theo con trỏ đã lưu; `?from_message_id=` trả nhánh đi qua message đó rồi xuống con mới nhất ở mỗi tầng. `current_message_id` là lá của nhánh trả về và là parent cho câu hỏi tiếp theo trên tab đó. Đọc không đổi con trỏ đã lưu. Phân trang history chưa làm.
 
 Việc có giữ nhiều SSE khi chuyển conversation, detach/subscription, callback đến muộn và cách tránh hiển thị chéo chat **tạm hoãn thảo luận**, chưa chốt chính sách frontend trong giai đoạn này. Không coi đề xuất chỉ giữ một SSE là quyết định đã duyệt.

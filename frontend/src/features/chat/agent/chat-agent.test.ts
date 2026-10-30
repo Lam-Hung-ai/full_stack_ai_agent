@@ -88,4 +88,28 @@ describe("ChatAgent", () => {
       agent.sendMessage({ parentMessageId: null, message: { id: "u1", text: "x", fileIds: [] } }),
     ).rejects.toMatchObject({ status: 409, payload: { error: { code: "assistant_active" } } });
   });
+
+  it("edits and regenerates through their own routes", async () => {
+    const fetchMock = vi.fn(async () => sse(turn("a2")));
+    vi.stubGlobal("fetch", fetchMock);
+    const agent = new ChatAgent({ conversationId: "c1" });
+
+    await agent.editMessage({
+      userMessageId: "u0",
+      message: { id: "u1", text: "Đã sửa", fileIds: [] },
+    });
+    await agent.regenerate({ assistantMessageId: "a1" });
+
+    const [editUrl, editInit] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(editUrl).toBe("/api/v1/conversations/c1/messages/u0/edit");
+    expect(JSON.parse(String(editInit.body))).toEqual({
+      message: { id: "u1", text: "Đã sửa", file_ids: [] },
+    });
+    const [regenerateUrl, regenerateInit] = fetchMock.mock.calls[1] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(regenerateUrl).toBe("/api/v1/conversations/c1/messages/a1/regenerate");
+    expect(regenerateInit.body).toBeUndefined();
+  });
 });

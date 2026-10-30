@@ -1,18 +1,31 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { PlusIcon } from "lucide-react";
+import { ArchiveIcon, ChevronRightIcon, FolderPlusIcon, PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useCurrentWorkspace } from "@/features/workspaces";
 import { cn } from "@/lib/utils";
-import { useConversations } from "../hooks/use-conversations";
+import { useFolderActions, useFolders } from "../hooks/use-conversations";
+import { ConversationList } from "./conversation-list";
+import { folderErrorMessage } from "../utils/folders";
+import { FolderGroup } from "./folder-group";
+import { NameDialog } from "./name-dialog";
 
 export function ConversationSidebar() {
-  const pathname = usePathname();
   const workspace = useCurrentWorkspace();
-  const conversations = useConversations(workspace?.id);
+  if (!workspace) return null;
+  // Keyed: switching workspace resets the open sections and dialogs.
+  return <WorkspaceSidebar key={workspace.id} workspaceId={workspace.id} />;
+}
+
+function WorkspaceSidebar({ workspaceId }: { workspaceId: string }) {
+  const folders = useFolders(workspaceId);
+  const { create } = useFolderActions(workspaceId);
+  const [creating, setCreating] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const folderList = folders.data?.data ?? [];
 
   return (
     <nav aria-label="Cuộc trò chuyện" className="flex h-full flex-col gap-2 p-2">
@@ -22,41 +35,75 @@ export function ConversationSidebar() {
           Chat mới
         </Link>
       </Button>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {conversations.isLoading && (
-          <div className="flex flex-col gap-2 p-1">
-            <Skeleton className="h-7" />
-            <Skeleton className="h-7" />
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
+        <section aria-labelledby="sidebar-folders">
+          <div className="flex items-center justify-between px-2">
+            <h2 className="font-medium text-muted-foreground text-xs" id="sidebar-folders">
+              Folder
+            </h2>
+            <Button
+              aria-label="Folder mới"
+              onClick={() => setCreating(true)}
+              size="icon-xs"
+              variant="ghost"
+            >
+              <FolderPlusIcon />
+            </Button>
           </div>
-        )}
-        {conversations.isError && (
-          <p className="p-2 text-destructive text-sm">Không tải được danh sách.</p>
-        )}
-        {conversations.data?.data.length === 0 && (
-          <p className="p-2 text-muted-foreground text-sm">Chưa có cuộc trò chuyện nào.</p>
-        )}
-        <ul className="flex flex-col gap-0.5">
-          {conversations.data?.data.map((conversation) => {
-            const href = `/c/${conversation.id}`;
-            const active = pathname === href;
-            return (
-              <li key={conversation.id}>
-                <Link
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "block truncate rounded-md px-2 py-1.5 text-sm hover:bg-accent",
-                    active && "bg-accent font-medium",
-                  )}
-                  href={href}
-                  title={conversation.title}
-                >
-                  {conversation.title}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+          {folderList.map((folder) => (
+            <FolderGroup
+              folder={folder}
+              folders={folderList}
+              key={folder.id}
+              workspaceId={workspaceId}
+            />
+          ))}
+        </section>
+        <section aria-labelledby="sidebar-chats">
+          <h2 className="px-2 pb-1 font-medium text-muted-foreground text-xs" id="sidebar-chats">
+            Cuộc trò chuyện
+          </h2>
+          <ConversationList
+            emptyText="Chưa có cuộc trò chuyện nào."
+            filter={{ kind: "unfiled" }}
+            folders={folderList}
+            workspaceId={workspaceId}
+          />
+        </section>
       </div>
+      <Collapsible onOpenChange={setShowArchived} open={showArchived}>
+        <CollapsibleTrigger className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-muted-foreground text-sm hover:bg-accent">
+          <ChevronRightIcon
+            className={cn("size-3.5 transition-transform", showArchived && "rotate-90")}
+          />
+          <ArchiveIcon className="size-3.5" />
+          Đã lưu trữ
+        </CollapsibleTrigger>
+        <CollapsibleContent className="max-h-60 overflow-y-auto">
+          {showArchived && (
+            <ConversationList
+              emptyText="Không có cuộc trò chuyện lưu trữ."
+              filter={{ kind: "archived" }}
+              folders={folderList}
+              workspaceId={workspaceId}
+            />
+          )}
+        </CollapsibleContent>
+      </Collapsible>
+      {creating && (
+        <NameDialog
+          error={create.isError ? folderErrorMessage(create.error) : null}
+          isPending={create.isPending}
+          label="Tên folder"
+          onClose={() => {
+            create.reset();
+            setCreating(false);
+          }}
+          onSubmit={(name) => create.mutate(name, { onSuccess: () => setCreating(false) })}
+          submitLabel="Tạo"
+          title="Folder mới"
+        />
+      )}
     </nav>
   );
 }

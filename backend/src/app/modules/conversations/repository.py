@@ -29,14 +29,28 @@ class ConversationRepository:
         return (await self._session.execute(statement)).mappings().one()
 
     async def list_for_owner(
-        self, *, workspace_id: UUID, owner_user_id: UUID, limit: int, offset: int
+        self,
+        *,
+        workspace_id: UUID,
+        owner_user_id: UUID,
+        archived: bool,
+        folder_id: UUID | None,
+        unfiled: bool,
+        limit: int,
+        offset: int,
     ) -> tuple[list[RowMapping], int]:
-        scope = (
+        scope = [
             conversations.c.workspace_id == workspace_id,
             conversations.c.owner_user_id == owner_user_id,
             conversations.c.deleted_at.is_(None),
-            conversations.c.archived_at.is_(None),
-        )
+            conversations.c.archived_at.is_not(None)
+            if archived
+            else conversations.c.archived_at.is_(None),
+        ]
+        if folder_id is not None:
+            scope.append(conversations.c.folder_id == folder_id)
+        elif unfiled:
+            scope.append(conversations.c.folder_id.is_(None))
         total = (
             await self._session.execute(
                 select(func.count()).select_from(conversations).where(*scope)
@@ -47,11 +61,18 @@ class ConversationRepository:
                 conversations.c.id,
                 conversations.c.title,
                 conversations.c.pinned_at,
+                conversations.c.archived_at,
+                conversations.c.folder_id,
                 conversations.c.updated_at,
             )
             .where(*scope)
-            # Matches conversations_sidebar_idx; id breaks ties for a stable order.
-            .order_by(conversations.c.updated_at.desc(), conversations.c.id.desc())
+            # Pinned chats first, then conversations_sidebar_idx order; id
+            # breaks ties for a stable page boundary.
+            .order_by(
+                conversations.c.pinned_at.desc().nulls_last(),
+                conversations.c.updated_at.desc(),
+                conversations.c.id.desc(),
+            )
             .limit(limit)
             .offset(offset)
         )
@@ -149,12 +170,26 @@ class MessageRepository:
         status: str,
         content: list[dict[str, Any]] | None = None,
     ) -> None:
+        """Only an active message changes: terminal rows are immutable, and a
+        turn finishing after a stop already marked it cancelled is a no-op."""
         values: dict[str, Any] = {"status": status}
         if content is not None:
             values["content"] = content
         await self._session.execute(
-            update(messages).where(messages.c.id == message_id).values(values)
+            update(messages)
+            .where(messages.c.id == message_id, messages.c.status.in_(ACTIVE_STATUSES))
+            .values(values)
         )
+
+    async def links(self, *, conversation_id: UUID) -> list[tuple[UUID, UUID | None]]:
+        """(id, parent) of every message, oldest first (messages_history_idx)."""
+        statement = (
+            select(messages.c.id, messages.c.parent_message_id)
+            .where(messages.c.conversation_id == conversation_id)
+            .order_by(messages.c.created_at, messages.c.id)
+        )
+        rows = (await self._session.execute(statement)).all()
+        return [(row.id, row.parent_message_id) for row in rows]
 
     async def branch(self, *, conversation_id: UUID, leaf_id: UUID) -> list[RowMapping]:
         """The path from `leaf_id` up to the root, returned root first.

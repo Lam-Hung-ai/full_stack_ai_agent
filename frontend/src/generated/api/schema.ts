@@ -152,6 +152,84 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/{conversation_id}/messages/{message_id}/edit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Edit Message
+         * @description Answer a new version of a user question; the old branch stays.
+         */
+        post: operations["edit_message_api_v1_conversations__conversation_id__messages__message_id__edit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{conversation_id}/messages/{message_id}/regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Regenerate Message
+         * @description Answer the same question again beside the given assistant message.
+         */
+        post: operations["regenerate_message_api_v1_conversations__conversation_id__messages__message_id__regenerate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{conversation_id}/messages/{message_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop Message
+         * @description Stop an assistant turn, keeping what it produced so far.
+         */
+        post: operations["stop_message_api_v1_conversations__conversation_id__messages__message_id__stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/folders/{folder_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Folder */
+        delete: operations["delete_folder_api_v1_folders__folder_id__delete"];
+        options?: never;
+        head?: never;
+        /** Rename Folder */
+        patch: operations["rename_folder_api_v1_folders__folder_id__patch"];
+        trace?: never;
+    };
     "/api/v1/users/me": {
         parameters: {
             query?: never;
@@ -210,11 +288,32 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Conversations */
+        /**
+         * List Conversations
+         * @description Pinned chats come first, then the most recently updated.
+         */
         get: operations["list_conversations_api_v1_workspaces__workspace_id__conversations_get"];
         put?: never;
         /** Create Conversation */
         post: operations["create_conversation_api_v1_workspaces__workspace_id__conversations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/folders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Folders */
+        get: operations["list_folders_api_v1_workspaces__workspace_id__folders_get"];
+        put?: never;
+        /** Create Folder */
+        post: operations["create_folder_api_v1_workspaces__workspace_id__folders_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -274,6 +373,10 @@ export interface components {
         };
         /** ConversationListItem */
         ConversationListItem: {
+            /** Archived At */
+            archived_at: string | null;
+            /** Folder Id */
+            folder_id: string | null;
             /**
              * Id
              * Format: uuid
@@ -329,10 +432,65 @@ export interface components {
              */
             workspace_id: string;
         };
-        /** ConversationUpdate */
+        /**
+         * ConversationUpdate
+         * @description Allowlist of what a PATCH may change (API §10); omitted fields stay.
+         *     `folder_id: null` takes the chat out of its folder.
+         */
         ConversationUpdate: {
+            /** Archived */
+            archived?: boolean | null;
+            /** Folder Id */
+            folder_id?: string | null;
+            /** Pinned */
+            pinned?: boolean | null;
             /** Title */
-            title: string;
+            title?: string | null;
+        };
+        /** EditMessage */
+        EditMessage: {
+            message: components["schemas"]["ChatMessageInput"];
+        };
+        /** FolderCreate */
+        FolderCreate: {
+            /** Name */
+            name: string;
+        };
+        /** FolderListResponse */
+        FolderListResponse: {
+            /** Data */
+            data: components["schemas"]["FolderResponse"][];
+            pagination: components["schemas"]["Pagination"];
+        };
+        /** FolderResponse */
+        FolderResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /** FolderUpdate */
+        FolderUpdate: {
+            /** Name */
+            name: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -389,6 +547,8 @@ export interface components {
              * @enum {string}
              */
             role: "user" | "assistant";
+            /** Sibling Ids */
+            sibling_ids: string[];
             /**
              * Status
              * @enum {string}
@@ -445,6 +605,23 @@ export interface components {
             user: components["schemas"]["UserResponse"];
             /** Workspaces */
             workspaces: components["schemas"]["WorkspaceResponse"][];
+        };
+        /**
+         * StopResponse
+         * @description Acknowledgement (API §7): the status the assistant has now. A turn that
+         *     did not stop within the wait still shows `running`.
+         */
+        StopResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "running" | "requires_action" | "completed" | "failed" | "cancelled";
         };
         /** TokenResponse */
         TokenResponse: {
@@ -763,7 +940,10 @@ export interface operations {
     };
     get_history_api_v1_conversations__conversation_id__messages_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Open the branch through this message instead */
+                from_message_id?: string | null;
+            };
             header?: never;
             path: {
                 conversation_id: string;
@@ -814,6 +994,170 @@ export interface operations {
                 };
                 content: {
                     "text/event-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_message_api_v1_conversations__conversation_id__messages__message_id__edit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                message_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EditMessage"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    regenerate_message_api_v1_conversations__conversation_id__messages__message_id__regenerate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                message_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_message_api_v1_conversations__conversation_id__messages__message_id__stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                message_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StopResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_folder_api_v1_folders__folder_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                folder_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_folder_api_v1_folders__folder_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                folder_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FolderUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderResponse"];
                 };
             };
             /** @description Validation Error */
@@ -913,6 +1257,12 @@ export interface operations {
     list_conversations_api_v1_workspaces__workspace_id__conversations_get: {
         parameters: {
             query?: {
+                /** @description Archived chats only */
+                archived?: boolean;
+                /** @description Chats of one folder */
+                folder_id?: string | null;
+                /** @description Chats outside any folder */
+                unfiled?: boolean;
                 page?: number;
                 page_size?: number;
             };
@@ -966,6 +1316,75 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConversationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_folders_api_v1_workspaces__workspace_id__folders_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_folder_api_v1_workspaces__workspace_id__folders_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FolderCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderResponse"];
                 };
             };
             /** @description Validation Error */

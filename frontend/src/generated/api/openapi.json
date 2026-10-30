@@ -80,6 +80,30 @@
       },
       "ConversationListItem": {
         "properties": {
+          "archived_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "folder_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder Id"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -111,6 +135,8 @@
           "id",
           "title",
           "pinned_at",
+          "archived_at",
+          "folder_id",
           "updated_at"
         ],
         "title": "ConversationListItem",
@@ -237,18 +263,159 @@
       },
       "ConversationUpdate": {
         "additionalProperties": false,
+        "description": "Allowlist of what a PATCH may change (API §10); omitted fields stay.\n`folder_id: null` takes the chat out of its folder.",
         "properties": {
+          "archived": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived"
+          },
+          "folder_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder Id"
+          },
+          "pinned": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinned"
+          },
           "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "ConversationUpdate",
+        "type": "object"
+      },
+      "EditMessage": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "$ref": "#/components/schemas/ChatMessageInput"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "EditMessage",
+        "type": "object"
+      },
+      "FolderCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
             "maxLength": 200,
             "minLength": 1,
-            "title": "Title",
+            "title": "Name",
             "type": "string"
           }
         },
         "required": [
-          "title"
+          "name"
         ],
-        "title": "ConversationUpdate",
+        "title": "FolderCreate",
+        "type": "object"
+      },
+      "FolderListResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/FolderResponse"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "title": "FolderListResponse",
+        "type": "object"
+      },
+      "FolderResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "name",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "FolderResponse",
+        "type": "object"
+      },
+      "FolderUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "FolderUpdate",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -361,6 +528,14 @@
             "title": "Role",
             "type": "string"
           },
+          "sibling_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Sibling Ids",
+            "type": "array"
+          },
           "status": {
             "enum": [
               "pending",
@@ -380,7 +555,8 @@
           "role",
           "status",
           "content",
-          "created_at"
+          "created_at",
+          "sibling_ids"
         ],
         "title": "MessageResponse",
         "type": "object"
@@ -512,6 +688,34 @@
           "workspaces"
         ],
         "title": "SessionResponse",
+        "type": "object"
+      },
+      "StopResponse": {
+        "description": "Acknowledgement (API §7): the status the assistant has now. A turn that\ndid not stop within the wait still shows `running`.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "running",
+              "requires_action",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status"
+        ],
+        "title": "StopResponse",
         "type": "object"
       },
       "TokenResponse": {
@@ -1025,6 +1229,25 @@
               "title": "Conversation Id",
               "type": "string"
             }
+          },
+          {
+            "description": "Open the branch through this message instead",
+            "in": "query",
+            "name": "from_message_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Open the branch through this message instead",
+              "title": "From Message Id"
+            }
           }
         ],
         "responses": {
@@ -1110,6 +1333,282 @@
         "summary": "Send Message",
         "tags": [
           "Conversations"
+        ]
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/messages/{message_id}/edit": {
+      "post": {
+        "description": "Answer a new version of a user question; the old branch stays.",
+        "operationId": "edit_message_api_v1_conversations__conversation_id__messages__message_id__edit_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Message Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditMessage"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Edit Message",
+        "tags": [
+          "Conversations"
+        ]
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/messages/{message_id}/regenerate": {
+      "post": {
+        "description": "Answer the same question again beside the given assistant message.",
+        "operationId": "regenerate_message_api_v1_conversations__conversation_id__messages__message_id__regenerate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Message Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Regenerate Message",
+        "tags": [
+          "Conversations"
+        ]
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/messages/{message_id}/stop": {
+      "post": {
+        "description": "Stop an assistant turn, keeping what it produced so far.",
+        "operationId": "stop_message_api_v1_conversations__conversation_id__messages__message_id__stop_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Message Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StopResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Stop Message",
+        "tags": [
+          "Conversations"
+        ]
+      }
+    },
+    "/api/v1/folders/{folder_id}": {
+      "delete": {
+        "operationId": "delete_folder_api_v1_folders__folder_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Folder Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Folder",
+        "tags": [
+          "Folders"
+        ]
+      },
+      "patch": {
+        "operationId": "rename_folder_api_v1_folders__folder_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "folder_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Folder Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FolderUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Rename Folder",
+        "tags": [
+          "Folders"
         ]
       }
     },
@@ -1250,6 +1749,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/conversations": {
       "get": {
+        "description": "Pinned chats come first, then the most recently updated.",
         "operationId": "list_conversations_api_v1_workspaces__workspace_id__conversations_get",
         "parameters": [
           {
@@ -1260,6 +1760,49 @@
               "format": "uuid",
               "title": "Workspace Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "Archived chats only",
+            "in": "query",
+            "name": "archived",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Archived chats only",
+              "title": "Archived",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Chats of one folder",
+            "in": "query",
+            "name": "folder_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Chats of one folder",
+              "title": "Folder Id"
+            }
+          },
+          {
+            "description": "Chats outside any folder",
+            "in": "query",
+            "name": "unfiled",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Chats outside any folder",
+              "title": "Unfiled",
+              "type": "boolean"
             }
           },
           {
@@ -1372,6 +1915,133 @@
         "summary": "Create Conversation",
         "tags": [
           "Conversations"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/folders": {
+      "get": {
+        "operationId": "list_folders_api_v1_workspaces__workspace_id__folders_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Folders",
+        "tags": [
+          "Folders"
+        ]
+      },
+      "post": {
+        "operationId": "create_folder_api_v1_workspaces__workspace_id__folders_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FolderCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Folder",
+        "tags": [
+          "Folders"
         ]
       }
     },

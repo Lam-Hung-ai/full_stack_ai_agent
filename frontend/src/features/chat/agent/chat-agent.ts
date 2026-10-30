@@ -29,8 +29,9 @@ export type AssistantEventValue = {
 
 export type ChatMessageInput = { id: string; text: string; fileIds: string[] };
 export type SendMessageInput = { parentMessageId: string | null; message: ChatMessageInput };
+export type EditMessageInput = { userMessageId: string; message: ChatMessageInput };
 
-type Operation = { path: string; body: unknown };
+type Operation = { path: string; body?: unknown };
 // The operation travels inside the run's own input, so a second call can
 // never rewrite the request of one still running.
 const OPERATION = "chatOperation";
@@ -58,11 +59,22 @@ export class ChatAgent extends HttpAgent {
     this.addMessage({ id: message.id, role: "user", content: message.text });
     return this.runOperation({
       path: "/messages",
-      body: {
-        parent_message_id: parentMessageId,
-        message: { id: message.id, text: message.text, file_ids: message.fileIds },
-      },
+      body: { parent_message_id: parentMessageId, message: toDto(message) },
     });
+  }
+
+  /** Ask a new version of a question; the old version keeps its branch. */
+  editMessage({ userMessageId, message }: EditMessageInput): Promise<RunAgentResult> {
+    this.addMessage({ id: message.id, role: "user", content: message.text });
+    return this.runOperation({
+      path: `/messages/${userMessageId}/edit`,
+      body: { message: toDto(message) },
+    });
+  }
+
+  /** Answer the question of `assistantMessageId` again, beside that answer. */
+  regenerate({ assistantMessageId }: { assistantMessageId: string }): Promise<RunAgentResult> {
+    return this.runOperation({ path: `/messages/${assistantMessageId}/regenerate` });
   }
 
   run(input: RunAgentInput): ReturnType<HttpAgent["run"]> {
@@ -76,7 +88,7 @@ export class ChatAgent extends HttpAgent {
               "Content-Type": "application/json",
               Accept: "text/event-stream",
             },
-            body: JSON.stringify(operation.body),
+            body: operation.body === undefined ? undefined : JSON.stringify(operation.body),
             signal: this.abortController.signal,
           })
         : Promise.reject(new Error("ChatAgent runs only through its operation methods"));
@@ -86,4 +98,8 @@ export class ChatAgent extends HttpAgent {
   private runOperation(operation: Operation): Promise<RunAgentResult> {
     return this.runAgent({ forwardedProps: { [OPERATION]: operation } });
   }
+}
+
+function toDto(message: ChatMessageInput) {
+  return { id: message.id, text: message.text, file_ids: message.fileIds };
 }

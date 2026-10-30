@@ -79,3 +79,11 @@ Loại: `BẮT ĐẦU`, `KẾT THÚC`, `LỖI`, `SỬA`, `THAY ĐỔI`, `QUYẾT
 | 30/10/2026 | S2 | THAY ĐỔI | TD-008 | Route conversation; gỡ `/agent`; tài liệu API cập nhật | CH-S2-BE-02 → BE-05 |
 | 30/10/2026 | S2 | RỦI RO | RR-13, RR-14 | Proxy production buffer SSE; mở lại lượt đang chạy chỉ poll | — |
 | 30/10/2026 | S2 | KẾT THÚC | — | Xong 9/9 task; backend 47 test, frontend 35 test xanh; 5 kịch bản chạy thật đạt | — |
+| 30/10/2026 | S2 | PHÁT HÀNH | — | Commit Sprint 2 trên `chat` | `dc6ad48` |
+| 30/10/2026 | S3 | BẮT ĐẦU | — | Bắt đầu Sprint 3 | CH-S3-DOC-01 |
+| 30/10/2026 | S3 | LỖI | L-07, L-08 | Lượt chat treo khi dựng agent lỗi; stop làm UI báo mất kết nối | CH-S3-BE-05, BE-03 |
+| 30/10/2026 | S3 | SỬA | L-07, L-08 | Dựng agent trong `try`, tập tool là `frozenset`; đóng span đang mở trước `RUN_FINISHED` | CH-S3-BE-03, BE-05 |
+| 30/10/2026 | S3 | QUYẾT ĐỊNH | QD-20, QD-21 | Nhánh/stop/folder; registry và kiểm quyền tool | CH-S3-BE-01 → BE-05 |
+| 30/10/2026 | S3 | THAY ĐỔI | TD-009 | Route edit/regenerate/stop, folder, bộ lọc sidebar, permission `tool.*`; tài liệu API cập nhật | CH-S3-BE-01 → FE-02, DOC-02 |
+| 30/10/2026 | S3 | RỦI RO | RR-15 | Role tổ chức cũ không tự có grant tool mới | CH-S3-BE-05 |
+| 30/10/2026 | S3 | KẾT THÚC | — | Xong 9/9 task; backend 66 test, frontend 38 test xanh; 5 kịch bản chạy thật đạt | — |

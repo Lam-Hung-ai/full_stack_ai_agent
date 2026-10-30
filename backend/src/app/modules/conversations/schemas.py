@@ -2,7 +2,13 @@ from datetime import datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import AfterValidator, BaseModel, Field, StringConstraints
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    Field,
+    StringConstraints,
+    model_validator,
+)
 
 from app.common.schemas.common import Input
 from app.common.schemas.pagination import Pagination
@@ -32,7 +38,22 @@ class ConversationCreate(Input):
 
 
 class ConversationUpdate(Input):
-    title: Title
+    """Allowlist of what a PATCH may change (API §10); omitted fields stay.
+    `folder_id: null` takes the chat out of its folder."""
+
+    title: Title | None = None
+    pinned: bool | None = None
+    archived: bool | None = None
+    folder_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def _check_fields(self) -> "ConversationUpdate":
+        if not self.model_fields_set:
+            raise ValueError("at least one field is required")
+        for name in ("title", "pinned", "archived"):
+            if name in self.model_fields_set and getattr(self, name) is None:
+                raise ValueError(f"{name} cannot be null")
+        return self
 
 
 class ActiveAssistant(BaseModel):
@@ -57,6 +78,8 @@ class ConversationListItem(BaseModel):
     id: UUID
     title: str
     pinned_at: datetime | None
+    archived_at: datetime | None
+    folder_id: UUID | None
     updated_at: datetime
 
 
@@ -76,11 +99,15 @@ class MessageResponse(BaseModel):
     status: MessageStatus
     content: list[dict[str, Any]]
     created_at: datetime
+    #: Every version at this position (same parent), oldest first, this one
+    #: included; more than one means the UI offers a branch switch.
+    sibling_ids: list[UUID]
 
 
 class HistoryResponse(BaseModel):
+    #: Leaf of the returned branch.
     current_message_id: UUID | None
-    #: The current branch, root first.
+    #: The branch, root first.
     data: list[MessageResponse]
 
 
@@ -94,3 +121,16 @@ class SendMessage(Input):
     #: Null only for the first turn; otherwise the assistant row being answered.
     parent_message_id: UUID | None
     message: ChatMessageInput
+
+
+class EditMessage(Input):
+    #: The new version, with its full list of files (API §4).
+    message: ChatMessageInput
+
+
+class StopResponse(BaseModel):
+    """Acknowledgement (API §7): the status the assistant has now. A turn that
+    did not stop within the wait still shows `running`."""
+
+    id: UUID
+    status: MessageStatus

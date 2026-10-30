@@ -174,12 +174,12 @@ RunAgentResult tái sử dụng từ @ag-ui/client. StopAcknowledgement là DTO 
 |---|---|---|
 | sendMessage | /messages | { parent_message_id, message: { id, text, file_ids } } |
 | editMessage | /messages/{userMessageId}/edit | { message } |
-| regenerate | /messages/{assistantMessageId}/regenerate | {} |
+| regenerate | /messages/{assistantMessageId}/regenerate | Không body |
 | resume | /messages/{assistantMessageId}/resume | { resume } |
 | attach | /connect | Không body |
 | stop | /messages/{assistantMessageId}/stop | Không body |
 
-Input TypeScript dùng `camelCase`; `ChatAgent` đổi sang body `snake_case` của REST API (QD-19). Thao tác truyền vào `runAgent()` qua `forwardedProps` của chính lần chạy đó, nên không có biến dùng chung bị lời gọi sau ghi đè. conversationId lấy từ config, không lặp lại trong mỗi input/body. userMessageId/assistantMessageId của thao tác đích dùng dựng URL, không tự chèn thêm vào body. attach không nhận cursor, messageId hoặc runId; server resolve assistant active và snapshot mới nhất.
+Input TypeScript dùng `camelCase`; `ChatAgent` đổi sang body `snake_case` của REST API (QD-19). Từ S3, stop là hàm REST `stopAssistant` trong `features/chat/api` (không phải method của `ChatAgent`) vì không chạy qua pipeline AG-UI; stream của lượt bị dừng tự kết thúc qua event của server (TD-009). Thao tác truyền vào `runAgent()` qua `forwardedProps` của chính lần chạy đó, nên không có biến dùng chung bị lời gọi sau ghi đè. conversationId lấy từ config, không lặp lại trong mỗi input/body. userMessageId/assistantMessageId của thao tác đích dùng dựng URL, không tự chèn thêm vào body. attach không nhận cursor, messageId hoặc runId; server resolve assistant active và snapshot mới nhất.
 
 StopInput áp dụng cả pending/running và requires_action: dừng/hủy toàn bộ assistant đích. Không nhận runId hoặc interrupt ID để phân biệt các lần resume. Chấp nhận stop đến muộn có thể dừng lần resume mới của cùng assistant; không tác động assistant khác của regenerate.
 
