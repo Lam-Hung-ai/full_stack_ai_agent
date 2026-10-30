@@ -8,6 +8,10 @@ import pytest
 async def client(pg):
     from app.main import app
 
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
-        yield http
+    # ASGITransport does not run the lifespan; the runner lives there.
+    async with app.router.lifespan_context(app):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as http:
+            yield http

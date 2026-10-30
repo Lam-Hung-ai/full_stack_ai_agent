@@ -41,8 +41,10 @@ def pg():
 @pytest.fixture
 def db(pg: psycopg.Connection):
     """Empty every application table, then return a small query helper."""
+    # The permission catalog is reference data loaded once per session.
     tables = pg.execute(
-        "SELECT schemaname, tablename FROM pg_tables WHERE schemaname = 'chat_app'"
+        "SELECT schemaname, tablename FROM pg_tables "
+        "WHERE schemaname = 'chat_app' AND tablename <> 'permissions'"
     ).fetchall()
     # Messages forbid TRUNCATE by trigger; replica mode skips triggers for
     # this statement only, on the test superuser's connection.

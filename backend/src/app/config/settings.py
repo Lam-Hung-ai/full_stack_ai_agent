@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     #: Requests per minute per IP on /auth.
     auth_rate_limit: int = Field(default=30, ge=1)
 
+    #: Assistant turns running at once in this process (QD-15); more wait.
+    max_concurrent_turns: int = Field(default=10, ge=1)
+    #: On shutdown, how long running turns get to finish before being cancelled.
+    shutdown_grace_seconds: float = Field(default=20, ge=0)
+
     allowed_origins: list[str] = ["http://localhost:3000"]
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     log_format: Literal["json", "text"] = "json"

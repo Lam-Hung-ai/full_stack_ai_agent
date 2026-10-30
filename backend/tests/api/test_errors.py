@@ -31,7 +31,7 @@ async def test_unsafe_request_id_is_replaced(client):
 
 
 async def test_validation_error_lists_locations_only(client):
-    response = await client.post("/agent", json={"threadId": 1})
+    response = await client.post("/api/v1/auth/login", json={"email": 1})
     assert response.status_code == 422
     error = response.json()["error"]
     assert error["code"] == "validation_error"

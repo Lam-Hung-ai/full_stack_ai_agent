@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from functools import lru_cache
 
 from langchain.agents import create_agent
+from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import tool
 from langchain_openrouter import ChatOpenRouter
 from langgraph.checkpoint.memory import InMemorySaver
@@ -26,11 +27,11 @@ def get_current_time() -> str:
 TOOLS = [get_current_time]
 
 
-@lru_cache(maxsize=1)
-def get_agent():
+def build_model() -> BaseChatModel:
+    """The chat model; tests replace this function with a scripted fake."""
     settings = get_settings()
     effort = settings.openrouter_reasoning_effort
-    model = ChatOpenRouter(
+    return ChatOpenRouter(
         model=settings.openrouter_model,
         api_key=settings.openrouter_api_key,
         openrouter_api_base=settings.openrouter_base_url,
@@ -39,11 +40,15 @@ def get_agent():
         reasoning={"effort": effort} if effort else None,
         streaming=True,
     )
-    # AG-UI (thread_id-based runs, interrupts/resume) requires a checkpointer.
-    # InMemorySaver is dev-only; the conversation runner moves to the Postgres
-    # saver (sprint S4).
+
+
+@lru_cache(maxsize=1)
+def get_agent():
+    # AG-UI requires a checkpointer for thread-based runs. Each assistant turn
+    # gets its own native thread, deleted when the turn ends; the Postgres
+    # saver that keeps paused turns arrives in sprint S4.
     return create_agent(
-        model=model,
+        model=build_model(),
         tools=TOOLS,
         system_prompt=SYSTEM_PROMPT,
         checkpointer=InMemorySaver(),

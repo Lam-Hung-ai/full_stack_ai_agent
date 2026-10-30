@@ -1,11 +1,13 @@
-/** Application frame: a top bar with start/end slots above a full-height main area. */
+/** Application frame: a top bar, an optional sidebar, a full-height main area. */
 export function AppShell({
   start,
   end,
+  sidebar,
   children,
 }: {
   start?: React.ReactNode;
   end?: React.ReactNode;
+  sidebar?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -14,7 +16,12 @@ export function AppShell({
         <div className="flex min-w-0 items-center gap-2">{start}</div>
         <div className="flex items-center gap-2">{end}</div>
       </header>
-      <main className="min-h-0 flex-1">{children}</main>
+      <div className="flex min-h-0 flex-1">
+        {sidebar && (
+          <aside className="hidden w-64 shrink-0 border-r md:block">{sidebar}</aside>
+        )}
+        <main className="min-w-0 flex-1">{children}</main>
+      </div>
     </div>
   );
 }

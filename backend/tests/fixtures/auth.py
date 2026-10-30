@@ -82,6 +82,22 @@ def add_member(db):
 
 
 @pytest.fixture
+def assign_role(db):
+    """Give a member one of the roles provisioned with the organization."""
+
+    def assign(organization_id: UUID, member_id: UUID, role_key: str) -> None:
+        db(
+            "INSERT INTO chat_app.member_role_assignments "
+            "(organization_id, member_id, role_id) "
+            "SELECT %s, %s, id FROM chat_app.organization_roles "
+            "WHERE organization_id = %s AND role_key = %s",
+            (organization_id, member_id, organization_id, role_key),
+        )
+
+    return assign
+
+
+@pytest.fixture
 def login(client):
     """Log in through the API and return the Authorization header."""
 

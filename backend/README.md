@@ -15,6 +15,7 @@ docker compose up -d postgres   # from the repository root; PostgreSQL 18 on 543
 # create its tables in schema langgraph_checkpoints.
 dbmate --env-file backend/.env -e DBMATE_DATABASE_URL --no-dump-schema up
 uv run --directory backend db checkpoints
+uv run --directory backend iam sync-permissions   # permission catalog (L-04)
 ```
 
 ## Run
@@ -24,7 +25,7 @@ uv run uvicorn app.main:app --reload --port 8000
 ```
 
 - `GET /health` — liveness.
-- `POST /agent` — legacy AG-UI endpoint taking a raw `RunAgentInput`; the conversation API under `/api/v1` replaces it in sprint S2.
+- `/api/v1/...` — auth, workspaces, conversations. `POST /api/v1/conversations/{id}/messages` starts an assistant turn and streams it as AG-UI events; the turn runs in the app's runner, independent of the HTTP request. Full contract: `uv run openapi`.
 
 `OPENROUTER_REASONING_EFFORT` turns on model reasoning when the model supports it (empty turns it off); it is streamed as `REASONING_*` events.
 
@@ -38,8 +39,11 @@ src/app/
 │   ├── session.py          async engine (psycopg 3), search_path chat_app
 │   └── generated_tables.py generated, never edited
 ├── common/                 errors, request id, logging
-├── modules/agent/          LangGraph graph, AG-UI wrapper, legacy /agent route
-└── tools/database.py       `uv run db export | generate | checkpoints`
+├── modules/
+│   ├── agent/              LangGraph graph, AG-UI wrapper, turn runner
+│   ├── auth, users, workspaces, authorization
+│   └── conversations/      chats, history, sending a message
+└── tools/                  `uv run db …`, `uv run iam …`, `uv run openapi`
 ```
 
 ## Database workflow

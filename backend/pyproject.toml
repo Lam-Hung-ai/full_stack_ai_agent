@@ -29,10 +29,12 @@ dependencies = [
     "pyjwt>=2.14.0",
     "argon2-cffi>=25.1.0",
     "email-validator>=2.2",
+    "uuid-utils>=0.11",
 ]
 
 [project.scripts]
 db = "app.tools.database:main"
+iam = "app.tools.iam:main"
 openapi = "app.tools.openapi:main"
 
 [build-system]
@@ -66,3 +68,7 @@ search-path = ["src", "."]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+    # Raised inside ag-ui-langgraph (pinned); not actionable from this code.
+    "ignore:`get_config_jsonschema` is deprecated:DeprecationWarning",
+]

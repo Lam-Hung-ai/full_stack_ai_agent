@@ -7,6 +7,10 @@ const backendUrl = process.env.BACKEND_URL ?? "http://localhost:8000";
 
 const nextConfig: NextConfig = {
   cacheComponents: true,
+  // Next's gzip buffers a proxied text/event-stream until it ends, so a chat
+  // answer arrived all at once (L-05). Compression belongs to the reverse
+  // proxy in production, which must also leave event streams unbuffered.
+  compress: false,
   partialPrefetching: true,
   turbopack: {
     rules: {

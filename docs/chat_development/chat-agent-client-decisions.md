@@ -69,7 +69,7 @@ Giữ cách sử dụng subscriber hiện tại như onMessagesChanged, onTextMe
 
 UI vẫn cần phần chức năng chưa có: render activity hỏi người dùng/duyệt tool, hiển thị pending/running/requires_action/terminal và liên kết protocol messages với SQL assistant row. Không tự suy completed từ stream đóng.
 
-Tên event/metadata liên kết nghiệp vụ sẽ chốt khi tích hợp. Chưa yêu cầu custom event chat.execution ở mọi thay đổi.
+Liên kết nghiệp vụ dùng event `CUSTOM chat.assistant` ([API §8](chat-agent-api-contract.md#8-id-và-stream), QD-19): UI lấy `assistantMessageId` làm parent cho câu hỏi tiếp theo, kể cả khi lượt `failed`/`cancelled`.
 
 ## 6. Connect, detach và stop
 
@@ -172,14 +172,14 @@ RunAgentResult tái sử dụng từ @ag-ui/client. StopAcknowledgement là DTO 
 
 | Method | URL sau /conversations/{conversationId} | HTTP body |
 |---|---|---|
-| sendMessage | /messages | { parentMessageId, message } |
+| sendMessage | /messages | { parent_message_id, message: { id, text, file_ids } } |
 | editMessage | /messages/{userMessageId}/edit | { message } |
 | regenerate | /messages/{assistantMessageId}/regenerate | {} |
 | resume | /messages/{assistantMessageId}/resume | { resume } |
 | attach | /connect | Không body |
 | stop | /messages/{assistantMessageId}/stop | Không body |
 
-conversationId lấy từ config, không lặp lại trong mỗi input/body. userMessageId/assistantMessageId của thao tác đích dùng dựng URL, không tự chèn thêm vào body. attach không nhận cursor, messageId hoặc runId; server resolve assistant active và snapshot mới nhất.
+Input TypeScript dùng `camelCase`; `ChatAgent` đổi sang body `snake_case` của REST API (QD-19). Thao tác truyền vào `runAgent()` qua `forwardedProps` của chính lần chạy đó, nên không có biến dùng chung bị lời gọi sau ghi đè. conversationId lấy từ config, không lặp lại trong mỗi input/body. userMessageId/assistantMessageId của thao tác đích dùng dựng URL, không tự chèn thêm vào body. attach không nhận cursor, messageId hoặc runId; server resolve assistant active và snapshot mới nhất.
 
 StopInput áp dụng cả pending/running và requires_action: dừng/hủy toàn bộ assistant đích. Không nhận runId hoặc interrupt ID để phân biệt các lần resume. Chấp nhận stop đến muộn có thể dừng lần resume mới của cùng assistant; không tác động assistant khác của regenerate.
 

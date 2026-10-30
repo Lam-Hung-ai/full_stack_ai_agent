@@ -57,46 +57,53 @@ export function refreshAccessToken(): Promise<boolean> {
   return refreshing;
 }
 
-async function request(path: string, options: ApiClientOptions): Promise<Response> {
+function withAuthorization(init: RequestInit): RequestInit {
+  const headers = new Headers(init.headers);
+  const token = getAccessToken();
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  return { ...init, headers, credentials: "include" };
+}
+
+/**
+ * `fetch` with the session's access token. A 401 refreshes once and replays
+ * the request: the backend rejected it before doing anything, so this is not
+ * a mutation retry. Returns the response whatever its status, which lets
+ * stream readers (the AG-UI agent) handle errors their own way.
+ */
+export async function authorizedFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const hadToken = getAccessToken() !== null;
+  let response = await fetch(url, withAuthorization(init));
+  if (response.status === 401 && hadToken && !url.includes(AUTH_PREFIX)) {
+    if (await refreshAccessToken()) {
+      response = await fetch(url, withAuthorization(init));
+    } else {
+      notifySessionExpired();
+    }
+  }
+  return response;
+}
+
+/** Send a request and return the raw response once it is known to be 2xx. */
+export async function send(path: string, options: ApiClientOptions = {}): Promise<Response> {
   const headers = new Headers(options.headers);
   let body: BodyInit | undefined;
   if (options.body !== undefined) {
     headers.set("Content-Type", "application/json");
     body = JSON.stringify(options.body);
   }
-  const token = getAccessToken();
-  if (token && !headers.has("Authorization")) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
+  let response: Response;
   try {
-    return await fetch(apiUrl(path, options.query), {
+    response = await authorizedFetch(apiUrl(path, options.query), {
       method: options.method ?? "GET",
       headers,
       body,
       signal: options.signal,
-      credentials: "include",
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     throw new ApiError(0, "network_error");
-  }
-}
-
-/**
- * Send a request and return the raw response once it is known to be 2xx.
- *
- * A 401 with an access token refreshes once and replays the request: the
- * backend rejected it before doing anything, so this is not a mutation retry.
- */
-export async function send(path: string, options: ApiClientOptions = {}): Promise<Response> {
-  const hadToken = getAccessToken() !== null;
-  let response = await request(path, options);
-  if (response.status === 401 && hadToken && !path.startsWith(AUTH_PREFIX)) {
-    if (await refreshAccessToken()) {
-      response = await request(path, options);
-    } else {
-      notifySessionExpired();
-    }
   }
   if (!response.ok) throw await toApiError(response);
   return response;

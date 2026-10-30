@@ -70,3 +70,12 @@ Loại: `BẮT ĐẦU`, `KẾT THÚC`, `LỖI`, `SỬA`, `THAY ĐỔI`, `QUYẾT
 | 29/10/2026 | S1 | QUYẾT ĐỊNH | QD-18 | Ân hạn 10 giây cho token refresh vừa xoay | CH-S1-BE-02 |
 | 29/10/2026 | S1 | SỬA | L-02, L-03 | Bỏ abort signal khi xoay token, xóa thay vì reset query session; `useId` cho form | CH-S1-FE-02 |
 | 29/10/2026 | S1 | KẾT THÚC | — | Xong 9/9 task; backend 28 test, frontend 29 test xanh; 5 kịch bản chạy thật đạt | — |
+| 29/10/2026 | S1 | PHÁT HÀNH | — | Commit Sprint 1 trên `chat` | `69ea9aa` |
+| 29/10/2026 | S2 | BẮT ĐẦU | — | Bắt đầu Sprint 2 | CH-S2-DOC-01 |
+| 29/10/2026 | S2 | LỖI | L-04 | Baseline mất danh mục permission | CH-S2-BE-01 |
+| 30/10/2026 | S2 | LỖI | L-05, L-06 | SSE bị gom qua proxy Next; reasoning cũ mở bung khi tải lại | CH-S2-FE-02 |
+| 30/10/2026 | S2 | SỬA | L-04, L-05, L-06 | Danh mục permission trong code + `iam sync-permissions`; Next tắt compress; reasoning lịch sử đóng sẵn | CH-S2-BE-01, FE-02 |
+| 30/10/2026 | S2 | QUYẾT ĐỊNH | QD-19 | Wire API chat: đường dẫn theo workspace, DTO snake_case, event `chat.assistant` | CH-S2-BE-04 |
+| 30/10/2026 | S2 | THAY ĐỔI | TD-008 | Route conversation; gỡ `/agent`; tài liệu API cập nhật | CH-S2-BE-02 → BE-05 |
+| 30/10/2026 | S2 | RỦI RO | RR-13, RR-14 | Proxy production buffer SSE; mở lại lượt đang chạy chỉ poll | — |
+| 30/10/2026 | S2 | KẾT THÚC | — | Xong 9/9 task; backend 47 test, frontend 35 test xanh; 5 kịch bản chạy thật đạt | — |

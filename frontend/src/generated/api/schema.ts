@@ -4,23 +4,6 @@
  */
 
 export interface paths {
-    "/agent": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Agent Endpoint */
-        post: operations["agent_endpoint_agent_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/auth/login": {
         parameters: {
             query?: never;
@@ -126,6 +109,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/{conversation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Conversation */
+        get: operations["get_conversation_api_v1_conversations__conversation_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Conversation */
+        delete: operations["delete_conversation_api_v1_conversations__conversation_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Conversation */
+        patch: operations["update_conversation_api_v1_conversations__conversation_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/conversations/{conversation_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get History */
+        get: operations["get_history_api_v1_conversations__conversation_id__messages_get"];
+        put?: never;
+        /**
+         * Send Message
+         * @description Start an assistant turn and stream it as AG-UI events.
+         *
+         *     Errors before the turn starts are JSON (401/403/404/409/422). Leaving the
+         *     stream only detaches this subscriber; the turn continues and is saved.
+         */
+        post: operations["send_message_api_v1_conversations__conversation_id__messages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/me": {
         parameters: {
             query?: never;
@@ -177,6 +203,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Conversations */
+        get: operations["list_conversations_api_v1_workspaces__workspace_id__conversations_get"];
+        put?: never;
+        /** Create Conversation */
+        post: operations["create_conversation_api_v1_workspaces__workspace_id__conversations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -198,219 +242,109 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /**
-         * ActivityMessage
-         * @description Structured progress that is not conversation content, materialised as a
-         *     message so it keeps its place in the sequence. Stands alone rather than
-         *     composing BaseMessage, because its content is an object rather than a
-         *     string.
-         */
-        ActivityMessage: {
-            /** Activitytype */
-            activityType: string;
-            /** Content */
-            content: {
-                [key: string]: unknown;
-            };
-            /** Id */
+        /** ActiveAssistant */
+        ActiveAssistant: {
+            /**
+             * Id
+             * Format: uuid
+             */
             id: string;
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            } | null;
             /**
-             * @description discriminator enum property added by openapi-typescript
+             * Status
              * @enum {string}
              */
-            role: "activity";
-            /** Subagentrunid */
-            subagentRunId?: string | null;
-        } & {
-            [key: string]: unknown;
+            status: "pending" | "running" | "requires_action" | "completed" | "failed" | "cancelled";
         };
-        /**
-         * AssistantMessage
-         * @description A message from the agent. Content is optional because a turn may consist
-         *     only of tool calls.
-         */
-        AssistantMessage: {
-            /** Content */
-            content?: string | null;
-            /** Encryptedvalue */
-            encryptedValue?: string | null;
-            /** Id */
+        /** ChatMessageInput */
+        ChatMessageInput: {
+            /** File Ids */
+            file_ids?: string[];
+            /**
+             * Id
+             * Format: uuid
+             */
             id: string;
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            } | null;
-            /** Name */
-            name?: string | null;
+            /** Text */
+            text: string;
+        };
+        /** ConversationCreate */
+        ConversationCreate: {
+            /** Title */
+            title?: string | null;
+        };
+        /** ConversationListItem */
+        ConversationListItem: {
             /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
+             * Id
+             * Format: uuid
              */
-            role: "assistant";
-            /** Subagentrunid */
-            subagentRunId?: string | null;
-            /** Toolcalls */
-            toolCalls?: components["schemas"]["ToolCall"][] | null;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * AudioPart
-         * @description An audio part.
-         */
-        AudioPart: {
-            /** Id */
-            id?: string | null;
-            /** Metadata */
-            metadata?: unknown | null;
-            /** Source */
-            source: components["schemas"]["DataSource"] | components["schemas"]["UrlSource"] | components["schemas"]["FileSource"];
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "audio";
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * Context
-         * @description A named piece of ambient information given to the agent for the run,
-         *     distinct from the conversation.
-         */
-        Context: {
-            /** Description */
-            description: string;
-            /** Value */
-            value: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * DataSource
-         * @description Bytes carried inline.
-         */
-        DataSource: {
-            /** Mimetype */
-            mimeType: string;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "data";
-            /** Value */
-            value: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * DeveloperMessage
-         * @description Instructions from the application developer.
-         */
-        DeveloperMessage: {
-            /** Content */
-            content: string;
-            /** Encryptedvalue */
-            encryptedValue?: string | null;
-            /** Id */
             id: string;
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            } | null;
-            /** Name */
-            name?: string | null;
+            /** Pinned At */
+            pinned_at: string | null;
+            /** Title */
+            title: string;
             /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
+             * Updated At
+             * Format: date-time
              */
-            role: "developer";
-            /** Subagentrunid */
-            subagentRunId?: string | null;
-        } & {
-            [key: string]: unknown;
+            updated_at: string;
         };
-        /**
-         * DocumentPart
-         * @description A document part.
-         */
-        DocumentPart: {
-            /** Id */
-            id?: string | null;
-            /** Metadata */
-            metadata?: unknown | null;
-            /** Source */
-            source: components["schemas"]["DataSource"] | components["schemas"]["UrlSource"] | components["schemas"]["FileSource"];
+        /** ConversationListResponse */
+        ConversationListResponse: {
+            /** Data */
+            data: components["schemas"]["ConversationListItem"][];
+            pagination: components["schemas"]["Pagination"];
+        };
+        /** ConversationResponse */
+        ConversationResponse: {
+            active_assistant?: components["schemas"]["ActiveAssistant"] | null;
+            /** Archived At */
+            archived_at: string | null;
             /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
+             * Created At
+             * Format: date-time
              */
-            type: "document";
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * FileSource
-         * @description Bytes already at the provider, named by a handle the provider issued: an
-         *     OpenAI or Anthropic file id, a Gemini file URI, a storage URL only that
-         *     provider can read. No bytes travel and nothing is fetched. Only the
-         *     provider that minted the handle can resolve it; a peer that cannot drops
-         *     the part as it drops any part it cannot use.
-         */
-        FileSource: {
-            /** Mimetype */
-            mimeType?: string | null;
-            /** Provider */
-            provider?: string | null;
+            created_at: string;
+            /** Current Message Id */
+            current_message_id: string | null;
+            /** Folder Id */
+            folder_id: string | null;
             /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
+             * Id
+             * Format: uuid
              */
-            type: "file";
-            /** Value */
-            value: string;
-        } & {
-            [key: string]: unknown;
+            id: string;
+            /** Pinned At */
+            pinned_at: string | null;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
         };
-        /**
-         * FunctionCall
-         * @description The name and arguments of a tool call.
-         */
-        FunctionCall: {
-            /** Arguments */
-            arguments: string;
-            /** Name */
-            name: string;
-        } & {
-            [key: string]: unknown;
+        /** ConversationUpdate */
+        ConversationUpdate: {
+            /** Title */
+            title: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
-        /**
-         * ImagePart
-         * @description An image part.
-         */
-        ImagePart: {
-            /** Id */
-            id?: string | null;
-            /** Metadata */
-            metadata?: unknown | null;
-            /** Source */
-            source: components["schemas"]["DataSource"] | components["schemas"]["UrlSource"] | components["schemas"]["FileSource"];
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "image";
-        } & {
-            [key: string]: unknown;
+        /** HistoryResponse */
+        HistoryResponse: {
+            /** Current Message Id */
+            current_message_id: string | null;
+            /** Data */
+            data: components["schemas"]["MessageResponse"][];
         };
         /** Login */
         Login: {
@@ -427,6 +361,40 @@ export interface components {
              */
             remember: boolean;
         };
+        /**
+         * MessageResponse
+         * @description One SQL row: a user message or a whole assistant turn. `content` is the
+         *     AG-UI Message[] bundle the UI renders; a turn may hold several protocol
+         *     messages (text, tool calls and results, reasoning).
+         */
+        MessageResponse: {
+            /** Content */
+            content: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Parent Message Id */
+            parent_message_id: string | null;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "user" | "assistant";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "running" | "requires_action" | "completed" | "failed" | "cancelled";
+        };
         /** Pagination */
         Pagination: {
             /** Has Next Page */
@@ -442,32 +410,6 @@ export interface components {
             /** Total Pages */
             total_pages: number;
         };
-        /**
-         * ReasoningMessage
-         * @description A span of the agent's reasoning, materialised as a message. Stands alone
-         *     rather than composing BaseMessage, because it carries no name.
-         */
-        ReasoningMessage: {
-            /** Content */
-            content: string;
-            /** Encryptedvalue */
-            encryptedValue?: string | null;
-            /** Id */
-            id: string;
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            } | null;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            role: "reasoning";
-            /** Subagentrunid */
-            subagentRunId?: string | null;
-        } & {
-            [key: string]: unknown;
-        };
         /** Register */
         Register: {
             /**
@@ -480,58 +422,11 @@ export interface components {
             /** Password */
             password: string;
         };
-        /**
-         * ResumeEntry
-         * @description An answer to one interrupt, sent on the run that continues from it.
-         */
-        ResumeEntry: {
-            /** Interruptid */
-            interruptId: string;
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            } | null;
-            /** Payload */
-            payload?: unknown | null;
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "resolved" | "cancelled";
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * RunAgentInput
-         * @description A request to run an agent. Also echoed back as RUN_STARTED.input. Only
-         *     threadId, runId and messages are required: those are the three the SDKs
-         *     already agree on, and for tools and context an absent key and an empty
-         *     array mean the same thing, so requiring them would catch nothing a
-         *     producer could get wrong.
-         */
-        RunAgentInput: {
-            /** Context */
-            context?: components["schemas"]["Context"][] | null;
-            /** Forwardedprops */
-            forwardedProps?: unknown | null;
-            /** Messages */
-            messages: (components["schemas"]["DeveloperMessage"] | components["schemas"]["SystemMessage"] | components["schemas"]["AssistantMessage"] | components["schemas"]["UserMessage"] | components["schemas"]["ToolMessage"] | components["schemas"]["ActivityMessage"] | components["schemas"]["ReasoningMessage"])[];
-            /** Parentrunid */
-            parentRunId?: string | null;
-            /** Protocolversion */
-            protocolVersion?: string | null;
-            /** Resume */
-            resume?: components["schemas"]["ResumeEntry"][] | null;
-            /** Runid */
-            runId: string;
-            /** State */
-            state?: unknown | null;
-            /** Threadid */
-            threadId: string;
-            /** Tools */
-            tools?: components["schemas"]["Tool"][] | null;
-        } & {
-            [key: string]: unknown;
+        /** SendMessage */
+        SendMessage: {
+            message: components["schemas"]["ChatMessageInput"];
+            /** Parent Message Id */
+            parent_message_id: string | null;
         };
         /**
          * SessionResponse
@@ -551,52 +446,6 @@ export interface components {
             /** Workspaces */
             workspaces: components["schemas"]["WorkspaceResponse"][];
         };
-        /**
-         * SystemMessage
-         * @description Instructions from the system.
-         */
-        SystemMessage: {
-            /** Content */
-            content: string;
-            /** Encryptedvalue */
-            encryptedValue?: string | null;
-            /** Id */
-            id: string;
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            } | null;
-            /** Name */
-            name?: string | null;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            role: "system";
-            /** Subagentrunid */
-            subagentRunId?: string | null;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * TextPart
-         * @description A text part.
-         */
-        TextPart: {
-            /** Id */
-            id?: string | null;
-            /** Metadata */
-            metadata?: unknown | null;
-            /** Text */
-            text: string;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "text";
-        } & {
-            [key: string]: unknown;
-        };
         /** TokenResponse */
         TokenResponse: {
             /** Access Token */
@@ -608,123 +457,6 @@ export interface components {
              * @default bearer
              */
             token_type: string;
-        };
-        /**
-         * Tool
-         * @description A tool the agent may call.
-         */
-        Tool: {
-            /** Description */
-            description: string;
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            } | null;
-            /** Name */
-            name: string;
-            /** Parameters */
-            parameters?: unknown | null;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * ToolCall
-         * @description A call an assistant message made. Carries no subagent attribution of its
-         *     own and inherits its containing message's, since several calls can share
-         *     one parent.
-         */
-        ToolCall: {
-            /** Encryptedvalue */
-            encryptedValue?: string | null;
-            function: components["schemas"]["FunctionCall"];
-            /** Id */
-            id: string;
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            } | null;
-            /**
-             * Type
-             * @default function
-             * @constant
-             */
-            type: "function";
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * ToolMessage
-         * @description What a tool returned, as a message in the conversation. Stands alone
-         *     rather than composing BaseMessage, because it carries no name.
-         */
-        ToolMessage: {
-            /** Content */
-            content: string | (components["schemas"]["TextPart"] | components["schemas"]["ImagePart"] | components["schemas"]["AudioPart"] | components["schemas"]["VideoPart"] | components["schemas"]["DocumentPart"])[];
-            /** Encryptedvalue */
-            encryptedValue?: string | null;
-            /** Error */
-            error?: string | null;
-            /** Id */
-            id: string;
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            } | null;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            role: "tool";
-            /** Subagentrunid */
-            subagentRunId?: string | null;
-            /** Toolcallid */
-            toolCallId: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * UrlSource
-         * @description Bytes referenced by URL, fetched by whoever needs them.
-         */
-        UrlSource: {
-            /** Mimetype */
-            mimeType?: string | null;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "url";
-            /** Value */
-            value: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * UserMessage
-         * @description A message from the person using the application.
-         */
-        UserMessage: {
-            /** Content */
-            content: string | (components["schemas"]["TextPart"] | components["schemas"]["ImagePart"] | components["schemas"]["AudioPart"] | components["schemas"]["VideoPart"] | components["schemas"]["DocumentPart"])[];
-            /** Encryptedvalue */
-            encryptedValue?: string | null;
-            /** Id */
-            id: string;
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            } | null;
-            /** Name */
-            name?: string | null;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            role: "user";
-            /** Subagentrunid */
-            subagentRunId?: string | null;
-        } & {
-            [key: string]: unknown;
         };
         /** UserResponse */
         UserResponse: {
@@ -760,25 +492,6 @@ export interface components {
             /** Error Type */
             type: string;
         };
-        /**
-         * VideoPart
-         * @description A video part.
-         */
-        VideoPart: {
-            /** Id */
-            id?: string | null;
-            /** Metadata */
-            metadata?: unknown | null;
-            /** Source */
-            source: components["schemas"]["DataSource"] | components["schemas"]["UrlSource"] | components["schemas"]["FileSource"];
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "video";
-        } & {
-            [key: string]: unknown;
-        };
         /** WorkspaceListResponse */
         WorkspaceListResponse: {
             /** Data */
@@ -811,39 +524,6 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    agent_endpoint_agent_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RunAgentInput"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     login_api_v1_auth_login_post: {
         parameters: {
             query?: never;
@@ -986,6 +666,167 @@ export interface operations {
             };
         };
     };
+    get_conversation_api_v1_conversations__conversation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_conversation_api_v1_conversations__conversation_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_conversation_api_v1_conversations__conversation_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_history_api_v1_conversations__conversation_id__messages_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_message_api_v1_conversations__conversation_id__messages_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendMessage"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     me_api_v1_users_me_get: {
         parameters: {
             query?: never;
@@ -1056,6 +897,75 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkspaceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_conversations_api_v1_workspaces__workspace_id__conversations_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_conversation_api_v1_workspaces__workspace_id__conversations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationResponse"];
                 };
             };
             /** @description Validation Error */

@@ -1,6 +1,7 @@
 "use client";
 
 import { BuildingIcon, CheckIcon, ChevronsUpDownIcon, UserIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +17,7 @@ import { useCurrentWorkspace, useWorkspaces } from "../hooks/use-workspaces";
 import { workspaceLabel } from "../utils/pick-workspace";
 
 export function WorkspaceSwitcher() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const { data } = useWorkspaces();
   const current = useCurrentWorkspace();
@@ -30,6 +32,8 @@ export function WorkspaceSwitcher() {
       predicate: (query) =>
         query.queryKey[0] === "workspaces" && query.queryKey.length > 1,
     });
+    // An open chat belongs to the previous workspace.
+    router.push("/");
   };
 
   return (

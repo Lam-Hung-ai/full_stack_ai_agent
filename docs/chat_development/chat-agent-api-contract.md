@@ -21,8 +21,8 @@ Các path dưới đây tương đối với `/api/v1`.
 
 | Method/path | Chức năng | Response |
 |---|---|---|
-| POST /conversations | Tạo chat trong workspace | JSON |
-| GET /conversations | Sidebar theo workspace, lọc pin/folder/archive và phân trang | JSON |
+| POST /workspaces/{workspaceId}/conversations | Tạo chat trong workspace | JSON |
+| GET /workspaces/{workspaceId}/conversations | Sidebar theo workspace, lọc pin/folder/archive và phân trang | JSON |
 | GET /conversations/{id} | Metadata, con trỏ nhánh đã lưu và assistant active nếu có | JSON |
 | PATCH /conversations/{id} | Rename, pin, archive, chuyển folder theo allowlist | JSON |
 | DELETE /conversations/{id} | Xóa mềm và revoke share nguồn | JSON hoặc empty theo convention chung |
@@ -34,7 +34,7 @@ Các path dưới đây tương đối với `/api/v1`.
 | POST /conversations/{id}/connect | Hydrate mới nhất, rồi theo dõi execution đang chạy | AG-UI SSE |
 | POST /conversations/{id}/messages/{assistantMessageId}/stop | Dừng execution hoặc hủy lượt đang chờ | JSON acknowledgement |
 
-GET metadata và history tách riêng vì history có thể dài. Con trỏ nhánh đã lưu không thay parent tường minh trong request gửi; lựa chọn nhánh per-tab vẫn ở client.
+Tạo và liệt kê lấy workspace từ path (QD-10, QD-12); các route còn lại suy workspace từ conversation và kiểm membership. Field JSON của DTO dùng `snake_case` như mọi REST API của backend; event AG-UI giữ `camelCase` của protocol (QD-19). GET metadata và history tách riêng vì history có thể dài. Con trỏ nhánh đã lưu không thay parent tường minh trong request gửi; lựa chọn nhánh per-tab vẫn ở client.
 
 Folder, upload/download, share/copy, auth/workspace/RBAC dùng REST API riêng theo database đã chốt. Đã có từ S1 (TD-007): `/auth/{register,login,refresh,session,logout,logout-all}`, `GET /users/me`, `GET /workspaces`, `GET /workspaces/{id}`; payload theo OpenAPI của backend. Các nhóm còn lại chốt khi tới sprint tương ứng. Health endpoints thuộc vận hành service, không phải API agent discovery.
 
@@ -48,11 +48,11 @@ POST /api/v1/conversations/{id}/messages
 
 ```json
 {
-  "parentMessageId": "previous-assistant-id",
+  "parent_message_id": "previous-assistant-id",
   "message": {
     "id": "new-user-message-id",
     "text": "Phân tích tài liệu này",
-    "fileIds": ["stored-file-id"]
+    "file_ids": ["stored-file-id"]
   }
 }
 ```
@@ -129,7 +129,7 @@ Ngắt HTTP/detach chỉ rời stream, không tự stop. Từ chối một tool 
 - Native LangGraph configurable.thread_id = assistant message ID. Adapter ánh xạ public/native thread, lifecycle events vẫn mang conversationId/runId public.
 - Protocol messageId/toolCallId riêng, ổn định khi hydrate/resume; một SQL assistant row có thể chứa nhiều protocol messages.
 
-Không chốt bộ custom event chat.execution riêng ở mọi thay đổi. Ưu tiên lifecycle/messages/activity chuẩn của AG-UI. Cần bổ sung liên kết SQL assistant ID và trạng thái nghiệp vụ ở metadata/event phù hợp khi tích hợp; vị trí wire cụ thể chưa chốt. RUN_FINISHED hoặc stream đóng không tự có nghĩa SQL assistant completed: interrupt có thể là requires_action.
+Liên kết SQL message và trạng thái nghiệp vụ đi trong một event `CUSTOM` tên `chat.assistant`, value `{conversationId, userMessageId, assistantMessageId, status}` (QD-19): phát ngay sau `RUN_STARTED` với `status: "running"`, và trước event kết thúc với trạng thái cuối (`completed`/`failed`/`cancelled`, sau này `requires_action`). Event cuối chỉ phát sau khi đã commit dữ liệu. Ngoài event này, ưu tiên lifecycle/messages/activity chuẩn của AG-UI. RUN_FINISHED hoặc stream đóng không tự có nghĩa SQL assistant completed: interrupt có thể là requires_action.
 
 ## 9. Xử lý mạng đơn giản trong phạm vi hiện tại
 

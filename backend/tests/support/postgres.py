@@ -79,3 +79,16 @@ def apply_schema(connection: psycopg.Connection) -> None:
     # A trusted file from the repository, not user input.
     connection.execute(cast(LiteralString, schema))
     connection.execute("RESET check_function_bodies")
+    _sync_permissions(connection)
+
+
+def _sync_permissions(connection: psycopg.Connection) -> None:
+    """Same catalog `uv run iam sync-permissions` writes (L-04)."""
+    from app.modules.authorization.catalog import PERMISSIONS
+
+    with connection.cursor() as cursor:
+        cursor.executemany(
+            "INSERT INTO chat_app.permissions (resource, action, description) "
+            "VALUES (%s, %s, %s) ON CONFLICT (resource, action) DO NOTHING",
+            [tuple(item) for item in PERMISSIONS],
+        )
