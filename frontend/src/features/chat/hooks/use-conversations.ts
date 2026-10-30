@@ -6,6 +6,7 @@ import {
   getConversation,
   deleteConversation,
   listConversations,
+  searchConversations,
   updateConversation,
 } from "../api/conversations-api";
 import { createFolder, deleteFolder, listFolders, renameFolder } from "../api/folders-api";
@@ -16,6 +17,8 @@ export const chatKeys = {
   conversations: (workspaceId: string) => ["workspaces", workspaceId, "conversations"] as const,
   conversationList: (workspaceId: string, filter: ConversationFilter) =>
     [...chatKeys.conversations(workspaceId), filter] as const,
+  conversationSearch: (workspaceId: string, term: string) =>
+    [...chatKeys.conversations(workspaceId), "search", term] as const,
   folders: (workspaceId: string) => ["workspaces", workspaceId, "folders"] as const,
   conversation: (conversationId: string) => ["conversations", conversationId, "detail"] as const,
   histories: (conversationId: string) => ["conversations", conversationId, "messages"] as const,
@@ -41,6 +44,18 @@ export function useConversations(workspaceId: string | undefined, filter: Conver
     getNextPageParam: (last) =>
       last.pagination.has_next_page ? last.pagination.page + 1 : undefined,
     enabled: !!workspaceId,
+  });
+}
+
+/** Search results for `term` (null: not searching), a page at a time. */
+export function useConversationSearch(workspaceId: string, term: string | null) {
+  return useInfiniteQuery({
+    queryKey: chatKeys.conversationSearch(workspaceId, term ?? ""),
+    queryFn: ({ pageParam, signal }) => searchConversations(workspaceId, term!, pageParam, signal),
+    initialPageParam: 1,
+    getNextPageParam: (last) =>
+      last.pagination.has_next_page ? last.pagination.page + 1 : undefined,
+    enabled: term !== null,
   });
 }
 

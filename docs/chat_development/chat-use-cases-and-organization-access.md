@@ -116,7 +116,7 @@ Chấm theo code trên nhánh `chat`: **Đạt** là chạy được và có tes
 
 | ID | Kết quả | Căn cứ / còn thiếu |
 |---|---|---|
-| C01 | Một phần | Chat chữ, tên mặc định lấy từ câu hỏi đầu (S2). Chưa có model tự đặt tên |
+| C01 | Đạt | Chat chữ; tên lấy từ câu hỏi đầu rồi model đặt tên ngắn, tên đổi tay luôn giữ (S2, S10) |
 | C02 | Đạt | Context dựng lại theo nhánh đã kiểm quyền (S2) |
 | C03 | Đạt | Redis live view + `connect` (S5); process chết giữa lượt thì không khôi phục (RR-01) |
 | C04 | Đạt | Stop tại chỗ, qua process khác, lượt mồ côi, lượt đang chờ (S3–S5) |
@@ -124,13 +124,13 @@ Chấm theo code trên nhánh `chat`: **Đạt** là chạy được và có tes
 | C06 | Đạt | Sửa câu hỏi, chuyển nhánh (S3), copy từ share (S8) |
 | C07 | Đạt | Tên tự sinh chỉ đặt khi chat còn tên mặc định; đổi tên tay luôn giữ (S2, S3) |
 | C08 | Đạt | Nhánh theo tab, parent tường minh, một lượt active mỗi chat (S3) |
-| C09 | Một phần | Ghim, lưu trữ, folder (S3). Chưa tìm kiếm nội dung |
+| C09 | Đạt | Ghim, lưu trữ, folder (S3); tìm theo tên và nội dung không phân biệt dấu, mở đúng nhánh (S10). Không có đánh dấu đã đọc |
 | D01 | Một phần | Đính kèm, model đọc, tải lại (S7). Chưa có trạng thái xử lý tệp |
 | D02 | Sau | RAG, nguồn có version/ACL |
 | D03 | Sau | Quyền theo nguồn/hàng/trường |
 | D04 | Sau | Như D03 |
 | D05 | Sau | Phụ thuộc nguồn |
-| D06 | Một phần | Tải lại tệp trong chat và share (S7, S8). Chưa có tool tạo tệp |
+| D06 | Đạt | Tool `create_file` tạo CSV, MD, TXT, XLSX gắn vào câu trả lời, tải lại trong chat, share và bản copy (S7, S8, S10). Không có PDF |
 | D07 | Sau | Tool web search, chính sách dữ liệu nội bộ |
 | T01 | Một phần | Quyền tool theo vai trò (S3, S6). Chưa có tài khoản/phạm vi uỷ quyền |
 | T02 | Sau | Idempotency thao tác ngoài |
@@ -146,7 +146,7 @@ Chấm theo code trên nhánh `chat`: **Đạt** là chạy được và có tes
 | O05 | Sau | Memory |
 | O06 | Sau | Memory |
 | O07 | Đạt | Rời/bị xoá: mất quyền ngay, dừng lượt đang chạy, huỷ lượt đang chờ, thu hồi share (S6, trigger) |
-| O08 | Một phần | Xoá mềm chat, thu hồi share (S3, S8). Chưa xoá tài khoản, export |
+| O08 | Một phần | Xoá mềm chat, thu hồi share (S3, S8); export chat thành zip (S10). Chưa xoá tài khoản, purge |
 | O09 | Sau | Nhật ký thao tác chưa có trong schema |
 
-Tổng: 13 Đạt, 7 Một phần, 12 Sau; không tình huống nào trong phạm vi bị bỏ dở.
+Tổng: 16 Đạt, 4 Một phần, 12 Sau (sau S10); không tình huống nào trong phạm vi bị bỏ dở.

@@ -90,6 +90,78 @@ class ConversationRepository:
         rows = (await self._session.execute(statement)).mappings().all()
         return list(rows), total
 
+    async def search_for_owner(
+        self,
+        *,
+        workspace_id: UUID,
+        owner_user_id: UUID,
+        pattern: str,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[RowMapping], int]:
+        """Chats whose title or some message text matches the LIKE `pattern`
+        (compared as `search_key` forms), with the newest matching message."""
+        key = func.chat_app.search_key
+        wanted = key(literal(pattern))
+        text_of = func.chat_app.message_text(messages.c.content)
+        match = (
+            select(messages.c.id.label("message_id"), text_of.label("message_text"))
+            .where(
+                messages.c.conversation_id == conversations.c.id,
+                key(text_of).like(wanted),
+            )
+            .order_by(messages.c.created_at.desc())
+            .limit(1)
+            .lateral("match")
+        )
+        scope = [
+            conversations.c.workspace_id == workspace_id,
+            conversations.c.owner_user_id == owner_user_id,
+            conversations.c.deleted_at.is_(None),
+            _not_unfinished_copy(),
+            key(conversations.c.title).like(wanted) | match.c.message_id.is_not(None),
+        ]
+        source = conversations.outerjoin(match, literal(True))
+        total = (
+            await self._session.execute(
+                select(func.count()).select_from(source).where(*scope)
+            )
+        ).scalar_one()
+        statement = (
+            select(
+                conversations.c.id,
+                conversations.c.title,
+                conversations.c.archived_at,
+                conversations.c.updated_at,
+                match.c.message_id,
+                match.c.message_text,
+            )
+            .select_from(source)
+            .where(*scope)
+            .order_by(conversations.c.updated_at.desc(), conversations.c.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        rows = (await self._session.execute(statement)).mappings().all()
+        return list(rows), total
+
+    async def all_for_owner(
+        self, *, workspace_id: UUID, owner_user_id: UUID
+    ) -> list[RowMapping]:
+        """Every live chat of the owner in the workspace, archived ones too,
+        oldest first (export)."""
+        statement = (
+            select(conversations)
+            .where(
+                conversations.c.workspace_id == workspace_id,
+                conversations.c.owner_user_id == owner_user_id,
+                conversations.c.deleted_at.is_(None),
+                _not_unfinished_copy(),
+            )
+            .order_by(conversations.c.created_at, conversations.c.id)
+        )
+        return list((await self._session.execute(statement)).mappings())
+
     async def get_for_owner(
         self, *, conversation_id: UUID, owner_user_id: UUID, lock: bool = False
     ) -> RowMapping | None:
@@ -111,6 +183,23 @@ class ConversationRepository:
             .returning(conversations)
         )
         return (await self._session.execute(statement)).mappings().one()
+
+    async def rename_if(
+        self, *, conversation_id: UUID, expected: str, title: str
+    ) -> bool:
+        """Rename only while the title is still `expected`: a rename by the
+        user meanwhile wins (C07)."""
+        result = await self._session.execute(
+            update(conversations)
+            .where(
+                conversations.c.id == conversation_id,
+                conversations.c.title == expected,
+                conversations.c.deleted_at.is_(None),
+            )
+            .values(title=title)
+            .returning(conversations.c.id)
+        )
+        return result.first() is not None
 
     async def soft_delete(self, *, conversation_id: UUID) -> None:
         await self._session.execute(

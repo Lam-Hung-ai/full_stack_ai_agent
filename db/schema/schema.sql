@@ -8,6 +8,10 @@ COMMENT ON SCHEMA langgraph_checkpoints IS 'Private LangGraph saver storage; SDK
 
 CREATE EXTENSION IF NOT EXISTS citext WITH SCHEMA public;
 
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
+
+CREATE EXTENSION IF NOT EXISTS unaccent WITH SCHEMA public;
+
 CREATE FUNCTION chat_app.assert_chat_file_scope(p_file uuid, p_workspace uuid, p_owner uuid) RETURNS void
     LANGUAGE plpgsql
     AS $$
@@ -492,6 +496,31 @@ BEGIN
 END;
 $$;
 
+CREATE FUNCTION chat_app.message_text(p_content jsonb) RETURNS text
+    LANGUAGE sql IMMUTABLE PARALLEL SAFE
+    AS $$
+    SELECT coalesce(string_agg(part, ' '), '')
+    FROM (
+        SELECT m.value ->> 'content' AS part
+        FROM jsonb_array_elements(
+            CASE WHEN jsonb_typeof(p_content) = 'array' THEN p_content ELSE '[]'::jsonb END
+        ) AS m
+        WHERE m.value ->> 'role' IN ('user', 'assistant')
+          AND jsonb_typeof(m.value -> 'content') = 'string'
+        UNION ALL
+        SELECT p.value ->> 'text'
+        FROM jsonb_array_elements(
+            CASE WHEN jsonb_typeof(p_content) = 'array' THEN p_content ELSE '[]'::jsonb END
+        ) AS m
+        CROSS JOIN LATERAL jsonb_array_elements(
+            CASE WHEN jsonb_typeof(m.value -> 'content') = 'array' THEN m.value -> 'content' ELSE '[]'::jsonb END
+        ) AS p
+        WHERE m.value ->> 'role' = 'user' AND p.value ->> 'type' = 'text'
+    ) AS parts;
+$$;
+
+COMMENT ON FUNCTION chat_app.message_text(p_content jsonb) IS 'Searchable text of a message AG-UI bundle (C09): user/assistant text only, never reasoning or tool payloads.';
+
 CREATE FUNCTION chat_app.provision_organization() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
@@ -539,6 +568,15 @@ BEGIN
     RETURN NULL;
 END;
 $$;
+
+CREATE FUNCTION chat_app.search_key(p_text text) RETURNS text
+    LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+    SET search_path TO 'public', 'pg_catalog'
+    AS $$
+    SELECT lower(unaccent('unaccent'::regdictionary, p_text));
+$$;
+
+COMMENT ON FUNCTION chat_app.search_key(p_text text) IS 'Lower-case, accent-free form compared by chat search (C09). Change it only together with the indexes built on it.';
 
 CREATE FUNCTION chat_app.touch_updated_at() RETURNS trigger
     LANGUAGE plpgsql
@@ -1111,6 +1149,8 @@ CREATE INDEX conversations_folder_fk_idx ON chat_app.conversations USING btree (
 
 CREATE INDEX conversations_sidebar_idx ON chat_app.conversations USING btree (owner_user_id, workspace_id, updated_at DESC, id DESC) WHERE (deleted_at IS NULL);
 
+CREATE INDEX conversations_title_search_idx ON chat_app.conversations USING gin (chat_app.search_key(title) gin_trgm_ops);
+
 CREATE INDEX conversations_workspace_idx ON chat_app.conversations USING btree (workspace_id);
 
 CREATE INDEX idx_conversations_folder ON chat_app.conversations USING btree (workspace_id, owner_user_id, folder_id, updated_at DESC, id DESC) WHERE ((folder_id IS NOT NULL) AND (deleted_at IS NULL) AND (archived_at IS NULL));
@@ -1130,6 +1170,8 @@ CREATE INDEX messages_history_idx ON chat_app.messages USING btree (conversation
 CREATE UNIQUE INDEX messages_one_active_assistant_idx ON chat_app.messages USING btree (conversation_id) WHERE ((role = 'assistant'::text) AND (status = ANY (ARRAY['pending'::text, 'running'::text, 'requires_action'::text])));
 
 CREATE INDEX messages_parent_idx ON chat_app.messages USING btree (conversation_id, parent_message_id);
+
+CREATE INDEX messages_search_idx ON chat_app.messages USING gin (chat_app.search_key(chat_app.message_text(content)) gin_trgm_ops);
 
 CREATE INDEX organization_invitations_acceptor_idx ON chat_app.organization_invitations USING btree (accepted_by);
 

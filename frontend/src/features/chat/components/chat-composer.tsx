@@ -2,13 +2,7 @@
 
 import { useRef } from "react";
 import type { ChatStatus } from "ai";
-import {
-  FileIcon,
-  Loader2Icon,
-  PaperclipIcon,
-  TriangleAlertIcon,
-  XIcon,
-} from "lucide-react";
+import { FileIcon, Loader2Icon, PaperclipIcon, TriangleAlertIcon, XIcon } from "lucide-react";
 import {
   PromptInput,
   PromptInputBody,
@@ -55,15 +49,10 @@ export function ChatComposer({
       <PromptInput
         className="mt-4"
         onSubmit={async (message) => {
-          if (
-            blocked ||
-            (!message.text.trim() && attachments.ready.length === 0)
-          ) {
+          if (blocked || (!message.text.trim() && attachments.ready.length === 0)) {
             throw new Error("not sent");
           }
-          if (
-            !(await onSubmit({ text: message.text, files: attachments.ready }))
-          ) {
+          if (!(await onSubmit({ text: message.text, files: attachments.ready }))) {
             throw new Error("not sent");
           }
           attachments.clear();
@@ -100,8 +89,7 @@ export function ChatComposer({
                   className="hidden"
                   multiple
                   onChange={(event) => {
-                    if (event.currentTarget.files)
-                      attachments.add(event.currentTarget.files);
+                    if (event.currentTarget.files) attachments.add(event.currentTarget.files);
                     // Picking the same file again must fire a change.
                     event.currentTarget.value = "";
                   }}
@@ -131,35 +119,21 @@ export function ChatComposer({
   );
 }
 
-function AttachmentChip({
-  item,
-  onRemove,
-}: {
-  item: Attachment;
-  onRemove: () => void;
-}) {
+function AttachmentChip({ item, onRemove }: { item: Attachment; onRemove: () => void }) {
   return (
     <div
       className="flex max-w-56 items-center gap-1.5 rounded-md border bg-muted/40 py-1 pr-1 pl-2 text-xs"
       title={item.error ?? item.name}
     >
       {item.status === "uploading" ? (
-        <Loader2Icon
-          aria-label="Đang tải lên"
-          className="size-3.5 shrink-0 animate-spin"
-        />
+        <Loader2Icon aria-label="Đang tải lên" className="size-3.5 shrink-0 animate-spin" />
       ) : item.status === "failed" ? (
-        <TriangleAlertIcon
-          aria-label="Lỗi"
-          className="size-3.5 shrink-0 text-destructive"
-        />
+        <TriangleAlertIcon aria-label="Lỗi" className="size-3.5 shrink-0 text-destructive" />
       ) : (
         <FileIcon className="size-3.5 shrink-0" />
       )}
       <span className="truncate">{item.name}</span>
-      {item.error && (
-        <span className="truncate text-destructive">· {item.error}</span>
-      )}
+      {item.error && <span className="truncate text-destructive">· {item.error}</span>}
       <Button
         aria-label={`Bỏ ${item.name}`}
         className="size-5"

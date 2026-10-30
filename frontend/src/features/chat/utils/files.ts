@@ -105,3 +105,25 @@ export function formatBytes(bytes: number): string {
   }
   return `${unit === 0 ? value : value.toFixed(1)} ${SIZE_UNITS[unit]}`;
 }
+
+/** Name of the tool that writes a file into the answer (D06). */
+export const CREATE_FILE_TOOL = "create_file";
+
+/** The file a `create_file` call made, from its JSON result; null otherwise
+ * (another tool, a refusal, or no result yet). */
+export function madeFile(toolName: string, result: unknown): AttachedFile | null {
+  if (toolName !== CREATE_FILE_TOOL || typeof result !== "string") return null;
+  try {
+    const made = JSON.parse(result) as Record<string, unknown>;
+    if (typeof made.file_id !== "string" || typeof made.name !== "string") return null;
+    return {
+      id: made.file_id,
+      name: made.name,
+      contentType: typeof made.content_type === "string" ? made.content_type : "",
+      sizeBytes: typeof made.size_bytes === "number" ? made.size_bytes : 0,
+      isImage: false,
+    };
+  } catch {
+    return null;
+  }
+}

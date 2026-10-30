@@ -26,6 +26,7 @@ PERMISSIONS: tuple[Permission, ...] = (
     ),
     # One entry per tool in modules/agent/tools.py (action = tool name).
     Permission("tool", "get_current_time", "Tool xem ngày giờ hiện tại"),
+    Permission("tool", "create_file", "Tool tạo tệp tải về (CSV, Markdown, TXT, XLSX)"),
 )
 
 #: What a personal workspace may do without roles: its owner is its only user.
@@ -34,5 +35,6 @@ PERSONAL_ALLOWED: frozenset[tuple[str, str]] = frozenset(
         ("conversation", "create"),
         ("conversation", "share"),
         ("tool", "get_current_time"),
+        ("tool", "create_file"),
     }
 )

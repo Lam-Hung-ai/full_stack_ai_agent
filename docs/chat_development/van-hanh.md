@@ -30,6 +30,11 @@ cd backend && uv run storage cleanup
 
 Lệnh xoá tệp đã tải lên nhưng không gắn vào câu hỏi nào sau 1 ngày (dòng `stored_files` trước, object sau), chuyển job copy bỏ dở quá 1 ngày sang `cancelled` và xoá byte của mọi bản copy đã huỷ; dòng của bản copy giữ lại vì message không bao giờ bị xoá (QD-30, RR-17, RR-18).
 
+Từ S10:
+- Migration tìm kiếm tạo extension `pg_trgm` và `unaccent` (gói contrib của PostgreSQL): user chạy `dbmate` phải có quyền `CREATE EXTENSION`, hoặc DBA tạo trước.
+- `uv sync` cài thêm `openpyxl` (tool tạo XLSX).
+- Sau `iam sync-permissions`, vai trò owner có quyền `tool.create_file`; vai trò khác gán ở màn Vai trò.
+
 ## 3. Proxy trước backend (RR-13)
 
 Stream SSE phải đi qua không bị gom. Backend đã gửi `Cache-Control: no-cache` và `X-Accel-Buffering: no`; proxy vẫn cần tắt buffer và nén cho đường dẫn API, và đặt timeout đọc dài hơn một lượt:
@@ -66,6 +71,8 @@ uv run uvicorn app.main:app --proxy-headers --forwarded-allow-ips=10.0.0.5
   - Gửi lời mời: 50 thư/giờ mỗi người gửi, bất kể IP.
 - Mỗi lượt gửi cho model tối đa 20 MB tệp đính kèm, ưu tiên câu hỏi mới nhất; tệp cũ hơn chỉ được nêu tên.
 
+- Mỗi chat mới gọi model thêm một lần để đặt tên (tắt reasoning, tối đa 40 token); log `Conversation title suggested` ghi số token.
+
 ## 5. Log và trace
 
 - `LOG_FORMAT=json`: mỗi dòng một JSON có `request_id`. Mỗi lượt có một dòng `Assistant turn ended` với `assistant_id`, `conversation_id`, `workspace_id`, `user_id`, `status`, `resumed`, `duration_ms`, `input_tokens`, `output_tokens`, `models`. Không ghi nội dung chat.
@@ -96,8 +103,10 @@ Kết quả 30/10/2026, một process, `MAX_CONCURRENT_TURNS=10`, `MAX_QUEUED_TU
 
 Load test tạo tài khoản `load-<run>-<n>@example.com` trong database đang trỏ tới; chạy trên database thử.
 
+Đo lại 30/10/2026 sau S10 (index tìm kiếm trên `messages`, đặt tên chat mới), 10 người × 5 lượt: 50/50, token đầu p50 247–264 / p95 370–399 ms qua hai lần đo (lần đầu khi còn nguội p95 879 ms), cả lượt p95 ~1,7 s, không lỗi. So với S9 chậm thêm khoảng 50 ms ở token đầu.
+
 ## 7. Còn theo dõi
 
 - RR-01, RR-10: process chết giữa lượt thì lượt đó không khôi phục; worker riêng chưa cần theo số liệu trên.
-- RR-17: tệp tải lên không gửi, đọc lại tệp mỗi lượt.
-- RR-18: copy chạy trong request; job dở không được dọn.
+- RR-17: đã có `storage cleanup` (QD-30); mỗi lượt vẫn đọc lại tệp (tối đa 20 MB).
+- RR-18: copy chạy trong request; dòng của bản copy huỷ chưa purge.

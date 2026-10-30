@@ -90,6 +90,22 @@ class ConversationListResponse(BaseModel):
     pagination: Pagination
 
 
+class ConversationSearchItem(BaseModel):
+    id: UUID
+    title: str
+    archived_at: datetime | None
+    updated_at: datetime
+    #: The newest matching message (open the chat through it), or null when
+    #: only the title matches.
+    message_id: UUID | None
+    snippet: str | None
+
+
+class ConversationSearchResponse(BaseModel):
+    data: list[ConversationSearchItem]
+    pagination: Pagination
+
+
 class MessageResponse(BaseModel):
     """One SQL row: a user message or a whole assistant turn. `content` is the
     AG-UI Message[] bundle the UI renders; a turn may hold several protocol

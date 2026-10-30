@@ -1,8 +1,10 @@
-import { apiClient } from "@/lib/api";
+import { apiClient, send } from "@/lib/api";
+import { attachmentName } from "@/lib/download";
 import type {
   Conversation,
   ConversationFilter,
   ConversationList,
+  ConversationSearch,
   ConversationUpdate,
   History,
   StopResult,
@@ -30,6 +32,19 @@ export function listConversations(
 ) {
   return apiClient<ConversationList>(`/api/v1/workspaces/${workspaceId}/conversations`, {
     query: { page, page_size: CONVERSATION_PAGE_SIZE, ...filterQuery(filter) },
+    signal,
+  });
+}
+
+/** Own chats of the workspace matching `q` by title or message text. */
+export function searchConversations(
+  workspaceId: string,
+  q: string,
+  page: number,
+  signal?: AbortSignal,
+) {
+  return apiClient<ConversationSearch>(`/api/v1/workspaces/${workspaceId}/conversations/search`, {
+    query: { q, page, page_size: CONVERSATION_PAGE_SIZE },
     signal,
   });
 }
@@ -72,4 +87,13 @@ export function stopAssistant(conversationId: string, assistantMessageId: string
     `/api/v1/conversations/${conversationId}/messages/${assistantMessageId}/stop`,
     { method: "POST" },
   );
+}
+
+/** The caller's own chats of the workspace as a zip, with its file name. */
+export async function exportConversations(workspaceId: string) {
+  const response = await send(`/api/v1/workspaces/${workspaceId}/export`);
+  return {
+    blob: await response.blob(),
+    name: attachmentName(response.headers.get("Content-Disposition"), "chat-export.zip"),
+  };
 }

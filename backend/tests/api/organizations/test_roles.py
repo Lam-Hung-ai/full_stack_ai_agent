@@ -209,4 +209,7 @@ async def test_sync_gives_owner_roles_new_permissions(db, make_user, make_organi
         "WHERE r.organization_id = %s AND p.resource = 'tool'",
         (organization_id,),
     )
-    assert [row["role_key"] for row in rows] == ["owner"]
+    from app.modules.agent.tools import TOOLS
+
+    # Every tool permission, to the owner role only.
+    assert [row["role_key"] for row in rows] == ["owner"] * len(TOOLS)

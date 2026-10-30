@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import type { Message as AGUIMessage } from "@ag-ui/client";
 import type { ToolUIPart } from "ai";
 import { PencilIcon, RefreshCcwIcon } from "lucide-react";
@@ -22,7 +22,7 @@ import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "@/componen
 import type { RowView } from "../types/chat.types";
 import { buildItems, findToolResult, parseToolArgs, type Turn } from "../utils/agui-messages";
 import { isActive, isTerminal } from "../utils/history";
-import { attachedFiles, questionText as textOf } from "../utils/files";
+import { attachedFiles, madeFile, questionText as textOf } from "../utils/files";
 import { ASK_USER_TOOL, type InteractionAnswer, interactionOf } from "../utils/interactions";
 import { BranchSwitcher } from "./branch-switcher";
 import { EditQuestionForm } from "./edit-question-form";
@@ -81,6 +81,7 @@ export function ChatMessages({
                   actions={actions}
                   answerable={!isBusy}
                   disabled={locked}
+                  fileSource={fileSource}
                   isStreaming={isBusy && !!row.live}
                   key={row.id}
                   row={row}
@@ -154,12 +155,14 @@ function AnswerRow({
   actions,
   answerable,
   disabled,
+  fileSource,
   isStreaming,
 }: {
   row: RowView;
   actions?: RowActions;
   answerable: boolean;
   disabled: boolean;
+  fileSource?: FileLinkSource;
   isStreaming: boolean;
 }) {
   const items = buildItems(row.content);
@@ -182,6 +185,7 @@ function AnswerRow({
         if (item.kind === "turn") {
           return (
             <TurnView
+              fileSource={fileSource}
               isStreaming={isStreaming && index === items.length - 1}
               key={item.turn.message.id}
               messages={row.content}
@@ -250,11 +254,13 @@ function TurnView({
   turn: { message, reasoning },
   messages,
   rowStatus,
+  fileSource,
   isStreaming,
 }: {
   turn: Turn;
   messages: readonly AGUIMessage[];
   rowStatus: RowView["status"];
+  fileSource?: FileLinkSource;
   isStreaming: boolean;
 }) {
   if (message.role !== "assistant") return null;
@@ -284,6 +290,7 @@ function TurnView({
         ) : null}
         {toolCalls.map((toolCall) => {
           const result = findToolResult(messages, toolCall.id);
+          const made = madeFile(toolCall.function.name, result?.content);
           const state: ToolUIPart["state"] = result
             ? result.error
               ? "output-error"
@@ -291,16 +298,24 @@ function TurnView({
             : (PENDING_TOOL_STATE[rowStatus] ?? "input-available");
 
           return (
-            <Tool key={toolCall.id}>
-              <ToolHeader state={state} type={`tool-${toolCall.function.name}` as ToolUIPart["type"]} />
-              <ToolContent>
-                <ToolInput input={parseToolArgs(toolCall.function.arguments)} />
-                <ToolOutput
-                  errorText={result?.error}
-                  output={typeof result?.content === "string" ? result.content : undefined}
+            <Fragment key={toolCall.id}>
+              <Tool>
+                <ToolHeader
+                  state={state}
+                  type={`tool-${toolCall.function.name}` as ToolUIPart["type"]}
                 />
-              </ToolContent>
-            </Tool>
+                <ToolContent>
+                  <ToolInput input={parseToolArgs(toolCall.function.arguments)} />
+                  <ToolOutput
+                    errorText={result?.error}
+                    output={typeof result?.content === "string" ? result.content : undefined}
+                  />
+                </ToolContent>
+              </Tool>
+              {made && fileSource && (
+                <MessageFiles align="start" files={[made]} source={fileSource} />
+              )}
+            </Fragment>
           );
         })}
       </MessageContent>

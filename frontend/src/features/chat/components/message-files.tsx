@@ -4,6 +4,7 @@ import { useState } from "react";
 import { FileIcon } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FileLink, getFileLink } from "../api/files-api";
+import { cn } from "@/lib/utils";
 import { chatKeys } from "../hooks/use-conversations";
 import { type AttachedFile, formatBytes } from "../utils/files";
 
@@ -24,17 +25,22 @@ export function conversationFiles(conversationId: string): FileLinkSource {
 /** Links are signed for ten minutes; reuse one for less than that. */
 const LINK_STALE_TIME = 5 * 60_000;
 
-/** Files attached to a question: pictures inline, other files as links. */
+/** Files of a message: pictures inline, other files as links. */
 export function MessageFiles({
   source,
   files,
+  align = "end",
 }: {
   source: FileLinkSource;
   files: readonly AttachedFile[];
+  /** End for a question's attachments, start for files in an answer. */
+  align?: "start" | "end";
 }) {
   if (files.length === 0) return null;
   return (
-    <div className="flex flex-wrap justify-end gap-2">
+    <div
+      className={cn("flex flex-wrap gap-2", align === "end" ? "justify-end" : "justify-start")}
+    >
       {files.map((file) =>
         file.isImage ? (
           <FileImage file={file} key={file.id} source={source} />

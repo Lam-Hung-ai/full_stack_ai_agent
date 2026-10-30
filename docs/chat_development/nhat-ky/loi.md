@@ -37,6 +37,9 @@ Lỗi ở đây là **hành vi sai** so với quyết định đã chốt (datab
 | L-27 | Trung bình | Danh sách chat, thành viên, workspace dừng ở 100 mục, không báo | Rà soát code 30/10 | Đã xác minh (test) | Sidebar tải thêm theo trang ("Xem thêm"); thành viên, workspace tải hết các trang | Đã sửa (sau S9) |
 | L-28 | Trung bình | Refresh gặp lỗi mạng hoặc 5xx (lúc deploy) là đăng xuất người dùng | Rà soát code 30/10 | Đã xác minh (test) | Chỉ hết phiên khi refresh bị từ chối (401/403); còn lại báo như mất kết nối | Đã sửa (sau S9) |
 | L-29 | Thấp | Mở tệp hoặc sao chép link share lỗi thì không báo, promise bị bỏ lửng | Rà soát code 30/10 | Đã xác minh (test) | Bắt lỗi và hiện thông báo | Đã sửa (sau S9) |
+| L-30 | Trung bình | Lượt tiếp tục sau khi trả lời câu hỏi (resume) không tạo được tệp: route resume không truyền storage nên tool `create_file` báo "Files cannot be created right now" | Chạy thật S10, 30/10 | Đã xác minh (test) | CH-S10-BE-03 | Đã sửa (S10) |
+| L-31 | Thấp | Tên tệp tải về khó đọc: tệp agent tạo dạng `bang_chi_phi_thang.xlsx`, zip export `chat-export-20261030-073209.zip`, thư mục trong zip nối gạch ngang kèm đuôi id | Người dùng, 30/10 | Đã xác minh | CH-S10-BE-03, BE-05 | Đã sửa (S10): hướng dẫn tool đặt tên có dấu, gạch dưới thành khoảng trắng; "Chat Cá nhân dd-mm-yyyy.zip"; thư mục "yyyy-mm-dd Tên chat", trùng thì (2) |
+| L-32 | Thấp | Sidebar giữ tên cũ khi model đặt tên xong sau lượt trả lời; lời gọi đặt tên bật reasoning tốn ~2 000 token, 16 giây | Chạy thật S10, 30/10 | Đã xác minh | CH-S10-BE-01 | Đã sửa (S10): sidebar tải lại sau 3 và 10 giây; tắt reasoning, tối đa 40 token (~4 giây) |
 
 Giá trị cột *Xác minh*:
 - **Đã xác minh:** đã đọc code/tài liệu hoặc chạy thử và chắc chắn.

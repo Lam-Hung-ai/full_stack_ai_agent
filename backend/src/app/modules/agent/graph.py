@@ -38,6 +38,27 @@ def build_model() -> BaseChatModel:
     )
 
 
+def build_title_model() -> BaseChatModel:
+    """A short, non-streaming call that names a new chat (C01); tests replace
+    this function too."""
+    settings = get_settings()
+    if settings.agent_fake_model:
+        from app.modules.agent.fake_model import LoadTestModel
+
+        return LoadTestModel(words=4, word_delay=0)
+    return ChatOpenRouter(
+        model=settings.openrouter_model,
+        api_key=settings.openrouter_api_key,
+        openrouter_api_base=settings.openrouter_base_url,
+        app_url=settings.openrouter_site_url,
+        app_title=settings.openrouter_app_name,
+        # A name needs no chain of thought; reasoning made it cost ~2k tokens.
+        reasoning={"effort": "none"},
+        max_tokens=40,
+        streaming=False,
+    )
+
+
 @lru_cache(maxsize=16)
 def get_agent(tool_names: frozenset[str]):
     """One compiled graph per set of allowed tools; members with the same

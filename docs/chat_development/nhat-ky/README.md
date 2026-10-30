@@ -139,3 +139,8 @@ Loại: `BẮT ĐẦU`, `KẾT THÚC`, `LỖI`, `SỬA`, `THAY ĐỔI`, `QUYẾT
 | 30/10/2026 | Sau S9 | PHÁT HÀNH | — | Commit sửa lỗi rà soát trên `chat` | `9151e03` |
 | 30/10/2026 | S10 | QUYẾT ĐỊNH | Q-09 → Q-12, QD-31 | PO chốt phạm vi S10: dời T03 và xoá tài khoản; export zip; tệp CSV/MD/TXT/XLSX; tìm theo tên và nội dung | — |
 | 30/10/2026 | S10 | THAY ĐỔI | TD-017 | Thêm S10 "Mở rộng chat" vào lộ trình (11 nc) | — |
+| 30/10/2026 | S10 | BẮT ĐẦU | — | Bắt đầu S10 mở rộng chat (C01, C09, D06, O08 export); rà rủi ro: chi phí tên tự sinh, index trigram, formula injection, export dài | CH-S10-DOC-01 |
+| 30/10/2026 | S10 | LỖI | L-30, L-31, L-32 | Resume không tạo được tệp; tên tệp tải về khó đọc (người dùng báo); sidebar không cập nhật tên tự sinh. Đã sửa | CH-S10-BE-01, BE-03, BE-05 |
+| 30/10/2026 | S10 | QUYẾT ĐỊNH | QD-32 | Chi tiết tên chat, index tìm kiếm, `create_file`, export | CH-S10-BE-01 → BE-05 |
+| 30/10/2026 | S10 | THAY ĐỔI | TD-018 | Route search và export, migration tìm kiếm, tool `create_file`, `openpyxl` | CH-S10-DB-01 → FE-03 |
+| 30/10/2026 | S10 | KẾT THÚC | — | Xong 12/12 task; backend 152 test, frontend 68 test xanh; kịch bản 1–4 đạt; use case 16 Đạt, 4 Một phần, 12 Sau | — |

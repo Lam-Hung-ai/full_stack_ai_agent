@@ -2,6 +2,7 @@ import type { Message as AGUIMessage } from "@ag-ui/client";
 import { describe, expect, it } from "vitest";
 import {
   attachedFiles,
+  madeFile,
   contentTypeOf,
   formatBytes,
   questionContent,
@@ -56,5 +57,30 @@ describe("helpers", () => {
     expect(formatBytes(512)).toBe("512 B");
     expect(formatBytes(2048)).toBe("2.0 KB");
     expect(formatBytes(5 * 1024 * 1024)).toBe("5.0 MB");
+  });
+});
+
+describe("madeFile", () => {
+  const result = JSON.stringify({
+    file_id: "f1",
+    name: "Chi phí.xlsx",
+    content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    size_bytes: 4096,
+  });
+
+  it("reads the file a create_file call made", () => {
+    expect(madeFile("create_file", result)).toEqual({
+      id: "f1",
+      name: "Chi phí.xlsx",
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      sizeBytes: 4096,
+      isImage: false,
+    });
+  });
+
+  it("ignores other tools, refusals and missing results", () => {
+    expect(madeFile("get_current_time", result)).toBeNull();
+    expect(madeFile("create_file", "Could not create the file: too big")).toBeNull();
+    expect(madeFile("create_file", undefined)).toBeNull();
   });
 });

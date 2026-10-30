@@ -230,14 +230,26 @@ def remap_bundle(
     row: RowMapping | dict[str, Any], message_id: UUID, files: dict[str, str]
 ) -> list[dict[str, Any]]:
     """A row's AG-UI bundle for a new row id: the user message takes the new
-    id (as stored questions do) and file parts point at `files` (old → new)."""
+    id (as stored questions do) and file parts point at `files` (old → new);
+    in an answer, tool results naming a file the agent made point there too."""
     if row["role"] != "user":
-        return list(row["content"])
+        return [_remap_tool_result(message, files) for message in row["content"]]
     (question,) = row["content"]
     content = question.get("content")
     if isinstance(content, list) and files:
         content = [_remap_part(part, files) for part in content]
     return [{**question, "id": str(message_id), "content": content}]
+
+
+def _remap_tool_result(
+    message: dict[str, Any], files: dict[str, str]
+) -> dict[str, Any]:
+    content = message.get("content")
+    if not files or message.get("role") != "tool" or not isinstance(content, str):
+        return message
+    for old, new in files.items():
+        content = content.replace(old, new)
+    return {**message, "content": content}
 
 
 def _remap_part(part: dict[str, Any], files: dict[str, str]) -> dict[str, Any]:

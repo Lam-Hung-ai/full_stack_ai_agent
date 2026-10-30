@@ -8,16 +8,19 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import StreamingResponse
 
 from app.common.dependencies.auth import CurrentUser
+from app.common.dependencies.rate_limit import user_rate_limit
 from app.common.dependencies.storage import OptionalStorageDep
 from app.common.dependencies.workspace import CurrentWorkspace
 from app.common.schemas.pagination import PageParams, page_params
 from app.database.session import SessionDep, SessionLocal
 from app.modules.agent.dependencies import RunnerDep
 from app.modules.conversations.connect import ConnectService
+from app.modules.conversations.export import content_disposition
 from app.modules.conversations.schemas import (
     ConversationCreate,
     ConversationListResponse,
     ConversationResponse,
+    ConversationSearchResponse,
     ConversationUpdate,
     EditMessage,
     HistoryResponse,
@@ -25,11 +28,15 @@ from app.modules.conversations.schemas import (
     SendMessage,
     StopResponse,
 )
+from app.modules.conversations.search import MAX_QUERY, MIN_QUERY
 from app.modules.conversations.service import (
     ConversationService,
     StartedTurn,
     TurnService,
 )
+
+#: Each export reads every chat of the workspace.
+EXPORTS_PER_HOUR = 10
 
 router = APIRouter(tags=["Conversations"])
 
@@ -74,6 +81,46 @@ async def list_conversations(
         archived=archived,
         folder_id=folder_id,
         unfiled=unfiled,
+    )
+
+
+@router.get(
+    "/workspaces/{workspace_id}/conversations/search",
+    response_model=ConversationSearchResponse,
+)
+async def search_conversations(
+    workspace: CurrentWorkspace,
+    user: CurrentUser,
+    session: SessionDep,
+    q: Annotated[str, Query(min_length=MIN_QUERY, max_length=MAX_QUERY)],
+    params: Annotated[PageParams, Depends(page_params)],
+) -> ConversationSearchResponse:
+    """Own chats matching `q` by title or message text, ignoring accents and
+    case; each with the newest matching message and a snippet."""
+    return await ConversationService(session).search(
+        user=user, workspace=workspace, query=q, params=params
+    )
+
+
+@router.get(
+    "/workspaces/{workspace_id}/export",
+    response_class=StreamingResponse,
+    responses={200: {"content": {"application/zip": {}}}},
+    dependencies=[
+        Depends(user_rate_limit("conversation-export", EXPORTS_PER_HOUR, window=3600))
+    ],
+)
+async def export_conversations(
+    workspace: CurrentWorkspace, user: CurrentUser, session: SessionDep
+) -> StreamingResponse:
+    """The caller's own chats of the workspace as a zip (JSON + Markdown)."""
+    name, chunks = await ConversationService(session).export(
+        user=user, workspace=workspace, session_factory=SessionLocal
+    )
+    return StreamingResponse(
+        chunks,
+        media_type="application/zip",
+        headers={"Content-Disposition": content_disposition(name)},
     )
 
 
@@ -205,10 +252,12 @@ async def resume_message(
     user: CurrentUser,
     session: SessionDep,
     runner: RunnerDep,
+    storage: OptionalStorageDep,
 ) -> StreamingResponse:
     """Answer what a paused assistant waits on and continue the same turn."""
+    # Storage too: the continued turn may create files (D06).
     turn = await TurnService(
-        session, runner=runner, session_factory=SessionLocal
+        session, runner=runner, session_factory=SessionLocal, storage=storage
     ).resume(
         user=user, conversation_id=conversation_id, message_id=message_id, data=data
     )

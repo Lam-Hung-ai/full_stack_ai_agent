@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from functools import partial
 from typing import Any
@@ -23,8 +24,9 @@ from app.modules.agent.graph import GRAPH_VERSION
 from app.modules.agent.runner import Pause, Runner, RunStream, TurnStatus
 from app.modules.agent.tools import TOOL_RESOURCE, TOOLS
 from app.modules.authorization.service import AuthorizationService
-from app.modules.conversations import interactions
+from app.modules.conversations import interactions, search, titles
 from app.modules.conversations.context import branch_messages
+from app.modules.conversations.export import archive_name, export_zip
 from app.modules.conversations.repository import (
     DEFAULT_TITLE,
     ConversationRepository,
@@ -38,6 +40,8 @@ from app.modules.conversations.schemas import (
     ConversationListItem,
     ConversationListResponse,
     ConversationResponse,
+    ConversationSearchItem,
+    ConversationSearchResponse,
     ConversationUpdate,
     EditMessage,
     HistoryResponse,
@@ -47,6 +51,7 @@ from app.modules.conversations.schemas import (
     StopResponse,
 )
 from app.modules.conversations.tree import MessageTree
+from app.modules.files.generated import save_generated
 from app.modules.files.repository import FileRepository
 from app.modules.files.service import FileService, file_part, resolve_files
 from app.modules.folders.service import FolderService
@@ -54,7 +59,6 @@ from app.modules.workspaces.schemas import WorkspaceContext
 from app.modules.workspaces.service import WorkspaceService
 
 TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled"})
-TITLE_LENGTH = 60
 #: How long a stop request waits for the turn to save its partial answer.
 STOP_WAIT_SECONDS = 5.0
 #: Suggested wait before retrying a turn refused for lack of room.
@@ -62,10 +66,8 @@ RETRY_AFTER_SECONDS = 5
 
 
 def _fallback_title(text: str) -> str:
-    """First line of the first question; a background title generator that
-    never overwrites a user's rename is left for later (use case C07)."""
-    line = " ".join(text.split())
-    return line if len(line) <= TITLE_LENGTH else line[: TITLE_LENGTH - 1] + "…"
+    """First line of the first question, until the model names the chat."""
+    return titles.clip(text)
 
 
 class ConversationService:
@@ -108,6 +110,73 @@ class ConversationService:
         return ConversationListResponse(
             data=[ConversationListItem.model_validate(dict(row)) for row in rows],
             pagination=Pagination.of(params, total),
+        )
+
+    async def search(
+        self,
+        *,
+        user: Principal,
+        workspace: WorkspaceContext,
+        query: str,
+        params: PageParams,
+    ) -> ConversationSearchResponse:
+        """The user's own chats in the workspace matching `query` by title or
+        message text, accents and case ignored; newest first (C09)."""
+        query = " ".join(query.split())
+        if len(query) < search.MIN_QUERY:
+            fail(422, "query_too_short", details={"min": search.MIN_QUERY})
+        rows, total = await self._conversations.search_for_owner(
+            workspace_id=workspace.id,
+            owner_user_id=user.id,
+            pattern=search.like_pattern(query),
+            limit=params.page_size,
+            offset=params.offset,
+        )
+        return ConversationSearchResponse(
+            data=[
+                ConversationSearchItem(
+                    id=row["id"],
+                    title=row["title"],
+                    archived_at=row["archived_at"],
+                    updated_at=row["updated_at"],
+                    message_id=row["message_id"],
+                    snippet=search.snippet(row["message_text"], query)
+                    if row["message_id"]
+                    else None,
+                )
+                for row in rows
+            ],
+            pagination=Pagination.of(params, total),
+        )
+
+    async def export(
+        self,
+        *,
+        user: Principal,
+        workspace: WorkspaceContext,
+        session_factory: SessionFactory,
+    ) -> tuple[str, AsyncIterator[bytes]]:
+        """The user's own chats of the workspace as a zip: its file name and
+        its bytes, streamed. Nothing stays open on this request's session."""
+        rows = await self._conversations.all_for_owner(
+            workspace_id=workspace.id, owner_user_id=user.id
+        )
+        info = await WorkspaceService(self._session).get(
+            user_id=user.id, workspace_id=workspace.id
+        )
+        await self._session.commit()
+        label = "Cá nhân" if workspace.kind == "personal" else info.name or "Tổ chức"
+        at = now()
+        manifest = {
+            "exported_at": at,
+            "workspace_id": workspace.id,
+            "workspace_kind": workspace.kind,
+            "workspace_name": label,
+            "user_email": user.email,
+            "note": "Tệp đính kèm chỉ có tên, loại và cỡ; nội dung tệp không kèm theo.",
+        }
+        return archive_name(label, at), export_zip(
+            session_factory=session_factory, conversations=rows, manifest=manifest
         )
 
     async def get(
@@ -262,7 +331,7 @@ class TurnService:
             if conversation["title"] == DEFAULT_TITLE and data.parent_message_id is None
             else None
         )
-        return await self._ask(
+        started = await self._ask(
             user,
             workspace,
             conversation_id,
@@ -271,6 +340,14 @@ class TurnService:
             text=text,
             title=title,
         )
+        if title is not None and text:
+            titles.name_in_background(
+                session_factory=self._session_factory,
+                conversation_id=conversation_id,
+                current=title,
+                question=text,
+            )
+        return started
 
     async def edit(
         self,
@@ -669,6 +746,9 @@ class TurnService:
             },
             tools=tools.intersection(TOOLS),
             tool_guard=partial(self._tool_allowed, user.id, workspace.id),
+            file_sink=partial(self._save_file, user.id, workspace.id, assistant_id)
+            if self._storage is not None
+            else None,
             on_running=lambda: self._record(assistant_id, "running"),
             finalize=finalize,
             known_ids=known_ids,
@@ -730,6 +810,31 @@ class TurnService:
             return await AuthorizationService(session).can(
                 workspace, TOOL_RESOURCE, tool_name
             )
+
+    async def _save_file(
+        self,
+        owner_id: UUID,
+        workspace_id: UUID,
+        assistant_id: UUID,
+        name: str,
+        fmt: str,
+        content: str | None,
+        rows: list[list[Any]] | None,
+    ) -> dict[str, Any]:
+        """A file the agent creates in the turn, attached to its answer (D06)."""
+        assert self._storage is not None
+        saved = await save_generated(
+            session_factory=self._session_factory,
+            storage=self._storage,
+            owner_id=owner_id,
+            workspace_id=workspace_id,
+            assistant_id=assistant_id,
+            name=name,
+            fmt=fmt,
+            content=content,
+            rows=rows,
+        )
+        return saved.as_result()
 
     async def _record(self, assistant_id: UUID, status: str) -> None:
         """Runs in the turn's task, after the request ended: its own session."""

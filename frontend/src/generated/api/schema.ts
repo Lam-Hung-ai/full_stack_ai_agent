@@ -761,6 +761,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/conversations/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Conversations
+         * @description Own chats matching `q` by title or message text, ignoring accents and
+         *     case; each with the newest matching message and a snippet.
+         */
+        get: operations["search_conversations_api_v1_workspaces__workspace_id__conversations_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/folders": {
         parameters: {
             query?: never;
@@ -931,6 +952,33 @@ export interface components {
              * Format: uuid
              */
             workspace_id: string;
+        };
+        /** ConversationSearchItem */
+        ConversationSearchItem: {
+            /** Archived At */
+            archived_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Message Id */
+            message_id: string | null;
+            /** Snippet */
+            snippet: string | null;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ConversationSearchResponse */
+        ConversationSearchResponse: {
+            /** Data */
+            data: components["schemas"]["ConversationSearchItem"][];
+            pagination: components["schemas"]["Pagination"];
         };
         /**
          * ConversationUpdate
@@ -3259,6 +3307,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConversationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_conversations_api_v1_workspaces__workspace_id__conversations_search_get: {
+        parameters: {
+            query: {
+                q: string;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationSearchResponse"];
                 };
             };
             /** @description Validation Error */

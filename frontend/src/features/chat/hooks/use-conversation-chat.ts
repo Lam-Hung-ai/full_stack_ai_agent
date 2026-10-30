@@ -22,6 +22,8 @@ import {
 import { chatKeys } from "./use-conversations";
 
 const ACTIVE_POLL_MS = 2_000;
+/** When the sidebar looks again for the name a new chat gets (C01). */
+const TITLE_REFRESH_MS = [3_000, 10_000];
 
 type TurnStart = Pick<LiveTurn, "kept" | "question" | "questionId"> & {
   continued?: RowView;
@@ -54,9 +56,9 @@ function questionRow(
  * when its live data is gone the history is polled until it is saved.
  * Leaving the conversation drops the stream; the turn goes on (QD-23).
  */
-export function useConversationChat(conversationId: string) {
+export function useConversationChat(conversationId: string, initialAnchor: string | null = null) {
   const queryClient = useQueryClient();
-  const [anchor, setAnchor] = useState<string | null>(null);
+  const [anchor, setAnchor] = useState<string | null>(initialAnchor);
   const runningRef = useRef(false);
   const history = useQuery({
     queryKey: chatKeys.history(conversationId, anchor),
@@ -197,6 +199,16 @@ export function useConversationChat(conversationId: string) {
         settleAccepted(Boolean(assistantId));
         updateLive(() => null);
         await queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+        if (assistantId && turn.kept.length === 0 && !turn.continued) {
+          // A new chat is named in the background (C01) and the name may
+          // land after the answer: look again a little later.
+          for (const delay of TITLE_REFRESH_MS) {
+            setTimeout(
+              () => void queryClient.invalidateQueries({ queryKey: ["workspaces"] }),
+              delay,
+            );
+          }
+        }
       }
     },
     [conversationId, queryClient, settleAccepted, updateLive],

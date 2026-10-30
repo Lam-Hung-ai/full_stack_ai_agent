@@ -42,7 +42,12 @@ from app.modules.agent.bundle import AguiMessage, BundleBuilder
 from app.modules.agent.checkpoints import TurnSaver, thread_config
 from app.modules.agent.lifecycle import OpenSpans
 from app.modules.agent.live import LiveStore, LiveView
-from app.modules.agent.tools import ToolGuard, current_tool_guard
+from app.modules.agent.tools import (
+    FileSink,
+    ToolGuard,
+    current_file_sink,
+    current_tool_guard,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +205,7 @@ class Runner:
         tool_guard: ToolGuard,
         on_running: Callable[[], Awaitable[None]],
         finalize: Finalizer,
+        file_sink: FileSink | None = None,
         known_ids: set[str] | None = None,
         resume_from: CheckpointTuple | None = None,
         prepare: InputPreparer | None = None,
@@ -219,6 +225,7 @@ class Runner:
                 announce=announce,
                 tools=tools,
                 tool_guard=tool_guard,
+                file_sink=file_sink,
                 on_running=on_running,
                 finalize=finalize,
                 known_ids=known_ids,
@@ -294,6 +301,7 @@ class Runner:
         announce: dict[str, Any],
         tools: frozenset[str],
         tool_guard: ToolGuard,
+        file_sink: FileSink | None,
         on_running: Callable[[], Awaitable[None]],
         finalize: Finalizer,
         known_ids: set[str] | None,
@@ -322,6 +330,7 @@ class Runner:
         saver = TurnSaver()
         # Tasks the graph spawns copy this context, so tool calls see the guard.
         current_tool_guard.set(tool_guard)
+        current_file_sink.set(file_sink)
         finished: BaseEvent | None = None
         pause: Pause | None = None
         started = False

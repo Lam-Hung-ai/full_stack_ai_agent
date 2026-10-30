@@ -10,10 +10,12 @@ tool configured to need approval. Both call `interrupt()` before anything with
 an effect, because LangGraph reruns the interrupted node from its start.
 """
 
+import json
+import logging
 from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ToolCallRequest
@@ -21,14 +23,24 @@ from langchain_core.messages import ToolCall, ToolMessage
 from langchain_core.tools import BaseTool, tool
 from langgraph.types import Command, interrupt
 
+logger = logging.getLogger(__name__)
+
 #: Permission resource of every tool; the action is the tool name.
 TOOL_RESOURCE = "tool"
 
 type ToolGuard = Callable[[str], Awaitable[bool]]
+#: Stores a file for the turn's assistant: (name, format, content, rows) ->
+#: what the tool returns. Raises ValueError for a request it refuses.
+type FileSink = Callable[
+    [str, str, str | None, list[list[Any]] | None], Awaitable[dict[str, Any]]
+]
 
 #: Set by the runner inside a turn's task; tool calls inherit it.
 current_tool_guard: ContextVar[ToolGuard | None] = ContextVar(
     "current_tool_guard", default=None
+)
+current_file_sink: ContextVar[FileSink | None] = ContextVar(
+    "current_file_sink", default=None
 )
 
 
@@ -41,7 +53,40 @@ def get_current_time() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-TOOLS: dict[str, BaseTool] = {item.name: item for item in (get_current_time,)}
+@tool
+async def create_file(
+    name: str,
+    format: Literal["csv", "md", "txt", "xlsx"],
+    content: str | None = None,
+    rows: list[list[str | int | float | None]] | None = None,
+) -> str:
+    """Create a file the user can download, attached to your answer.
+
+    Use it when the user asks for a document or spreadsheet to keep, e.g.
+    "lập bảng Excel", "xuất CSV", "viết thành file Markdown".
+    - name: what a person would call the file, in the user's language with
+      its accents and spaces, saying what it holds, e.g. "Bảng chi phí tháng
+      10-2026" (no underscores, no extension needed).
+    - csv, xlsx: give `rows`, a list of rows; the first row holds the headers.
+    - md, txt: give the whole text in `content`.
+    In your answer name the file instead of repeating all of its content.
+    """
+    sink = current_file_sink.get()
+    if sink is None:
+        return "Files cannot be created right now."
+    try:
+        result = await sink(name, format, content, rows)
+    except ValueError as error:
+        return f"Could not create the file: {error}"
+    except Exception:
+        logger.warning("create_file failed", exc_info=True)
+        return "Could not store the file right now. Try again later."
+    return json.dumps(result, ensure_ascii=False)
+
+
+TOOLS: dict[str, BaseTool] = {
+    item.name: item for item in (get_current_time, create_file)
+}
 
 
 @tool

@@ -160,6 +160,11 @@ t_conversations = Table(
         "id",
         postgresql_where="(deleted_at IS NULL)",
     ),
+    Index(
+        "conversations_title_search_idx",
+        postgresql_ops={"chat_app.search_key(title)": "gin_trgm_ops"},
+        postgresql_using="gin",
+    ),
     Index("conversations_workspace_idx", "workspace_id"),
     Index(
         "idx_conversations_folder",
@@ -266,6 +271,13 @@ t_messages = Table(
         unique=True,
     ),
     Index("messages_parent_idx", "conversation_id", "parent_message_id"),
+    Index(
+        "messages_search_idx",
+        postgresql_ops={
+            "chat_app.search_key(chat_app.message_text(content))": "gin_trgm_ops"
+        },
+        postgresql_using="gin",
+    ),
     schema="chat_app",
 )
 

@@ -91,3 +91,26 @@ def scripted_model(monkeypatch):
 
     yield install
     graph.get_agent.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def title_model(request, monkeypatch):
+    """Naming a chat (C01) never reaches OpenRouter in tests. By default the
+    call fails, so the first-line name stays; call with a reply to name it."""
+    if "pg" not in request.fixturenames:
+        return None  # no app here: unit tests
+    # The app may be imported only once the test database exists.
+    request.getfixturevalue("pg")
+    from app.modules.agent import graph
+
+    def unavailable():
+        raise RuntimeError("no title model in tests")
+
+    monkeypatch.setattr(graph, "build_title_model", unavailable)
+
+    def install(reply: str) -> GenericFakeChatModel:
+        model = GenericFakeChatModel(messages=iter([AIMessage(content=reply)]))
+        monkeypatch.setattr(graph, "build_title_model", lambda: model)
+        return model
+
+    return install

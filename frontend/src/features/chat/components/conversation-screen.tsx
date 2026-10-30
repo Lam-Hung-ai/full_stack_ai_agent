@@ -12,8 +12,15 @@ import { ChatEmptyState } from "./chat-empty-state";
 import { ChatMessages } from "./chat-messages";
 import { conversationFiles } from "./message-files";
 
-export function ConversationScreen({ conversationId }: { conversationId: string }) {
-  const chat = useConversationChat(conversationId);
+export function ConversationScreen({
+  conversationId,
+  messageId = null,
+}: {
+  conversationId: string;
+  /** Open the branch through this message instead of the saved one. */
+  messageId?: string | null;
+}) {
+  const chat = useConversationChat(conversationId, messageId);
   const conversation = useConversation(conversationId);
   const fileSource = useMemo(() => conversationFiles(conversationId), [conversationId]);
   const take = usePendingMessageStore((state) => state.take);
@@ -38,7 +45,9 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
     return (
       <div className="mx-auto w-full max-w-3xl p-4">
         <Alert variant="destructive">
-          <AlertDescription>Không tìm thấy cuộc trò chuyện hoặc bạn không có quyền xem.</AlertDescription>
+          <AlertDescription>
+            Không tìm thấy cuộc trò chuyện hoặc bạn không có quyền xem.
+          </AlertDescription>
         </Alert>
       </div>
     );

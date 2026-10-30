@@ -81,6 +81,17 @@ Từ S8 (TD-014, QD-28): chia sẻ và copy.
 | GET /shares/{token}/files/{fileId} | URL ký của tệp trong snapshot | Như trên |
 | POST /shares/{token}/copy | `client_request_id`; tạo chat riêng của người gọi (public → workspace cá nhân, tổ chức → workspace tổ chức đó) với message, tệp và object mới; gọi lại cùng id trả cùng bản sao. Bản sao chưa hoàn tất (đang copy, lỗi, bị huỷ) không hiện và trả 404 cho mọi route conversation (TD-016) | Đăng nhập, đọc được share, `conversation.create` ở workspace đích |
 
+Từ S10 (TD-018, QD-31, QD-32): tìm kiếm, export, tệp do agent tạo.
+
+| Method/path | Chức năng | Quyền |
+|---|---|---|
+| GET /workspaces/{id}/conversations/search?q=&page=&page_size= | Chat của mình trong workspace khớp `q` (2–200 ký tự) theo tên hoặc chữ của câu hỏi, câu trả lời, không phân biệt hoa thường và dấu. Mỗi dòng: `id`, `title`, `archived_at`, `updated_at`, `message_id` (message khớp mới nhất, null khi chỉ khớp tên), `snippet`; mới nhất trước. Bỏ chat đã xoá và bản copy chưa xong. `q` ngắn hơn 2 ký tự sau khi gộp khoảng trắng: 422 `query_too_short` | Thành viên workspace; chỉ chat của chính mình |
+| GET /workspaces/{id}/export | Tệp zip (`application/zip`, tên kiểu "Chat Cá nhân 30-10-2026.zip"): `manifest.json` và mỗi chat một thư mục "yyyy-mm-dd Tên chat" có `conversation.json` (cả cây) và `conversation.md` (nhánh đã lưu). Tệp đính kèm chỉ có tên, loại, cỡ. 10 lần/giờ mỗi người (429) | Thành viên workspace; chỉ chat của chính mình |
+
+Mở chat ở nhánh của một kết quả tìm kiếm: frontend dùng `/c/{id}?m={message_id}`, history gọi `?from_message_id=`.
+
+Tool `create_file` (quyền `tool.create_file`): agent tạo tệp CSV, MD, TXT, XLSX gắn vào assistant đang chạy. Kết quả tool là JSON `{file_id, name, content_type, size_bytes}`; tệp tải qua `GET /conversations/{id}/files/{fileId}` như tệp đính kèm, đi theo share và copy (id trong kết quả tool được đổi ở bản copy). Tối đa 5 tệp mỗi câu trả lời, 5 MB mỗi tệp; ô bảng tính luôn là dữ liệu, không là công thức.
+
 Sidebar (`GET /workspaces/{id}/conversations`) nhận `archived=true` (chỉ chat đã lưu trữ), `folder_id` (chat của một folder) hoặc `unfiled=true` (chat ngoài folder); mặc định là mọi chat chưa lưu trữ. Chat ghim lên đầu, rồi theo `updated_at` giảm dần. `PATCH /conversations/{id}` nhận `title`, `pinned`, `archived`, `folder_id` (null là bỏ khỏi folder); field bỏ trống giữ nguyên, field khác bị từ chối. Các nhóm còn lại chốt khi tới sprint tương ứng. Health endpoints thuộc vận hành service, không phải API agent discovery.
 
 ## 3. Gửi câu hỏi mới
