@@ -129,3 +129,4 @@ Loại: `BẮT ĐẦU`, `KẾT THÚC`, `LỖI`, `SỬA`, `THAY ĐỔI`, `QUYẾT
 | 30/10/2026 | S9 | THAY ĐỔI | TD-015 | 503 `server_busy`, `MAX_QUEUED_TURNS`, `LANGFUSE_*`, `AGENT_FAKE_MODEL`, `uv run loadtest`; `van-hanh.md`; chấm lại use case | CH-S9-BE-01 → DOC-02 |
 | 30/10/2026 | S9 | RỦI RO | RR-13, RR-16, RR-10 | SSE qua proxy và dọn checkpoint đã xử lý; runner trong process đủ theo load test | CH-S9-BE-05, BE-06, QA-01 |
 | 30/10/2026 | S9 | KẾT THÚC | — | Xong 9/9 task; backend 126 test, frontend 59 test xanh; load test đạt; use case 13 Đạt, 7 Một phần, 12 Sau | — |
+| 30/10/2026 | S9 | PHÁT HÀNH | — | Commit Sprint 9 trên `chat` | `aa24411` |
