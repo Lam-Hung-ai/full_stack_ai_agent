@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { useConversationChat } from "../hooks/use-conversation-chat";
@@ -10,10 +10,12 @@ import { chatErrorMessage } from "../utils/history";
 import { ChatComposer } from "./chat-composer";
 import { ChatEmptyState } from "./chat-empty-state";
 import { ChatMessages } from "./chat-messages";
+import { conversationFiles } from "./message-files";
 
 export function ConversationScreen({ conversationId }: { conversationId: string }) {
   const chat = useConversationChat(conversationId);
   const conversation = useConversation(conversationId);
+  const fileSource = useMemo(() => conversationFiles(conversationId), [conversationId]);
   const take = usePendingMessageStore((state) => state.take);
   const { isReady, sendMessage, editMessage, regenerate, answerInterrupt, switchBranch, stop } =
     chat;
@@ -47,7 +49,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
   return (
     <div className="mx-auto flex h-full w-full max-w-3xl flex-col p-4">
       <ChatMessages
-        conversationId={conversationId}
+        fileSource={fileSource}
         actions={{
           onEdit: (id, text) => void editMessage(id, text),
           onRegenerate: (id) => void regenerate(id),

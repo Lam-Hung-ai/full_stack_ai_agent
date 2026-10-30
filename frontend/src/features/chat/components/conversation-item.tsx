@@ -11,8 +11,11 @@ import {
   PencilIcon,
   PinIcon,
   PinOffIcon,
+  Share2Icon,
   Trash2Icon,
 } from "lucide-react";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { NameDialog } from "@/components/shared/name-dialog";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -24,13 +27,13 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useCurrentWorkspace } from "@/features/workspaces";
 import { cn } from "@/lib/utils";
 import { useConversationActions } from "../hooks/use-conversations";
 import type { ConversationListItem, ConversationUpdate, Folder } from "../types/chat.types";
-import { ConfirmDialog } from "@/components/shared/confirm-dialog";
-import { NameDialog } from "@/components/shared/name-dialog";
+import { ShareDialog } from "./share-dialog";
 
-/** One chat in the sidebar with its menu: pin, rename, file, archive, delete. */
+/** One chat in the sidebar with its menu: pin, rename, share, file, archive, delete. */
 export function ConversationItem({
   conversation,
   workspaceId,
@@ -40,12 +43,14 @@ export function ConversationItem({
   workspaceId: string;
   folders: readonly Folder[];
 }) {
+  // Personal chats share by public link, organization chats internally.
+  const isPersonal = useCurrentWorkspace()?.kind === "personal";
   const router = useRouter();
   const pathname = usePathname();
   const href = `/c/${conversation.id}`;
   const active = pathname === href;
   const { update, remove } = useConversationActions(workspaceId);
-  const [dialog, setDialog] = useState<"rename" | "delete" | null>(null);
+  const [dialog, setDialog] = useState<"rename" | "share" | "delete" | null>(null);
   const archived = conversation.archived_at !== null;
 
   const change = (changes: ConversationUpdate, leave = false) =>
@@ -99,6 +104,10 @@ export function ConversationItem({
           >
             <PencilIcon />
             Đổi tên
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setDialog("share")}>
+            <Share2Icon />
+            Chia sẻ
           </DropdownMenuItem>
           {!archived && (
             <DropdownMenuSub>
@@ -155,6 +164,13 @@ export function ConversationItem({
             )
           }
           title="Đổi tên cuộc trò chuyện"
+        />
+      )}
+      {dialog === "share" && (
+        <ShareDialog
+          conversationId={conversation.id}
+          isPersonal={isPersonal}
+          onClose={() => setDialog(null)}
         />
       )}
       {dialog === "delete" && (

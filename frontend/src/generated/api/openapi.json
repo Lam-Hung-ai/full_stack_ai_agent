@@ -316,6 +316,42 @@
         "title": "ConversationUpdate",
         "type": "object"
       },
+      "CopyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "client_request_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Client Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_request_id"
+        ],
+        "title": "CopyRequest",
+        "type": "object"
+      },
+      "CopyResponse": {
+        "properties": {
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "workspace_id"
+        ],
+        "title": "CopyResponse",
+        "type": "object"
+      },
       "DownloadResponse": {
         "description": "A short-lived link; returned in the body, never as a redirect.",
         "properties": {
@@ -1454,6 +1490,160 @@
           "workspaces"
         ],
         "title": "SessionResponse",
+        "type": "object"
+      },
+      "ShareResponse": {
+        "description": "The owner's view of a chat's share.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "public",
+              "organization"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "mode",
+          "url",
+          "version",
+          "published_at"
+        ],
+        "title": "ShareResponse",
+        "type": "object"
+      },
+      "SharedConversation": {
+        "description": "A published snapshot: the whole tree as it was, not the live chat.",
+        "properties": {
+          "can_copy": {
+            "title": "Can Copy",
+            "type": "boolean"
+          },
+          "current_message_id": {
+            "format": "uuid",
+            "title": "Current Message Id",
+            "type": "string"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/SharedMessage"
+            },
+            "title": "Messages",
+            "type": "array"
+          },
+          "mode": {
+            "enum": [
+              "public",
+              "organization"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "title",
+          "mode",
+          "version",
+          "published_at",
+          "current_message_id",
+          "messages",
+          "can_copy"
+        ],
+        "title": "SharedConversation",
+        "type": "object"
+      },
+      "SharedMessage": {
+        "properties": {
+          "content": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Content",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "parent_message_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Message Id"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "sibling_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Sibling Ids",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "parent_message_id",
+          "role",
+          "status",
+          "content",
+          "created_at",
+          "sibling_ids"
+        ],
+        "title": "SharedMessage",
         "type": "object"
       },
       "StopResponse": {
@@ -2664,6 +2854,142 @@
         ]
       }
     },
+    "/api/v1/conversations/{conversation_id}/share": {
+      "delete": {
+        "description": "The link stops working for good; sharing again makes a new link.",
+        "operationId": "revoke_share_api_v1_conversations__conversation_id__share_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Revoke Share",
+        "tags": [
+          "Shares"
+        ]
+      },
+      "get": {
+        "description": "The chat's live share and its link, for its owner.",
+        "operationId": "get_share_api_v1_conversations__conversation_id__share_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Share",
+        "tags": [
+          "Shares"
+        ]
+      },
+      "post": {
+        "description": "Publish the chat as it is now (whole tree); the link stays the same.",
+        "operationId": "publish_share_api_v1_conversations__conversation_id__share_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Publish Share",
+        "tags": [
+          "Shares"
+        ]
+      }
+    },
     "/api/v1/folders/{folder_id}": {
       "delete": {
         "operationId": "delete_folder_api_v1_folders__folder_id__delete",
@@ -3671,6 +3997,169 @@
         "summary": "List Permissions",
         "tags": [
           "Roles"
+        ]
+      }
+    },
+    "/api/v1/shares/{token}": {
+      "get": {
+        "description": "Public links open for anyone; organization links need an active\nmember. Anything else is 404.",
+        "operationId": "view_share_api_v1_shares__token__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedConversation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "View Share",
+        "tags": [
+          "Shares"
+        ]
+      }
+    },
+    "/api/v1/shares/{token}/copy": {
+      "post": {
+        "description": "Continue the shared chat as a private copy of one's own.",
+        "operationId": "copy_share_api_v1_shares__token__copy_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CopyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CopyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Copy Share",
+        "tags": [
+          "Shares"
+        ]
+      }
+    },
+    "/api/v1/shares/{token}/files/{file_id}": {
+      "get": {
+        "operationId": "share_file_api_v1_shares__token__files__file_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "File Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Share File",
+        "tags": [
+          "Shares"
         ]
       }
     },

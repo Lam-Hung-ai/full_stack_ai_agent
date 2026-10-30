@@ -84,8 +84,8 @@ Tool hệ thống chỉ đọc và MCP search có thể dùng cấu hình triể
 |---|---|---|
 | O01 | Một user ở nhiều org, chuyển workspace | Hiện tại: session toàn hệ thống, request kiểm tra scope; execution cũ không chuyển org |
 | O02 | Mời thành viên, nhóm team Sales | Có từ S6: mời bằng email, nhận lời mời (tạo tài khoản nếu chưa có), vai trò và quyền; team/org units chưa có trong scope |
-| O03 | Share cho đồng nghiệp/team | Policy mới: public personal hoặc link nội bộ org, toàn cây; chưa direct-recipient/team |
-| O04 | Người nhận hỏi tiếp | Hiện tại theo copy chat/file độc lập bằng quyền người nhận; không copy runtime/credentials |
+| O03 | Share cho đồng nghiệp/team | Có từ S8: public personal hoặc link nội bộ org, snapshot toàn cây có version, thu hồi; chưa direct-recipient/team |
+| O04 | Người nhận hỏi tiếp | Có từ S8: "Hỏi tiếp" copy chat và tệp (object mới) thành chat riêng của người nhận, chạy bằng quyền của họ; không copy runtime/credentials |
 | O05 | Nhớ sở thích user xuyên chat trong workspace | Sau: native Store + policy, không dùng checkpoint của một assistant làm memory xuyên chat |
 | O06 | Xem/sửa/xóa memory | Sau: chưa có Store API/UI/provenance/cleanup |
 | O07 | Rời org khi có stream/approval | Có từ S6: rời hoặc bị xoá thì mất đọc/resume/tool ngay request kế tiếp; lượt đang chạy bị dừng, lượt đang chờ bị huỷ (QD-25) |

@@ -70,6 +70,17 @@ Từ S7 (TD-013, QD-27): tệp đính kèm.
 
 Gửi câu hỏi (§3) và sửa câu hỏi (§4) nhận `file_ids`: tối đa 10 tệp, mỗi tệp là upload của chính người gửi trong cùng workspace (sai thì 422 `invalid_file`); câu hỏi có tệp được phép không có chữ. Loại được nhận: PNG, JPEG, GIF, WebP, PDF, văn bản (txt, md, csv, json), tối đa 10 MB.
 
+Từ S8 (TD-014, QD-28): chia sẻ và copy.
+
+| Method/path | Chức năng | Quyền |
+|---|---|---|
+| GET /conversations/{id}/share | Share đang hiệu lực của chat: `url`, `mode`, `version`, `published_at`; 404 nếu chưa có | Chủ chat |
+| POST /conversations/{id}/share | Chụp toàn cây (mọi nhánh, tệp, nhánh đang mở) thành snapshot mới, đóng dấu rồi xuất bản; link giữ nguyên. 409 `conversation_busy` khi còn lượt chưa xong | Chủ chat, `conversation.share` |
+| DELETE /conversations/{id}/share | Thu hồi vĩnh viễn; chia sẻ lại là link mới | Chủ chat |
+| GET /shares/{token} | Snapshot: `title`, `mode`, `version`, `messages` (cả cây, kèm `sibling_ids`), `current_message_id`, `can_copy` | Public: ai cũng xem; tổ chức: thành viên đang hoạt động. Còn lại 404 |
+| GET /shares/{token}/files/{fileId} | URL ký của tệp trong snapshot | Như trên |
+| POST /shares/{token}/copy | `client_request_id`; tạo chat riêng của người gọi (public → workspace cá nhân, tổ chức → workspace tổ chức đó) với message, tệp và object mới; gọi lại cùng id trả cùng bản sao | Đăng nhập, đọc được share, `conversation.create` ở workspace đích |
+
 Sidebar (`GET /workspaces/{id}/conversations`) nhận `archived=true` (chỉ chat đã lưu trữ), `folder_id` (chat của một folder) hoặc `unfiled=true` (chat ngoài folder); mặc định là mọi chat chưa lưu trữ. Chat ghim lên đầu, rồi theo `updated_at` giảm dần. `PATCH /conversations/{id}` nhận `title`, `pinned`, `archived`, `folder_id` (null là bỏ khỏi folder); field bỏ trống giữ nguyên, field khác bị từ chối. Các nhóm còn lại chốt khi tới sprint tương ứng. Health endpoints thuộc vận hành service, không phải API agent discovery.
 
 ## 3. Gửi câu hỏi mới

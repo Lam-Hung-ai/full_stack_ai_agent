@@ -142,6 +142,15 @@ class MessageRepository:
         )
         return (await self._session.execute(statement)).mappings().one_or_none()
 
+    async def tree(self, *, conversation_id: UUID) -> list[RowMapping]:
+        """Every message of the conversation, oldest first (sibling order)."""
+        statement = (
+            select(messages)
+            .where(messages.c.conversation_id == conversation_id)
+            .order_by(messages.c.created_at, messages.c.id)
+        )
+        return list((await self._session.execute(statement)).mappings())
+
     async def active_of_owner(
         self, *, workspace_id: UUID, owner_user_id: UUID
     ) -> list[RowMapping]:

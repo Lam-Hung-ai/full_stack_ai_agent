@@ -45,6 +45,16 @@ class FileRepository:
         )
         return (await self._session.execute(statement)).mappings().one_or_none()
 
+    async def links_of(self, *, conversation_id: UUID) -> list[RowMapping]:
+        """(message_id, file row) of every file attached in the conversation."""
+        statement = (
+            select(message_files.c.message_id, stored_files)
+            .join(stored_files, stored_files.c.id == message_files.c.stored_file_id)
+            .join(messages, messages.c.id == message_files.c.message_id)
+            .where(messages.c.conversation_id == conversation_id)
+        )
+        return list((await self._session.execute(statement)).mappings())
+
     async def link(self, *, message_id: UUID, file_ids: Collection[UUID]) -> None:
         """Attach files to a message that is not terminal yet (trigger)."""
         if file_ids:

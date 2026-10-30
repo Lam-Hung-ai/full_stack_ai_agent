@@ -347,6 +347,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/{conversation_id}/share": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Share
+         * @description The chat's live share and its link, for its owner.
+         */
+        get: operations["get_share_api_v1_conversations__conversation_id__share_get"];
+        put?: never;
+        /**
+         * Publish Share
+         * @description Publish the chat as it is now (whole tree); the link stays the same.
+         */
+        post: operations["publish_share_api_v1_conversations__conversation_id__share_post"];
+        /**
+         * Revoke Share
+         * @description The link stops working for good; sharing again makes a new link.
+         */
+        delete: operations["revoke_share_api_v1_conversations__conversation_id__share_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/folders/{folder_id}": {
         parameters: {
             query?: never;
@@ -595,6 +623,64 @@ export interface paths {
          * @description The permission catalog; the same for every organization.
          */
         get: operations["list_permissions_api_v1_permissions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shares/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * View Share
+         * @description Public links open for anyone; organization links need an active
+         *     member. Anything else is 404.
+         */
+        get: operations["view_share_api_v1_shares__token__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shares/{token}/copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Copy Share
+         * @description Continue the shared chat as a private copy of one's own.
+         */
+        post: operations["copy_share_api_v1_shares__token__copy_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shares/{token}/files/{file_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Share File */
+        get: operations["share_file_api_v1_shares__token__files__file_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -860,6 +946,24 @@ export interface components {
             pinned?: boolean | null;
             /** Title */
             title?: string | null;
+        };
+        /** CopyRequest */
+        CopyRequest: {
+            /** Client Request Id */
+            client_request_id: string;
+        };
+        /** CopyResponse */
+        CopyResponse: {
+            /**
+             * Conversation Id
+             * Format: uuid
+             */
+            conversation_id: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
         };
         /**
          * DownloadResponse
@@ -1345,6 +1449,85 @@ export interface components {
             user: components["schemas"]["UserResponse"];
             /** Workspaces */
             workspaces: components["schemas"]["WorkspaceResponse"][];
+        };
+        /**
+         * ShareResponse
+         * @description The owner's view of a chat's share.
+         */
+        ShareResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "public" | "organization";
+            /**
+             * Published At
+             * Format: date-time
+             */
+            published_at: string;
+            /** Url */
+            url: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * SharedConversation
+         * @description A published snapshot: the whole tree as it was, not the live chat.
+         */
+        SharedConversation: {
+            /** Can Copy */
+            can_copy: boolean;
+            /**
+             * Current Message Id
+             * Format: uuid
+             */
+            current_message_id: string;
+            /** Messages */
+            messages: components["schemas"]["SharedMessage"][];
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "public" | "organization";
+            /**
+             * Published At
+             * Format: date-time
+             */
+            published_at: string;
+            /** Title */
+            title: string;
+            /** Version */
+            version: number;
+        };
+        /** SharedMessage */
+        SharedMessage: {
+            /** Content */
+            content: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Parent Message Id */
+            parent_message_id: string | null;
+            /** Role */
+            role: string;
+            /** Sibling Ids */
+            sibling_ids: string[];
+            /** Status */
+            status: string;
         };
         /**
          * StopResponse
@@ -2103,6 +2286,97 @@ export interface operations {
             };
         };
     };
+    get_share_api_v1_conversations__conversation_id__share_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    publish_share_api_v1_conversations__conversation_id__share_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_share_api_v1_conversations__conversation_id__share_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     delete_folder_api_v1_folders__folder_id__delete: {
         parameters: {
             query?: never;
@@ -2738,6 +3012,104 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PermissionListResponse"];
+                };
+            };
+        };
+    };
+    view_share_api_v1_shares__token__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharedConversation"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    copy_share_api_v1_shares__token__copy_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CopyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CopyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    share_file_api_v1_shares__token__files__file_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DownloadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

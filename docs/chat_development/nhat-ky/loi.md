@@ -18,6 +18,7 @@ Lỗi ở đây là **hành vi sai** so với quyết định đã chốt (datab
 | L-08 | Trung bình | Bấm dừng thì câu trả lời giữ đúng nhưng UI báo "Mất kết nối": runner phát `RUN_FINISHED` khi step/text message còn mở, verifier của `@ag-ui/client` từ chối | Chạy thật S3, 30/10 | Đã xác minh | CH-S3-BE-03 | Đã sửa (S3) |
 | L-09 | Cao | Bấm "Cho phép" không có tác dụng và báo "Mất kết nối": `@ag-ui/client` ghi `pendingInterrupts` từ `RUN_FINISHED` có outcome interrupt rồi chặn lần chạy kế tiếp không kèm `resume` khớp id, ném lỗi trước khi gửi request | Chạy thật S4, 30/10 | Đã xác minh | CH-S4-FE-01 | Đã sửa (S4) |
 | L-10 | Trung bình | Trang nhận lời mời: bấm "Đăng xuất để đổi tài khoản" thì phiên bị thu hồi nhưng màn vẫn báo đang đăng nhập email cũ: `queryClient.clear()` không làm query đang hiển thị tải lại | Chạy thật S6, 30/10 | Đã xác minh | CH-S6-FE-03 | Đã sửa (S6) |
+| L-11 | Trung bình | Trang xem share: đăng nhập xong quay lại vẫn hiện "Đăng nhập để hỏi tiếp" vì kết quả lúc xem ẩn danh (`can_copy=false`) còn trong cache với cùng khoá | Chạy thật S8, 30/10 | Đã xác minh | CH-S8-FE-02 | Đã sửa (S8) |
 
 Giá trị cột *Xác minh*:
 - **Đã xác minh:** đã đọc code/tài liệu hoặc chạy thử và chắc chắn.
@@ -82,6 +83,13 @@ Giá trị cột *Xác minh*:
 - **Cách sửa:** đăng xuất xong thì tải lại trang, bắt đầu lại ở trạng thái chưa đăng nhập (form tạo tài khoản hoặc nút đăng nhập).
 - **Test chặn tái phát:** chạy thật kịch bản 1 của S6 (không có test tự động: hành vi nằm ở tải lại trang).
 - **Trạng thái:** Đã sửa (S6).
+
+### L-11: Share hiển thị theo người xem cũ
+- **Vị trí:** `frontend/src/features/shares/hooks/use-shared-conversation.ts`.
+- **Thực tế:** khoá query `["shares", token]` không chứa người xem; nội dung share (link tổ chức, `can_copy`) lại phụ thuộc người xem.
+- **Cách sửa:** khoá gồm id người xem (`shareKey(token, viewerId)`), cả cho link tệp.
+- **Test chặn tái phát:** chạy thật kịch bản 2 của S8.
+- **Trạng thái:** Đã sửa (S8).
 
 ## Mẫu ghi
 

@@ -2,19 +2,33 @@
 
 import { FileIcon } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { getFileLink } from "../api/files-api";
+import { type FileLink, getFileLink } from "../api/files-api";
 import { chatKeys } from "../hooks/use-conversations";
 import { type AttachedFile, formatBytes } from "../utils/files";
+
+/** Where links to a message's files come from: the owner's chat or a share. */
+export type FileLinkSource = {
+  key: readonly unknown[];
+  fetch: (fileId: string, signal?: AbortSignal) => Promise<FileLink>;
+};
+
+/** Files of the owner's own chat. */
+export function conversationFiles(conversationId: string): FileLinkSource {
+  return {
+    key: chatKeys.conversation(conversationId),
+    fetch: (fileId, signal) => getFileLink(conversationId, fileId, signal),
+  };
+}
 
 /** Links are signed for ten minutes; reuse one for less than that. */
 const LINK_STALE_TIME = 5 * 60_000;
 
 /** Files attached to a question: pictures inline, other files as links. */
 export function MessageFiles({
-  conversationId,
+  source,
   files,
 }: {
-  conversationId: string;
+  source: FileLinkSource;
   files: readonly AttachedFile[];
 }) {
   if (files.length === 0) return null;
@@ -22,25 +36,25 @@ export function MessageFiles({
     <div className="flex flex-wrap justify-end gap-2">
       {files.map((file) =>
         file.isImage ? (
-          <FileImage conversationId={conversationId} file={file} key={file.id} />
+          <FileImage file={file} key={file.id} source={source} />
         ) : (
-          <FileLink conversationId={conversationId} file={file} key={file.id} />
+          <FileButton file={file} key={file.id} source={source} />
         ),
       )}
     </div>
   );
 }
 
-function linkQuery(conversationId: string, fileId: string) {
+function linkQuery(source: FileLinkSource, fileId: string) {
   return {
-    queryKey: [...chatKeys.conversation(conversationId), "files", fileId] as const,
-    queryFn: ({ signal }: { signal: AbortSignal }) => getFileLink(conversationId, fileId, signal),
+    queryKey: [...source.key, "files", fileId] as const,
+    queryFn: ({ signal }: { signal: AbortSignal }) => source.fetch(fileId, signal),
     staleTime: LINK_STALE_TIME,
   };
 }
 
-function FileImage({ conversationId, file }: { conversationId: string; file: AttachedFile }) {
-  const link = useQuery(linkQuery(conversationId, file.id));
+function FileImage({ source, file }: { source: FileLinkSource; file: AttachedFile }) {
+  const link = useQuery(linkQuery(source, file.id));
   if (!link.data) {
     return <div aria-busy className="size-32 animate-pulse rounded-md bg-muted" />;
   }
@@ -52,11 +66,11 @@ function FileImage({ conversationId, file }: { conversationId: string; file: Att
   );
 }
 
-function FileLink({ conversationId, file }: { conversationId: string; file: AttachedFile }) {
+function FileButton({ source, file }: { source: FileLinkSource; file: AttachedFile }) {
   const queryClient = useQueryClient();
   const open = async () => {
     // A fresh link on demand; opened in a new tab, never as the app's origin.
-    const link = await queryClient.fetchQuery(linkQuery(conversationId, file.id));
+    const link = await queryClient.fetchQuery(linkQuery(source, file.id));
     window.open(link.url, "_blank", "noopener,noreferrer");
   };
   return (

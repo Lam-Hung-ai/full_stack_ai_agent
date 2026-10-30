@@ -27,16 +27,17 @@ import { ASK_USER_TOOL, type InteractionAnswer, interactionOf } from "../utils/i
 import { BranchSwitcher } from "./branch-switcher";
 import { EditQuestionForm } from "./edit-question-form";
 import { InteractionCard } from "./interaction-card";
-import { MessageFiles } from "./message-files";
+import { type FileLinkSource, MessageFiles } from "./message-files";
 import { ReasoningSummary } from "./reasoning-summary";
 
+/** What the reader may do; a shared snapshot only switches versions. */
 export type RowActions = {
-  onEdit: (userMessageId: string, text: string) => void;
-  onRegenerate: (assistantMessageId: string) => void;
   onSwitch: (messageId: string) => void;
-  onAnswer: (assistantMessageId: string, interruptId: string, answer: InteractionAnswer) => void;
+  onEdit?: (userMessageId: string, text: string) => void;
+  onRegenerate?: (assistantMessageId: string) => void;
+  onAnswer?: (assistantMessageId: string, interruptId: string, answer: InteractionAnswer) => void;
   /** Answers kept until every question of a pause has one, by interrupt id. */
-  drafts: Record<string, InteractionAnswer>;
+  drafts?: Record<string, InteractionAnswer>;
 };
 
 /**
@@ -44,15 +45,15 @@ export type RowActions = {
  * none. Without `actions` the rows are read-only.
  */
 export function ChatMessages({
-  conversationId,
+  fileSource,
   rows,
   isBusy,
   waitingForUser = false,
   actions,
   empty,
 }: {
-  /** Needed to open attached files; absent before the chat exists. */
-  conversationId?: string;
+  /** Where attached files open from; absent before the chat exists. */
+  fileSource?: FileLinkSource;
   rows: readonly RowView[];
   isBusy: boolean;
   /** A pause holds the chat: only its questions can be acted on. */
@@ -70,8 +71,8 @@ export function ChatMessages({
               row.role === "user" ? (
                 <QuestionRow
                   actions={actions}
-                  conversationId={conversationId}
                   disabled={locked}
+                  fileSource={fileSource}
                   key={row.id}
                   row={row}
                 />
@@ -95,12 +96,12 @@ export function ChatMessages({
 function QuestionRow({
   row,
   actions,
-  conversationId,
+  fileSource,
   disabled,
 }: {
   row: RowView;
   actions?: RowActions;
-  conversationId?: string;
+  fileSource?: FileLinkSource;
   disabled: boolean;
 }) {
   const [editing, setEditing] = useState(false);
@@ -108,21 +109,22 @@ function QuestionRow({
   const text = textOf(question);
   const files = attachedFiles(question);
 
-  if (editing && actions) {
+  const onEdit = actions?.onEdit;
+  if (editing && onEdit) {
     return (
       <EditQuestionForm
         defaultText={text}
         onCancel={() => setEditing(false)}
         onSubmit={(edited) => {
           setEditing(false);
-          actions.onEdit(row.id, edited);
+          onEdit(row.id, edited);
         }}
       />
     );
   }
   return (
     <Message from="user">
-      {conversationId && <MessageFiles conversationId={conversationId} files={files} />}
+      {fileSource && <MessageFiles files={files} source={fileSource} />}
       {text && (
         <MessageContent>
           <MessageResponse>{text}</MessageResponse>
@@ -136,9 +138,11 @@ function QuestionRow({
             onSwitch={actions.onSwitch}
             siblingIds={row.siblingIds}
           />
-          <MessageAction disabled={disabled} label="Sửa câu hỏi" onClick={() => setEditing(true)}>
-            <PencilIcon />
-          </MessageAction>
+          {onEdit && (
+            <MessageAction disabled={disabled} label="Sửa câu hỏi" onClick={() => setEditing(true)}>
+              <PencilIcon />
+            </MessageAction>
+          )}
         </MessageActions>
       )}
     </Message>
@@ -163,7 +167,7 @@ function AnswerRow({
   const waiting = isStreaming || (!row.live && isActive(row));
   const showActions = actions && !row.live && isTerminal(row);
   // Only a saved pause can be answered; the server checks it again.
-  const canAnswer = actions && answerable && !row.live && row.status === "requires_action";
+  const onAnswer = answerable && !row.live && row.status === "requires_action" ? actions?.onAnswer : undefined;
 
   return (
     <>
@@ -191,11 +195,11 @@ function AnswerRow({
         return (
           <Message from="assistant" key={item.message.id}>
             <InteractionCard
-              draft={actions?.drafts[interaction.interrupt_id]}
+              draft={actions?.drafts?.[interaction.interrupt_id]}
               interaction={interaction}
               onAnswer={
-                canAnswer
-                  ? (answer) => actions.onAnswer(row.id, interaction.interrupt_id, answer)
+                onAnswer
+                  ? (answer) => onAnswer(row.id, interaction.interrupt_id, answer)
                   : undefined
               }
             />
@@ -212,13 +216,15 @@ function AnswerRow({
           )}
           {showActions && (
             <>
-              <MessageAction
-                disabled={disabled}
-                label="Tạo lại câu trả lời"
-                onClick={() => actions.onRegenerate(row.id)}
-              >
-                <RefreshCcwIcon />
-              </MessageAction>
+              {actions.onRegenerate && (
+                <MessageAction
+                  disabled={disabled}
+                  label="Tạo lại câu trả lời"
+                  onClick={() => actions.onRegenerate?.(row.id)}
+                >
+                  <RefreshCcwIcon />
+                </MessageAction>
+              )}
               <BranchSwitcher
                 currentId={row.id}
                 disabled={disabled}

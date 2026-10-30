@@ -21,6 +21,8 @@ from app.modules.folders.router import router as folders_router
 from app.modules.members.router import invitations_router
 from app.modules.members.router import router as members_router
 from app.modules.organizations.router import router as organizations_router
+from app.modules.shares.router import links_router as share_links_router
+from app.modules.shares.router import router as shares_router
 from app.modules.users.router import router as users_router
 from app.modules.workspaces.router import router as workspaces_router
 
@@ -74,6 +76,8 @@ api_router.include_router(organizations_router)
 api_router.include_router(members_router)
 api_router.include_router(invitations_router)
 api_router.include_router(authorization_router)
+api_router.include_router(shares_router)
+api_router.include_router(share_links_router)
 app.include_router(api_router)
 
 

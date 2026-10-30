@@ -115,3 +115,11 @@ Loại: `BẮT ĐẦU`, `KẾT THÚC`, `LỖI`, `SỬA`, `THAY ĐỔI`, `QUYẾT
 | 30/10/2026 | S7 | THAY ĐỔI | TD-013 | Route upload/complete/tải tệp, `file_ids`, `STORAGE_*`, RustFS, `uv run storage setup`; tài liệu API §2, §3 | CH-S7-BE-01 → FE-02, DOC-02 |
 | 30/10/2026 | S7 | RỦI RO | RR-17 | Tệp không gửi nằm lại storage; đọc lại tệp mỗi lượt | CH-S7-BE-02 |
 | 30/10/2026 | S7 | KẾT THÚC | — | Xong 9/9 task; backend 116 test, frontend 57 test xanh; 3 kịch bản chạy thật đạt | — |
+| 30/10/2026 | S7 | PHÁT HÀNH | — | Commit Sprint 7 trên `chat` | `94eaae8` |
+| 30/10/2026 | S8 | BẮT ĐẦU | — | Bắt đầu Sprint 8; không có câu hỏi chặn | CH-S8-DOC-01 |
+| 30/10/2026 | S8 | QUYẾT ĐỊNH | QD-28 | Token share bằng HMAC, snapshot toàn cây có version, copy trong request dưới lease | CH-S8-BE-01 → BE-03 |
+| 30/10/2026 | S8 | THAY ĐỔI | TD-014 | Route share, xem share, tệp share, copy; trang `/s/{token}`; tài liệu API §2 | CH-S8-BE-01 → FE-02, DOC-02 |
+| 30/10/2026 | S8 | LỖI | L-11 | Trang share giữ kết quả của lúc xem ẩn danh sau khi đăng nhập | CH-S8-FE-02 |
+| 30/10/2026 | S8 | SỬA | L-11 | Khoá query gồm người xem | CH-S8-FE-02 |
+| 30/10/2026 | S8 | RỦI RO | RR-18 | Copy trong request, job dở không được dọn | CH-S8-BE-03 |
+| 30/10/2026 | S8 | KẾT THÚC | — | Xong 7/7 task; backend 122 test, frontend 59 test xanh; 4 kịch bản đạt (3 chạy thật, 1 test API) | — |

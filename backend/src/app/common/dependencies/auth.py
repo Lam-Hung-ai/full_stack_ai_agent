@@ -52,3 +52,17 @@ async def current_user(
 
 
 CurrentUser = Annotated[Principal, Depends(current_user)]
+
+
+async def optional_user(
+    session: SessionDep,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+) -> Principal | None:
+    """The user when a token is sent, None for an anonymous visitor (public
+    share links). A token that is sent must still be valid."""
+    if credentials is None:
+        return None
+    return await current_user(session, credentials)
+
+
+OptionalUser = Annotated[Principal | None, Depends(optional_user)]
