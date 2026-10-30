@@ -24,15 +24,46 @@ export function isTerminal(row: Pick<MessageRow, "status">): boolean {
  * The rows to draw: the saved branch, or while this tab streams a turn the
  * rows kept above it, the new question and the answer so far. The agent's
  * messages may hold the whole context once a snapshot arrives, so the answer
- * is what follows the question.
+ * is what follows the question; a resumed turn adds what is new to the row
+ * it continues.
  */
 export function shownRows(
   saved: readonly RowView[],
   live: LiveTurn | null,
   liveMessages: readonly Message[],
 ): RowView[] {
-  if (!live || (live.done && saved.some((row) => row.id === live.assistantId))) {
-    return [...saved];
+  if (!live) return [...saved];
+  if (live.continued) {
+    const rows = [...live.kept, live.continued];
+    const known = new Set(rows.flatMap((row) => row.content.map((message) => message.id)));
+    // A resumed stream replays the interrupted tool call under a new id.
+    const knownCalls = new Set(
+      rows.flatMap((row) =>
+        row.content.flatMap((message) =>
+          message.role === "tool"
+            ? [message.toolCallId]
+            : message.role === "assistant"
+              ? (message.toolCalls ?? []).map((call) => call.id)
+              : [],
+        ),
+      ),
+    );
+    const replayed = (message: Message) =>
+      (message.role === "tool" && knownCalls.has(message.toolCallId)) ||
+      (message.role === "assistant" &&
+        !message.content &&
+        !!message.toolCalls?.length &&
+        message.toolCalls.every((call) => knownCalls.has(call.id)));
+    const added = liveMessages.filter(
+      (message) => message.role !== "user" && !known.has(message.id) && !replayed(message),
+    );
+    const answer: RowView = {
+      ...live.continued,
+      status: live.status,
+      content: [...live.continued.content, ...added],
+      live: true,
+    };
+    return [...live.kept, answer];
   }
   const start = liveMessages.findIndex((message) => message.id === live.questionId);
   const answer: RowView = {
@@ -62,6 +93,13 @@ const MESSAGES: Record<string, string> = {
   parent_required: "Cuộc trò chuyện đã thay đổi. Hãy tải lại trang.",
   message_not_found: "Tin nhắn không còn trong cuộc trò chuyện. Hãy tải lại trang.",
   conversation_not_found: "Không tìm thấy cuộc trò chuyện.",
+  not_waiting: "Câu hỏi này đã được trả lời hoặc đã dừng. Hãy tải lại trang.",
+  stale_interrupt: "Câu hỏi đã thay đổi. Hãy tải lại trang.",
+  resume_incomplete: "Hãy trả lời tất cả câu hỏi của agent.",
+  empty_answer: "Câu trả lời không được để trống.",
+  permission_denied: "Bạn không còn quyền dùng công cụ này.",
+  graph_version_changed: "Agent đã được cập nhật nên không tiếp tục được câu trả lời này. Hãy dừng và hỏi lại.",
+  checkpoint_missing: "Không tìm thấy trạng thái đã lưu để tiếp tục. Hãy dừng và hỏi lại.",
   agent_run_failed: "Agent không trả lời được. Vui lòng thử lại.",
   persist_failed: "Không lưu được câu trả lời.",
   network_error: "Mất kết nối. Câu trả lời có thể vẫn đang được tạo; hãy tải lại trang sau ít phút.",

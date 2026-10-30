@@ -101,6 +101,19 @@ Body có trường `resume: ResumeEntry[]`, dùng đúng kiểu/validation của
 
 Tên field chi tiết bên trong ResumeEntry theo SDK đã pin; không sao chép schema tự chế để tránh lệch protocol.
 
+Từ S4 (QD-22):
+
+```json
+{ "resume": [ { "interruptId": "<interrupt_id>", "status": "resolved", "payload": { "answer": "CSV" } } ] }
+```
+
+- Payload theo loại interrupt: câu hỏi `{ "answer": "<text>" }`, duyệt tool `{ "approved": true | false }`. Phải trả lời đủ mọi interrupt của lượt chờ (`resume_incomplete`), id lạ hoặc cũ trả 409 `stale_interrupt`; `status` khác `resolved` trả 422 (hủy cả lượt dùng stop).
+- Thứ tự kiểm tra trước claim: chủ conversation, `requires_action` (`not_waiting`), `graph_version` (`graph_version_changed`), câu trả lời, quyền của tool được duyệt (403 `permission_denied`), checkpoint còn trong DB (`checkpoint_missing`). Lỗi ở bước nào thì lượt vẫn chờ.
+- Claim chuyển `requires_action → running` cùng transaction với câu trả lời trong activity và `metadata.actions`; hai request đồng thời chỉ một request được claim.
+- Response là AG-UI SSE của cùng assistant ID; `chat.assistant.userMessageId` là câu hỏi gốc.
+
+Lượt dừng để chờ phát `ACTIVITY_SNAPSHOT` loại `user_interaction` (một activity cho mỗi interrupt, id `interaction:<action_id>:<n>`), `chat.assistant` với `requires_action`, rồi `RUN_FINISHED` có `outcome.type = "interrupt"`, tất cả sau khi checkpoint, content và metadata đã commit. Content activity: `{action_id, interrupt_id, kind, status, question? | tool_name, tool_call_id, arguments}`; sau khi trả lời thêm `response`, `actor_id`; `status` là `waiting`/`answered`/`cancelled`.
+
 ## 6. Connect không có cursor
 
 ```http

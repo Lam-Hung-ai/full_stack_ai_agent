@@ -192,6 +192,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/{conversation_id}/messages/{message_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume Message
+         * @description Answer what a paused assistant waits on and continue the same turn.
+         */
+        post: operations["resume_message_api_v1_conversations__conversation_id__messages__message_id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/conversations/{conversation_id}/messages/{message_id}/stop": {
         parameters: {
             query?: never;
@@ -581,6 +601,37 @@ export interface components {
             name: string;
             /** Password */
             password: string;
+        };
+        /**
+         * ResumeEntry
+         * @description An answer to one interrupt, sent on the run that continues from it.
+         */
+        ResumeEntry: {
+            /** Interruptid */
+            interruptId: string;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /** Payload */
+            payload?: unknown | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "resolved" | "cancelled";
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * ResumeMessage
+         * @description Answers to every interrupt the assistant waits on (API §5), in the
+         *     SDK's own `ResumeEntry` shape (`interruptId`, `status`, `payload`):
+         *     `{"answer": "..."}` for a question, `{"approved": true}` for a tool.
+         */
+        ResumeMessage: {
+            /** Resume */
+            resume: components["schemas"]["ResumeEntry"][];
         };
         /** SendMessage */
         SendMessage: {
@@ -1054,6 +1105,42 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_message_api_v1_conversations__conversation_id__messages__message_id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                message_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResumeMessage"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

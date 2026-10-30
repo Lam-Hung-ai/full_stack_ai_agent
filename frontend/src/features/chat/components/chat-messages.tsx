@@ -20,16 +20,21 @@ import {
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning";
 import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "@/components/ai-elements/tool";
 import type { RowView } from "../types/chat.types";
-import { buildTurns, findToolResult, parseToolArgs, type Turn } from "../utils/agui-messages";
+import { buildItems, findToolResult, parseToolArgs, type Turn } from "../utils/agui-messages";
 import { isActive, isTerminal } from "../utils/history";
+import { ASK_USER_TOOL, type InteractionAnswer, interactionOf } from "../utils/interactions";
 import { BranchSwitcher } from "./branch-switcher";
 import { EditQuestionForm } from "./edit-question-form";
+import { InteractionCard } from "./interaction-card";
 import { ReasoningSummary } from "./reasoning-summary";
 
 export type RowActions = {
   onEdit: (userMessageId: string, text: string) => void;
   onRegenerate: (assistantMessageId: string) => void;
   onSwitch: (messageId: string) => void;
+  onAnswer: (assistantMessageId: string, interruptId: string, answer: InteractionAnswer) => void;
+  /** Answers kept until every question of a pause has one, by interrupt id. */
+  drafts: Record<string, InteractionAnswer>;
 };
 
 /**
@@ -39,14 +44,18 @@ export type RowActions = {
 export function ChatMessages({
   rows,
   isBusy,
+  waitingForUser = false,
   actions,
   empty,
 }: {
   rows: readonly RowView[];
   isBusy: boolean;
+  /** A pause holds the chat: only its questions can be acted on. */
+  waitingForUser?: boolean;
   actions?: RowActions;
   empty?: React.ReactNode;
 }) {
+  const locked = isBusy || waitingForUser;
   return (
     <Conversation>
       <ConversationContent>
@@ -54,11 +63,12 @@ export function ChatMessages({
           ? empty
           : rows.map((row) =>
               row.role === "user" ? (
-                <QuestionRow actions={actions} disabled={isBusy} key={row.id} row={row} />
+                <QuestionRow actions={actions} disabled={locked} key={row.id} row={row} />
               ) : (
                 <AnswerRow
                   actions={actions}
-                  disabled={isBusy}
+                  answerable={!isBusy}
+                  disabled={locked}
                   isStreaming={isBusy && !!row.live}
                   key={row.id}
                   row={row}
@@ -125,36 +135,60 @@ function QuestionRow({
 function AnswerRow({
   row,
   actions,
+  answerable,
   disabled,
   isStreaming,
 }: {
   row: RowView;
   actions?: RowActions;
+  answerable: boolean;
   disabled: boolean;
   isStreaming: boolean;
 }) {
-  const turns = buildTurns(row.content);
+  const items = buildItems(row.content);
   // Content is saved when a turn ends: one running elsewhere has none yet.
   const waiting = isStreaming || (!row.live && isActive(row));
   const showActions = actions && !row.live && isTerminal(row);
+  // Only a saved pause can be answered; the server checks it again.
+  const canAnswer = actions && answerable && !row.live && row.status === "requires_action";
 
   return (
     <>
-      {turns.length === 0 && waiting && (
+      {items.length === 0 && waiting && (
         <Message from="assistant">
           <MessageContent>
             <Loader />
           </MessageContent>
         </Message>
       )}
-      {turns.map((turn, index) => (
-        <TurnView
-          isStreaming={isStreaming && index === turns.length - 1}
-          key={turn.message.id}
-          messages={row.content}
-          turn={turn}
-        />
-      ))}
+      {items.map((item, index) => {
+        if (item.kind === "turn") {
+          return (
+            <TurnView
+              isStreaming={isStreaming && index === items.length - 1}
+              key={item.turn.message.id}
+              messages={row.content}
+              rowStatus={row.live ? "running" : row.status}
+              turn={item.turn}
+            />
+          );
+        }
+        const interaction = interactionOf(item.message);
+        if (!interaction) return null;
+        return (
+          <Message from="assistant" key={item.message.id}>
+            <InteractionCard
+              draft={actions?.drafts[interaction.interrupt_id]}
+              interaction={interaction}
+              onAnswer={
+                canAnswer
+                  ? (answer) => actions.onAnswer(row.id, interaction.interrupt_id, answer)
+                  : undefined
+              }
+            />
+          </Message>
+        );
+      })}
       {(row.status === "cancelled" || row.status === "failed" || showActions) && (
         <MessageActions>
           {row.status === "cancelled" && (
@@ -186,19 +220,32 @@ function AnswerRow({
   );
 }
 
+/** A tool call with no result yet, by where its turn stands. */
+const PENDING_TOOL_STATE: Partial<Record<RowView["status"], ToolUIPart["state"]>> = {
+  requires_action: "approval-requested",
+  cancelled: "output-denied",
+  failed: "output-error",
+};
+
 function TurnView({
   turn: { message, reasoning },
   messages,
+  rowStatus,
   isStreaming,
 }: {
   turn: Turn;
   messages: readonly AGUIMessage[];
+  rowStatus: RowView["status"];
   isStreaming: boolean;
 }) {
   if (message.role !== "assistant") return null;
 
-  const toolCalls = message.toolCalls ?? [];
+  // ask_user shows as its interaction card, not as a tool call.
+  const toolCalls = (message.toolCalls ?? []).filter(
+    (call) => call.function.name !== ASK_USER_TOOL,
+  );
   const isReasoningStreaming = isStreaming && !message.content && toolCalls.length === 0;
+  if (!reasoning && !message.content && toolCalls.length === 0 && !isStreaming) return null;
 
   return (
     <Message from="assistant">
@@ -222,7 +269,7 @@ function TurnView({
             ? result.error
               ? "output-error"
               : "output-available"
-            : "input-available";
+            : (PENDING_TOOL_STATE[rowStatus] ?? "input-available");
 
           return (
             <Tool key={toolCall.id}>

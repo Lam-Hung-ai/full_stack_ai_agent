@@ -17,6 +17,7 @@ from app.modules.conversations.schemas import (
     ConversationUpdate,
     EditMessage,
     HistoryResponse,
+    ResumeMessage,
     SendMessage,
     StopResponse,
 )
@@ -181,6 +182,29 @@ async def regenerate_message(
     turn = await TurnService(
         session, runner=runner, session_factory=SessionLocal
     ).regenerate(user=user, conversation_id=conversation_id, message_id=message_id)
+    return _turn_stream(turn, request)
+
+
+@router.post(
+    "/conversations/{conversation_id}/messages/{message_id}/resume",
+    response_class=StreamingResponse,
+    responses=TURN_RESPONSES,
+)
+async def resume_message(
+    conversation_id: UUID,
+    message_id: UUID,
+    data: ResumeMessage,
+    request: Request,
+    user: CurrentUser,
+    session: SessionDep,
+    runner: RunnerDep,
+) -> StreamingResponse:
+    """Answer what a paused assistant waits on and continue the same turn."""
+    turn = await TurnService(
+        session, runner=runner, session_factory=SessionLocal
+    ).resume(
+        user=user, conversation_id=conversation_id, message_id=message_id, data=data
+    )
     return _turn_stream(turn, request)
 
 

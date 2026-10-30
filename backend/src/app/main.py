@@ -8,7 +8,7 @@ from app.common.exceptions.handlers import install_handlers
 from app.common.logging import configure_logging
 from app.common.request_context import RequestIdMiddleware
 from app.config.settings import get_settings
-from app.modules.agent.agui import get_agui_agent
+from app.modules.agent.agui import turn_agent
 from app.modules.agent.runner import Runner
 from app.modules.auth.router import router as auth_router
 from app.modules.conversations.router import router as conversations_router
@@ -23,7 +23,7 @@ configure_logging()
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     app.state.runner = Runner(
-        agent_factory=get_agui_agent, max_concurrent=settings.max_concurrent_turns
+        agent_factory=turn_agent, max_concurrent=settings.max_concurrent_turns
     )
     yield
     # Let running turns finish and save before the process exits.

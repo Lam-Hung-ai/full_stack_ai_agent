@@ -26,7 +26,7 @@ async def test_personal_workspace_offers_the_allowlisted_tools(
     conversation_id = await org_chat(client, headers, user.personal_workspace_id)
 
     await send(client, conversation_id, headers, body("Mấy giờ rồi?"))
-    assert ["get_current_time"] in model.bound_tools
+    assert any("get_current_time" in names for names in model.bound_tools)
     tool_result = (await history(client, conversation_id, headers))["data"][-1][
         "content"
     ][1]
@@ -73,7 +73,7 @@ async def test_grant_revoked_during_the_turn_refuses_the_call(
 
     status, _ = await send(client, conversation_id, headers, body("Mấy giờ rồi?"))
     assert status == 200
-    assert ["get_current_time"] in model.bound_tools
+    assert any("get_current_time" in names for names in model.bound_tools)
     turn = (await history(client, conversation_id, headers))["data"][-1]
     tool_result = next(m for m in turn["content"] if m["role"] == "tool")
     assert tool_result["content"] == "This tool is not available to you."

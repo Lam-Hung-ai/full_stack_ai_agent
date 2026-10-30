@@ -112,4 +112,31 @@ describe("ChatAgent", () => {
     expect(regenerateUrl).toBe("/api/v1/conversations/c1/messages/a1/regenerate");
     expect(regenerateInit.body).toBeUndefined();
   });
+
+  it("lets the server decide what a paused turn still waits on", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => sse(turn("a1"))));
+    const agent = new ChatAgent({ conversationId: "c1" });
+    agent.pendingInterrupts = [{ id: "i1", reason: "input_required" }];
+
+    await expect(
+      agent.sendMessage({ parentMessageId: "a0", message: { id: "u2", text: "khác", fileIds: [] } }),
+    ).resolves.toBeDefined();
+  });
+
+  it("resumes with the SDK's ResumeEntry shape", async () => {
+    const fetchMock = vi.fn(async () => sse(turn("a1")));
+    vi.stubGlobal("fetch", fetchMock);
+    const agent = new ChatAgent({ conversationId: "c1" });
+
+    await agent.resume({
+      assistantMessageId: "a1",
+      resume: [{ interruptId: "i1", status: "resolved", payload: { answer: "CSV" } }],
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/v1/conversations/c1/messages/a1/resume");
+    expect(JSON.parse(String(init.body))).toEqual({
+      resume: [{ interruptId: "i1", status: "resolved", payload: { answer: "CSV" } }],
+    });
+  });
 });

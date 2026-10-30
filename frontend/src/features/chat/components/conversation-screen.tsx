@@ -13,7 +13,8 @@ import { ChatMessages } from "./chat-messages";
 export function ConversationScreen({ conversationId }: { conversationId: string }) {
   const chat = useConversationChat(conversationId);
   const take = usePendingMessageStore((state) => state.take);
-  const { isReady, sendMessage, editMessage, regenerate, switchBranch, stop } = chat;
+  const { isReady, sendMessage, editMessage, regenerate, answerInterrupt, switchBranch, stop } =
+    chat;
 
   // The question typed on the new-chat screen, sent once the chat is ready.
   useEffect(() => {
@@ -40,6 +41,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
   }
 
   const locked = chat.isBusy || chat.remoteTurnRunning || chat.isSwitching;
+  const composerLocked = locked || chat.waitingForUser;
   return (
     <div className="mx-auto flex h-full w-full max-w-3xl flex-col p-4">
       <ChatMessages
@@ -47,13 +49,21 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
           onEdit: (id, text) => void editMessage(id, text),
           onRegenerate: (id) => void regenerate(id),
           onSwitch: switchBranch,
+          onAnswer: answerInterrupt,
+          drafts: chat.drafts,
         }}
         empty={<ChatEmptyState />}
         isBusy={locked}
         rows={chat.rows}
+        waitingForUser={chat.waitingForUser}
       />
       {chat.remoteTurnRunning && (
         <p className="py-2 text-muted-foreground text-sm">Câu trả lời đang được tạo…</p>
+      )}
+      {chat.waitingForUser && (
+        <p className="py-2 text-muted-foreground text-sm">
+          Agent đang chờ bạn trả lời ở trên. Bấm dừng để bỏ qua và hỏi câu khác.
+        </p>
       )}
       {chat.error && (
         <Alert variant="destructive">
@@ -61,7 +71,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
         </Alert>
       )}
       <ChatComposer
-        disabled={locked}
+        disabled={composerLocked}
         onStop={chat.canStop ? () => void stop() : undefined}
         onSubmit={(text) => void sendMessage(text)}
         status={chat.status}

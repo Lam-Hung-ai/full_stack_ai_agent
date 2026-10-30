@@ -628,6 +628,71 @@
         "title": "Register",
         "type": "object"
       },
+      "ResumeEntry": {
+        "additionalProperties": true,
+        "description": "An answer to one interrupt, sent on the run that continues from it.",
+        "properties": {
+          "interruptId": {
+            "title": "Interruptid",
+            "type": "string"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "payload": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payload"
+          },
+          "status": {
+            "enum": [
+              "resolved",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "interruptId",
+          "status"
+        ],
+        "title": "ResumeEntry",
+        "type": "object"
+      },
+      "ResumeMessage": {
+        "additionalProperties": false,
+        "description": "Answers to every interrupt the assistant waits on (API §5), in the\nSDK's own `ResumeEntry` shape (`interruptId`, `status`, `payload`):\n`{\"answer\": \"...\"}` for a question, `{\"approved\": true}` for a tool.",
+        "properties": {
+          "resume": {
+            "items": {
+              "$ref": "#/components/schemas/ResumeEntry"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Resume",
+            "type": "array"
+          }
+        },
+        "required": [
+          "resume"
+        ],
+        "title": "ResumeMessage",
+        "type": "object"
+      },
       "SendMessage": {
         "additionalProperties": false,
         "properties": {
@@ -1451,6 +1516,71 @@
           }
         ],
         "summary": "Regenerate Message",
+        "tags": [
+          "Conversations"
+        ]
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/messages/{message_id}/resume": {
+      "post": {
+        "description": "Answer what a paused assistant waits on and continue the same turn.",
+        "operationId": "resume_message_api_v1_conversations__conversation_id__messages__message_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Message Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeMessage"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Resume Message",
         "tags": [
           "Conversations"
         ]

@@ -87,3 +87,11 @@ Loại: `BẮT ĐẦU`, `KẾT THÚC`, `LỖI`, `SỬA`, `THAY ĐỔI`, `QUYẾT
 | 30/10/2026 | S3 | THAY ĐỔI | TD-009 | Route edit/regenerate/stop, folder, bộ lọc sidebar, permission `tool.*`; tài liệu API cập nhật | CH-S3-BE-01 → FE-02, DOC-02 |
 | 30/10/2026 | S3 | RỦI RO | RR-15 | Role tổ chức cũ không tự có grant tool mới | CH-S3-BE-05 |
 | 30/10/2026 | S3 | KẾT THÚC | — | Xong 9/9 task; backend 66 test, frontend 38 test xanh; 5 kịch bản chạy thật đạt | — |
+| 30/10/2026 | S3 | PHÁT HÀNH | — | Commit Sprint 3 trên `chat` | `ef8a519` |
+| 30/10/2026 | S4 | BẮT ĐẦU | — | Bắt đầu Sprint 4 | CH-S4-DOC-01 |
+| 30/10/2026 | S4 | LỖI | L-09 | SDK chặn lần trả lời sau khi pause | CH-S4-FE-01 |
+| 30/10/2026 | S4 | SỬA | L-09 | `ChatAgent` xoá `pendingInterrupts`, chuyển `resume` vào input | CH-S4-FE-01 |
+| 30/10/2026 | S4 | QUYẾT ĐỊNH | QD-22 | `ask_user` qua tool, duyệt tool trong middleware, saver RAM theo lượt | CH-S4-BE-01 → BE-04 |
+| 30/10/2026 | S4 | THAY ĐỔI | TD-010 | Route resume, event pause, biến `TOOLS_REQUIRING_APPROVAL`; tài liệu API §5 | CH-S4-BE-01 → FE-01, DOC-02 |
+| 30/10/2026 | S4 | RỦI RO | RR-16, RR-06 | Checkpoint không được dọn; mapping C1/A1 đã kiểm chứng | CH-S4-BE-04 |
+| 30/10/2026 | S4 | KẾT THÚC | — | Xong 8/8 task; backend 77 test, frontend 41 test xanh; 4 kịch bản chạy thật đạt | — |

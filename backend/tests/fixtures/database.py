@@ -8,7 +8,11 @@ import psycopg
 import pytest
 from psycopg import sql
 
-from tests.support.postgres import apply_schema, temporary_postgres
+from tests.support.postgres import (
+    apply_schema,
+    setup_checkpoints,
+    temporary_postgres,
+)
 
 
 @pytest.fixture(scope="session")
@@ -35,6 +39,7 @@ def pg():
             "would point at the .env database instead of the test database"
         )
         apply_schema(connection)
+        setup_checkpoints(url)
         yield connection
 
 
@@ -42,9 +47,12 @@ def pg():
 def db(pg: psycopg.Connection):
     """Empty every application table, then return a small query helper."""
     # The permission catalog is reference data loaded once per session.
+    # So is the saver's migration log; its checkpoints are per test.
     tables = pg.execute(
         "SELECT schemaname, tablename FROM pg_tables "
-        "WHERE schemaname = 'chat_app' AND tablename <> 'permissions'"
+        "WHERE (schemaname = 'chat_app' AND tablename <> 'permissions') "
+        "OR (schemaname = 'langgraph_checkpoints' "
+        "AND tablename <> 'checkpoint_migrations')"
     ).fetchall()
     # Messages forbid TRUNCATE by trigger; replica mode skips triggers for
     # this statement only, on the test superuser's connection.

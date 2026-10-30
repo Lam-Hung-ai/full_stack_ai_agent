@@ -27,9 +27,9 @@ const live = (overrides: Partial<LiveTurn>): LiveTurn => ({
   kept: [view("u0", "user"), view("a0", "assistant")],
   question: view("u1", "user"),
   questionId: "u1",
+  continued: null,
   assistantId: "a1",
   status: "running",
-  done: false,
   ...overrides,
 });
 
@@ -61,11 +61,43 @@ describe("history", () => {
     expect(rows.at(-1)?.live).toBe(true);
   });
 
-  it("returns to the saved branch once it holds the finished answer", () => {
-    const saved = [view("u0", "user"), view("a0", "assistant"), view("u1", "user"), view("a1", "assistant")];
-    expect(shownRows(saved, live({ done: true }), [])).toEqual(saved);
-    // Not yet refetched: the live turn stays on screen.
-    expect(shownRows(saved.slice(0, 2), live({ done: true }), []).at(-1)?.live).toBe(true);
+  it("adds only what a resumed turn streams to the row it continues", () => {
+    const paused: RowView = {
+      ...view("a1", "assistant"),
+      status: "requires_action",
+      content: [
+        {
+          id: "m1",
+          role: "assistant",
+          content: "",
+          toolCalls: [{ id: "c0", type: "function", function: { name: "clock", arguments: "{}" } }],
+        },
+        { id: "interaction:x:0", role: "activity", activityType: "user_interaction", content: {} },
+      ],
+    };
+    const messages: Message[] = [
+      { id: "u0", role: "user", content: "hỏi" },
+      { id: "m1", role: "assistant", content: "" },
+      {
+        id: "m1-replayed",
+        role: "assistant",
+        toolCalls: [{ id: "c0", type: "function", function: { name: "clock", arguments: "{}" } }],
+      },
+      { id: "t1", role: "tool", toolCallId: "c1", content: "CSV" },
+      { id: "m2", role: "assistant", content: "Xong" },
+    ];
+    const rows = shownRows(
+      [],
+      live({ kept: [view("u0", "user")], question: null, questionId: "", continued: paused }),
+      messages,
+    );
+    expect(rows.map((r) => r.id)).toEqual(["u0", "a1"]);
+    expect(rows[1].content.map((m) => m.id)).toEqual(["m1", "interaction:x:0", "t1", "m2"]);
+  });
+
+  it("returns the saved branch when nothing streams", () => {
+    const saved = [view("u0", "user"), view("a0", "assistant")];
+    expect(shownRows(saved, null, [])).toEqual(saved);
   });
 
   it("knows when a turn is still running", () => {

@@ -4,7 +4,8 @@ from functools import partial
 from typing import Any
 from uuid import UUID
 
-from ag_ui.core import RunAgentInput
+from ag_ui.core import BaseEvent, ResumeEntry, RunAgentInput
+from langgraph.checkpoint.base import CheckpointTuple
 from sqlalchemy import RowMapping
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,9 +16,12 @@ from app.common.exceptions.handlers import DomainError, fail
 from app.common.schemas.pagination import PageParams, Pagination
 from app.config.security import now
 from app.modules.agent.bundle import AguiMessage
-from app.modules.agent.runner import Runner, RunStream, TurnStatus
+from app.modules.agent.checkpoints import durable_saver
+from app.modules.agent.graph import GRAPH_VERSION
+from app.modules.agent.runner import Pause, Runner, RunStream, TurnStatus
 from app.modules.agent.tools import TOOL_RESOURCE, TOOLS
 from app.modules.authorization.service import AuthorizationService
+from app.modules.conversations import interactions
 from app.modules.conversations.context import branch_messages
 from app.modules.conversations.repository import (
     DEFAULT_TITLE,
@@ -36,6 +40,7 @@ from app.modules.conversations.schemas import (
     EditMessage,
     HistoryResponse,
     MessageResponse,
+    ResumeMessage,
     SendMessage,
     StopResponse,
 )
@@ -219,10 +224,12 @@ class StartedTurn:
 
 
 class TurnService:
-    """Starts assistant turns, stops them and records their outcome.
+    """Starts, resumes and stops assistant turns and records their outcome.
 
     Sending, editing and regenerating differ only in where the new rows hang
-    in the tree (database §6); all three end in `_launch`."""
+    in the tree (database §6); all three end in `_launch`. Resuming continues
+    the same assistant row from its stored checkpoint (database phase 4 §7).
+    """
 
     def __init__(
         self, session: AsyncSession, *, runner: Runner, session_factory: SessionFactory
@@ -296,24 +303,119 @@ class TurnService:
             messages=branch_messages(history),
         )
 
+    async def resume(
+        self,
+        *,
+        user: Principal,
+        conversation_id: UUID,
+        message_id: UUID,
+        data: ResumeMessage,
+    ) -> StartedTurn:
+        """Answer what the assistant waits on and continue it (API §5). Every
+        check happens before the claim, so a refused answer leaves the turn
+        waiting; the claim, the answers and the activity commit together."""
+        _, workspace = await self._open(user, conversation_id)
+        target = await self._target(conversation_id, message_id, "assistant")
+        pending = target["metadata"].get("pending_action")
+        if target["status"] != "requires_action" or not pending:
+            fail(409, "not_waiting")
+        if pending.get("graph_version") != GRAPH_VERSION:
+            # RR-07: an older graph's checkpoint is not run on a new graph.
+            fail(409, "graph_version_changed")
+        values = interactions.validate_answers(pending, data.resume)
+        authorization = AuthorizationService(self._session)
+        for tool_name in sorted(interactions.approved_tools(pending, values)):
+            # An approval never stands in for the grant (use case T07).
+            await authorization.require(workspace, TOOL_RESOURCE, tool_name)
+        stored = await (await durable_saver(self._session)).aget_tuple(
+            {"configurable": pending["checkpoint"]}
+        )
+        if stored is None:
+            fail(409, "checkpoint_missing")
+        content = interactions.resolve_activities(
+            target["content"],
+            pending,
+            status="answered",
+            values=values,
+            actor_id=user.id,
+        )
+        metadata = interactions.resolved_metadata(
+            target["metadata"],
+            pending,
+            status="answered",
+            values=values,
+            actor_id=user.id,
+        )
+        claimed = await self._messages.set_status(
+            message_id=message_id,
+            status="running",
+            content=content,
+            metadata=metadata,
+            expected=frozenset({"requires_action"}),
+        )
+        if not claimed:
+            fail(409, "not_waiting")
+        question_id = target["parent_message_id"]
+        history = await self._messages.branch(
+            conversation_id=conversation_id, leaf_id=question_id
+        )
+        tools = await authorization.allowed_actions(workspace, TOOL_RESOURCE)
+        await self._session.commit()
+
+        # The graph state replays the context and this turn so far; only what
+        # the resumed run adds belongs after the stored content.
+        known = {m["id"] for row in history for m in row["content"]}
+        known.update(m["id"] for m in content)
+        return self._run(
+            user,
+            workspace,
+            conversation_id,
+            assistant_id=message_id,
+            user_message_id=question_id,
+            tools=tools,
+            messages=[],
+            resume=interactions.resume_entries(values),
+            resume_from=stored,
+            known_ids=known,
+            base_content=content,
+            base_metadata=metadata,
+        )
+
     async def stop(
         self, *, user: Principal, conversation_id: UUID, message_id: UUID
     ) -> StopResponse:
-        """Stop this assistant only (API §7). A finished one is left as is."""
+        """Stop this assistant only (API §7). A finished one is left as is; one
+        waiting for the user is cancelled with its question (phase 4 §7)."""
         await ConversationService(self._session).require_owned(
             user=user, conversation_id=conversation_id
         )
         target = await self._target(conversation_id, message_id, "assistant")
         if target["status"] in ACTIVE_STATUSES:
             if not await self._runner.stop(message_id, timeout=STOP_WAIT_SECONDS):
-                # No turn runs it in this process: a restart orphaned it
-                # (RR-01, RR-10). Cancel in place so the chat can go on.
-                await self._messages.set_status(
-                    message_id=message_id, status="cancelled"
-                )
+                # Nothing runs it in this process: it waits for the user, or a
+                # restart orphaned it (RR-01, RR-10). Cancel it in place.
+                await self._cancel_in_place(target)
                 await self._session.commit()
             target = await self._target(conversation_id, message_id, "assistant")
         return StopResponse(id=message_id, status=target["status"])
+
+    async def _cancel_in_place(self, target: RowMapping) -> None:
+        pending = target["metadata"].get("pending_action")
+        content = metadata = None
+        if pending:
+            metadata = interactions.resolved_metadata(
+                target["metadata"], pending, status="cancelled"
+            )
+            if target["status"] == "requires_action":
+                content = interactions.resolve_activities(
+                    target["content"], pending, status="cancelled"
+                )
+        await self._messages.set_status(
+            message_id=target["id"],
+            status="cancelled",
+            content=content,
+            metadata=metadata,
+        )
 
     async def _open(
         self, user: Principal, conversation_id: UUID
@@ -411,8 +513,33 @@ class TurnService:
             workspace, TOOL_RESOURCE
         )
         await self._session.commit()
+        return self._run(
+            user,
+            workspace,
+            conversation_id,
+            assistant_id=assistant["id"],
+            user_message_id=user_message_id,
+            tools=tools,
+            messages=messages,
+        )
 
-        assistant_id = assistant["id"]
+    def _run(
+        self,
+        user: Principal,
+        workspace: WorkspaceContext,
+        conversation_id: UUID,
+        *,
+        assistant_id: UUID,
+        user_message_id: UUID,
+        tools: frozenset[str],
+        messages: list[AguiMessage],
+        resume: list[ResumeEntry] | None = None,
+        resume_from: CheckpointTuple | None = None,
+        known_ids: set[str] | None = None,
+        base_content: list[AguiMessage] | None = None,
+        base_metadata: dict[str, Any] | None = None,
+    ) -> StartedTurn:
+        """Hand a committed turn to the runner."""
         run_input = RunAgentInput.model_validate(
             {
                 "threadId": str(conversation_id),
@@ -422,8 +549,21 @@ class TurnService:
                 "tools": [],
                 "context": [],
                 "forwardedProps": {},
+                "resume": resume,
             }
         )
+
+        async def finalize(
+            status: TurnStatus, bundle: list[AguiMessage], pause: Pause | None
+        ) -> list[BaseEvent]:
+            return await self._finalize(
+                assistant_id,
+                status,
+                [*(base_content or []), *bundle],
+                base_metadata or {},
+                pause,
+            )
+
         stream = self._runner.start(
             assistant_id=assistant_id,
             run_input=run_input,
@@ -435,9 +575,9 @@ class TurnService:
             tools=tools.intersection(TOOLS),
             tool_guard=partial(self._tool_allowed, user.id, workspace.id),
             on_running=lambda: self._record(assistant_id, "running"),
-            finalize=lambda status, content: self._record(
-                assistant_id, status, content
-            ),
+            finalize=finalize,
+            known_ids=known_ids,
+            resume_from=resume_from,
         )
         return StartedTurn(user_message_id, assistant_id, stream)
 
@@ -475,18 +615,47 @@ class TurnService:
                 workspace, TOOL_RESOURCE, tool_name
             )
 
-    async def _record(
-        self,
-        assistant_id: UUID,
-        status: TurnStatus | str,
-        content: list[AguiMessage] | None = None,
-    ) -> None:
+    async def _record(self, assistant_id: UUID, status: str) -> None:
         """Runs in the turn's task, after the request ended: its own session."""
         async with self._session_factory() as session:
             await MessageRepository(session).set_status(
-                message_id=assistant_id, status=status, content=content
+                message_id=assistant_id, status=status
             )
             await session.commit()
+
+    async def _finalize(
+        self,
+        assistant_id: UUID,
+        status: TurnStatus,
+        content: list[AguiMessage],
+        metadata: dict[str, Any],
+        pause: Pause | None,
+    ) -> list[BaseEvent]:
+        """Save the outcome. A pause stores its checkpoint, the waiting
+        activities and `pending_action` in one transaction (phase 4 §6) and
+        returns the activities to announce once that has committed."""
+        metadata = {k: v for k, v in metadata.items() if k != "pending_action"}
+        events: list[BaseEvent] = []
+        async with self._session_factory() as session:
+            if pause is not None:
+                saver = await durable_saver(session)
+                pending = interactions.new_pending_action(
+                    checkpoint=await pause.saver.export(saver, pause.thread_id),
+                    interrupts=pause.interrupts,
+                    graph_version=GRAPH_VERSION,
+                )
+                activities = interactions.waiting_activities(pending)
+                content = [*content, *activities]
+                metadata["pending_action"] = pending
+                events = interactions.activity_events(activities)
+            await MessageRepository(session).set_status(
+                message_id=assistant_id,
+                status=status,
+                content=content,
+                metadata=metadata,
+            )
+            await session.commit()
+        return events
 
 
 def _question_text(message: ChatMessageInput) -> str:

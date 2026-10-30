@@ -8,12 +8,15 @@ for reconnects across processes.
 
 Database decisions §6: content is written once the turn ends. The terminal
 RUN_FINISHED / RUN_ERROR is published only after that write commits, so a
-client that saw the end can reload and find the same result.
+client that saw the end can reload and find the same result. A turn that
+stops on an interrupt ends as `requires_action`; its checkpoint is handed to
+the finalizer to be stored in the same transaction (agent/checkpoints.py).
 """
 
 import asyncio
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
+from dataclasses import dataclass
 from typing import Any, Literal
 from uuid import UUID
 
@@ -28,18 +31,36 @@ from ag_ui.core import (
     RunStartedEvent,
 )
 from ag_ui_langgraph import LangGraphAgent
+from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointTuple
+from langgraph.types import Interrupt
 
 from app.modules.agent.bundle import AguiMessage, BundleBuilder
+from app.modules.agent.checkpoints import TurnSaver, thread_config
 from app.modules.agent.lifecycle import OpenSpans
 from app.modules.agent.tools import ToolGuard, current_tool_guard
 
 logger = logging.getLogger(__name__)
 
-TurnStatus = Literal["completed", "failed", "cancelled"]
+TurnStatus = Literal["completed", "failed", "cancelled", "requires_action"]
 #: Name of the CUSTOM event that ties the protocol stream to SQL rows.
 ASSISTANT_EVENT = "chat.assistant"
 
-type Finalizer = Callable[[TurnStatus, list[AguiMessage]], Awaitable[None]]
+
+@dataclass(frozen=True)
+class Pause:
+    """A turn stopped on interrupts; `saver` holds the checkpoint to store."""
+
+    saver: TurnSaver
+    thread_id: str
+    interrupts: list[Interrupt]
+
+
+#: Saves the outcome; returns events to announce before the final status
+#: (e.g. the activity asking the user).
+type Finalizer = Callable[
+    [TurnStatus, list[AguiMessage], Pause | None], Awaitable[list[BaseEvent]]
+]
+type AgentFactory = Callable[[frozenset[str], BaseCheckpointSaver], LangGraphAgent]
 
 
 class RunStream:
@@ -80,7 +101,7 @@ class Runner:
     def __init__(
         self,
         *,
-        agent_factory: Callable[[frozenset[str]], LangGraphAgent],
+        agent_factory: AgentFactory,
         max_concurrent: int,
     ) -> None:
         self._agent_factory = agent_factory
@@ -100,7 +121,12 @@ class Runner:
         tool_guard: ToolGuard,
         on_running: Callable[[], Awaitable[None]],
         finalize: Finalizer,
+        known_ids: set[str] | None = None,
+        resume_from: CheckpointTuple | None = None,
     ) -> RunStream:
+        """Run a turn in the background. `known_ids` are protocol messages the
+        bundle must not repeat (default: the input); `resume_from` is the
+        stored pause a resumed turn continues from."""
         stream = RunStream()
         self._streams[assistant_id] = stream
         self._tasks[assistant_id] = asyncio.create_task(
@@ -113,6 +139,8 @@ class Runner:
                 tool_guard=tool_guard,
                 on_running=on_running,
                 finalize=finalize,
+                known_ids=known_ids,
+                resume_from=resume_from,
             ),
             name=f"assistant-turn-{assistant_id}",
         )
@@ -157,23 +185,33 @@ class Runner:
         tool_guard: ToolGuard,
         on_running: Callable[[], Awaitable[None]],
         finalize: Finalizer,
+        known_ids: set[str] | None,
+        resume_from: CheckpointTuple | None,
     ) -> None:
         public_thread = run_input.thread_id
-        builder = BundleBuilder({message.id for message in run_input.messages})
+        # ID decisions §1: the native thread is the assistant row; the
+        # protocol stream keeps the conversation as its thread.
+        native_thread = str(assistant_id)
+        builder = BundleBuilder(
+            known_ids
+            if known_ids is not None
+            else {message.id for message in run_input.messages}
+        )
         spans = OpenSpans()
+        saver = TurnSaver()
         # Tasks the graph spawns copy this context, so tool calls see the guard.
         current_tool_guard.set(tool_guard)
-        agent: LangGraphAgent | None = None
         finished: BaseEvent | None = None
+        pause: Pause | None = None
         started = False
         status: TurnStatus = "failed"
         try:
-            agent = self._agent_factory(tools).clone()
+            if resume_from is not None:
+                saver.seed(resume_from)
+            agent = self._agent_factory(tools, saver)
             async with self._slots:
                 await on_running()
-                # ID decisions §1: the native thread is the assistant row; the
-                # protocol stream keeps the conversation as its thread.
-                native = run_input.model_copy(update={"thread_id": str(assistant_id)})
+                native = run_input.model_copy(update={"thread_id": native_thread})
                 async for event in agent.run(native):
                     if getattr(event, "thread_id", None) is not None:
                         event = event.model_copy(update={"thread_id": public_thread})
@@ -188,7 +226,13 @@ class Runner:
                     if event.type == EventType.RUN_STARTED:
                         started = True
                         await stream.publish(self._status_event(announce, "running"))
-            status = "completed"
+            state = await agent.graph.aget_state(thread_config(native_thread))
+            interrupts = [item for task in state.tasks for item in task.interrupts]
+            if interrupts and saver.has_pause(native_thread):
+                pause = Pause(saver, native_thread, interrupts)
+                status = "requires_action"
+            else:
+                status = "completed"
         except asyncio.CancelledError:
             status = "cancelled"
             raise
@@ -207,10 +251,9 @@ class Runner:
                     finished=finished,
                     run_input=run_input,
                     spans=spans,
+                    pause=pause,
                 )
             finally:
-                if agent is not None:
-                    await self._forget_native_thread(agent, assistant_id)
                 self._streams.pop(assistant_id, None)
                 self._tasks.pop(assistant_id, None)
                 self._finishing.discard(assistant_id)
@@ -227,10 +270,11 @@ class Runner:
         finished: BaseEvent | None,
         run_input: RunAgentInput,
         spans: OpenSpans,
+        pause: Pause | None,
     ) -> None:
         try:
             # Shielded: a shutdown cancellation must not abort the final write.
-            await asyncio.shield(finalize(status, content))
+            announced = await asyncio.shield(finalize(status, content, pause))
         except Exception:
             logger.exception("Could not save assistant turn %s", announce)
             await stream.publish(
@@ -246,7 +290,7 @@ class Runner:
             await stream.publish(
                 RunStartedEvent(thread_id=run_input.thread_id, run_id=run_input.run_id)
             )
-        for event in spans.closing_events():
+        for event in [*spans.closing_events(), *announced]:
             await stream.publish(event)
         await stream.publish(self._status_event(announce, status))
         if status == "failed":
@@ -271,14 +315,3 @@ class Runner:
     @staticmethod
     def _status_event(announce: dict[str, Any], status: str) -> CustomEvent:
         return CustomEvent(name=ASSISTANT_EVENT, value={**announce, "status": status})
-
-    @staticmethod
-    async def _forget_native_thread(agent: LangGraphAgent, assistant_id: UUID) -> None:
-        """The in-memory saver keeps every thread; nothing resumes a finished
-        turn before sprint S4, so drop it."""
-        checkpointer = getattr(agent.graph, "checkpointer", None)
-        try:
-            if checkpointer is not None:
-                await checkpointer.adelete_thread(str(assistant_id))
-        except Exception:
-            logger.warning("Could not delete native thread %s", assistant_id)

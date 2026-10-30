@@ -35,12 +35,12 @@ export type RowView = {
 export type LiveTurn = {
   /** Rows of the shown branch kept above the new turn. */
   kept: RowView[];
-  /** The new question (send, edit); none for a regeneration. */
+  /** The new question (send, edit); none for a regeneration or a resume. */
   question: RowView | null;
   /** Protocol id of the question being answered; the answer streams after it. */
   questionId: string;
+  /** Resume: the paused row this turn continues; its content stays first. */
+  continued: RowView | null;
   assistantId: string | null;
   status: MessageStatus;
-  /** The stream ended; shown until the saved branch has the assistant row. */
-  done: boolean;
 };

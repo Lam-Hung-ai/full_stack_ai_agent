@@ -11,6 +11,9 @@ import type { Message as AGUIMessage } from "@ag-ui/client";
 export type TurnMessage = Extract<AGUIMessage, { role: "user" | "assistant" }>;
 export type Turn = { message: TurnMessage; reasoning?: string };
 export type ToolResultMessage = Extract<AGUIMessage, { role: "tool" }>;
+export type ActivityMessage = Extract<AGUIMessage, { role: "activity" }>;
+/** What a bundle renders, in order: message turns and activities between them. */
+export type RenderItem = { kind: "turn"; turn: Turn } | { kind: "activity"; message: ActivityMessage };
 
 /** Marks the placeholder turn that carries reasoning arriving before its assistant message. */
 export const PENDING_REASONING_ID = "__pending-reasoning__";
@@ -21,7 +24,12 @@ export const PENDING_REASONING_ID = "__pending-reasoning__";
  * turn that follows it.
  */
 export function buildTurns(messages: readonly AGUIMessage[]): Turn[] {
-  const turns: Turn[] = [];
+  return buildItems(messages).flatMap((item) => (item.kind === "turn" ? [item.turn] : []));
+}
+
+/** `buildTurns`, keeping activities (a question to the user) where they fall. */
+export function buildItems(messages: readonly AGUIMessage[]): RenderItem[] {
+  const items: RenderItem[] = [];
   let pendingReasoning: string | undefined;
 
   for (const message of messages) {
@@ -29,10 +37,14 @@ export function buildTurns(messages: readonly AGUIMessage[]): Turn[] {
       pendingReasoning = message.content;
       continue;
     }
+    if (message.role === "activity") {
+      items.push({ kind: "activity", message });
+      continue;
+    }
     if (message.role === "user" || message.role === "assistant") {
-      turns.push({
-        message,
-        reasoning: message.role === "assistant" ? pendingReasoning : undefined,
+      items.push({
+        kind: "turn",
+        turn: { message, reasoning: message.role === "assistant" ? pendingReasoning : undefined },
       });
       pendingReasoning = undefined;
     }
@@ -43,13 +55,16 @@ export function buildTurns(messages: readonly AGUIMessage[]): Turn[] {
   // entire reasoning phase renders nothing — reasoning only became visible once
   // the run finished. A placeholder turn makes it show up immediately.
   if (pendingReasoning !== undefined) {
-    turns.push({
-      message: { id: PENDING_REASONING_ID, role: "assistant", content: "" },
-      reasoning: pendingReasoning,
+    items.push({
+      kind: "turn",
+      turn: {
+        message: { id: PENDING_REASONING_ID, role: "assistant", content: "" },
+        reasoning: pendingReasoning,
+      },
     });
   }
 
-  return turns;
+  return items;
 }
 
 export function findToolResult(

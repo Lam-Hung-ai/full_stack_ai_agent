@@ -169,17 +169,24 @@ class MessageRepository:
         message_id: UUID,
         status: str,
         content: list[dict[str, Any]] | None = None,
-    ) -> None:
-        """Only an active message changes: terminal rows are immutable, and a
-        turn finishing after a stop already marked it cancelled is a no-op."""
+        metadata: dict[str, Any] | None = None,
+        expected: frozenset[str] = ACTIVE_STATUSES,
+    ) -> bool:
+        """Change a message still in one of `expected` (by default any active
+        status): terminal rows are immutable, and a turn finishing after a stop
+        already marked it cancelled is a no-op. True when the row changed."""
         values: dict[str, Any] = {"status": status}
         if content is not None:
             values["content"] = content
-        await self._session.execute(
+        if metadata is not None:
+            values["metadata"] = metadata
+        result = await self._session.execute(
             update(messages)
-            .where(messages.c.id == message_id, messages.c.status.in_(ACTIVE_STATUSES))
+            .where(messages.c.id == message_id, messages.c.status.in_(expected))
             .values(values)
+            .returning(messages.c.id)
         )
+        return result.first() is not None
 
     async def links(self, *, conversation_id: UUID) -> list[tuple[UUID, UUID | None]]:
         """(id, parent) of every message, oldest first (messages_history_idx)."""

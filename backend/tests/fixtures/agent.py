@@ -64,7 +64,7 @@ class ScriptedModel(GenericFakeChatModel):
 @pytest.fixture
 def scripted_model(monkeypatch):
     """Replace the model; call with the replies the agent should give."""
-    from app.modules.agent import agui, graph
+    from app.modules.agent import graph
 
     def install(
         *replies: str | AIMessage,
@@ -87,9 +87,7 @@ def scripted_model(monkeypatch):
         )
         monkeypatch.setattr(graph, "build_model", lambda: model)
         graph.get_agent.cache_clear()
-        agui.get_agui_agent.cache_clear()
         return model
 
     yield install
     graph.get_agent.cache_clear()
-    agui.get_agui_agent.cache_clear()

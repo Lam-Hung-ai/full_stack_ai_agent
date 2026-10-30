@@ -3,6 +3,7 @@ import {
   runHttpRequest,
   transformHttpEventStream,
   type Message,
+  type ResumeEntry,
   type RunAgentInput,
   type RunAgentResult,
 } from "@ag-ui/client";
@@ -24,12 +25,13 @@ export type AssistantEventValue = {
   conversationId: string;
   userMessageId: string;
   assistantMessageId: string;
-  status: "running" | "completed" | "failed" | "cancelled";
+  status: "running" | "requires_action" | "completed" | "failed" | "cancelled";
 };
 
 export type ChatMessageInput = { id: string; text: string; fileIds: string[] };
 export type SendMessageInput = { parentMessageId: string | null; message: ChatMessageInput };
 export type EditMessageInput = { userMessageId: string; message: ChatMessageInput };
+export type ResumeInput = { assistantMessageId: string; resume: ResumeEntry[] };
 
 type Operation = { path: string; body?: unknown };
 // The operation travels inside the run's own input, so a second call can
@@ -72,6 +74,11 @@ export class ChatAgent extends HttpAgent {
     });
   }
 
+  /** Answer what a paused assistant waits on; the same turn continues. */
+  resume({ assistantMessageId, resume }: ResumeInput): Promise<RunAgentResult> {
+    return this.runOperation({ path: `/messages/${assistantMessageId}/resume`, body: { resume } }, resume);
+  }
+
   /** Answer the question of `assistantMessageId` again, beside that answer. */
   regenerate({ assistantMessageId }: { assistantMessageId: string }): Promise<RunAgentResult> {
     return this.runOperation({ path: `/messages/${assistantMessageId}/regenerate` });
@@ -95,8 +102,12 @@ export class ChatAgent extends HttpAgent {
     return transformHttpEventStream(runHttpRequest(request), this.debugLogger);
   }
 
-  private runOperation(operation: Operation): Promise<RunAgentResult> {
-    return this.runAgent({ forwardedProps: { [OPERATION]: operation } });
+  private runOperation(operation: Operation, resume?: ResumeEntry[]): Promise<RunAgentResult> {
+    // The server owns what a turn waits on and checks every answer (API §5).
+    // The SDK's own bookkeeping from an interrupt outcome would refuse a stop
+    // followed by a new question, or an answer given after a reload.
+    this.pendingInterrupts = [];
+    return this.runAgent({ forwardedProps: { [OPERATION]: operation }, resume });
   }
 }
 

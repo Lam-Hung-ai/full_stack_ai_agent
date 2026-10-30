@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     max_concurrent_turns: int = Field(default=10, ge=1)
     #: On shutdown, how long running turns get to finish before being cancelled.
     shutdown_grace_seconds: float = Field(default=20, ge=0)
+    #: Tools that pause the turn for the user's approval before they run.
+    tools_requiring_approval: list[str] = []
 
     allowed_origins: list[str] = ["http://localhost:3000"]
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"

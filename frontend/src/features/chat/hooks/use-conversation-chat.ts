@@ -10,11 +10,19 @@ import { ASSISTANT_EVENT, ChatAgent, type AssistantEventValue } from "../agent/c
 import { getHistory, stopAssistant } from "../api/conversations-api";
 import type { LiveTurn, RowView } from "../types/chat.types";
 import { isActive, shownRows, toChatError, toRowView } from "../utils/history";
+import {
+  type InteractionAnswer,
+  toResumeEntries,
+  waitingInteractions,
+  withAnswers,
+} from "../utils/interactions";
 import { chatKeys } from "./use-conversations";
 
 const ACTIVE_POLL_MS = 2_000;
 
-type TurnStart = Pick<LiveTurn, "kept" | "question" | "questionId">;
+type TurnStart = Pick<LiveTurn, "kept" | "question" | "questionId"> & {
+  continued?: RowView;
+};
 
 function questionRow(id: string, text: string, siblingIds: string[]): RowView {
   return {
@@ -28,7 +36,8 @@ function questionRow(id: string, text: string, siblingIds: string[]): RowView {
 
 /**
  * One conversation: the branch this tab shows, a ChatAgent to continue it,
- * and the turn actions (send, edit, regenerate, stop, switch branch).
+ * and the turn actions (send, edit, regenerate, answer a pause, stop, switch
+ * branch).
  *
  * Which branch is shown is per tab (API §2): `anchor` opens the branch
  * through a message, null the saved one. A turn this tab streams is drawn
@@ -54,6 +63,8 @@ export function useConversationChat(conversationId: string) {
   const [agentReady, setAgentReady] = useState(false);
   const [status, setStatus] = useState<ChatStatus>("ready");
   const [error, setError] = useState<ApiError | null>(null);
+  // Answers given so far when one pause asks several things at once.
+  const [drafts, setDrafts] = useState<Record<string, InteractionAnswer>>({});
   const runErrorRef = useRef<ApiError | null>(null);
 
   const updateLive = useCallback((next: (current: LiveTurn | null) => LiveTurn | null) => {
@@ -117,7 +128,12 @@ export function useConversationChat(conversationId: string) {
       runningRef.current = true;
       agent.setMessages(seed);
       setLiveMessages(seed);
-      updateLive(() => ({ ...turn, assistantId: null, status: "pending", done: false }));
+      updateLive(() => ({
+        ...turn,
+        continued: turn.continued ?? null,
+        assistantId: turn.continued?.id ?? null,
+        status: turn.continued ? "running" : "pending",
+      }));
       setStatus("submitted");
       setError(null);
       runErrorRef.current = null;
@@ -133,14 +149,26 @@ export function useConversationChat(conversationId: string) {
         runningRef.current = false;
         const assistantId = liveRef.current?.assistantId;
         if (assistantId) {
-          // Show the saved branch through the new answer, with its siblings.
-          updateLive((current) => current && { ...current, done: true });
+          // Load the saved branch through the answer (with its siblings)
+          // before dropping the live turn, so the screen never steps back.
+          await queryClient.invalidateQueries({
+            queryKey: chatKeys.histories(conversationId),
+            refetchType: "none",
+          });
+          try {
+            await queryClient.fetchQuery({
+              queryKey: chatKeys.history(conversationId, assistantId),
+              queryFn: ({ signal }) =>
+                getHistory(conversationId, { fromMessageId: assistantId, signal }),
+            });
+          } catch {
+            // The query retries once it is shown.
+          }
           setAnchor(assistantId);
-          await queryClient.invalidateQueries({ queryKey: chatKeys.histories(conversationId) });
-        } else {
-          // Rejected before a turn existed (409, network): nothing was saved.
-          updateLive(() => null);
         }
+        // Without an assistant the request was refused (409, network) and
+        // nothing was saved.
+        updateLive(() => null);
         await queryClient.invalidateQueries({ queryKey: ["workspaces"] });
       }
     },
@@ -200,6 +228,44 @@ export function useConversationChat(conversationId: string) {
     [saved, startTurn],
   );
 
+  const resume = useCallback(
+    async (assistantMessageId: string, answers: Record<string, InteractionAnswer>) => {
+      const index = saved.findIndex((row) => row.id === assistantMessageId);
+      if (index === -1) return;
+      await startTurn(
+        {
+          kept: saved.slice(0, index),
+          question: null,
+          questionId: "",
+          continued: withAnswers(saved[index], answers),
+        },
+        (agent) => agent.resume({ assistantMessageId, resume: toResumeEntries(answers) }),
+        [],
+      );
+    },
+    [saved, startTurn],
+  );
+
+  /** One answer; the turn resumes once every waiting question has one. */
+  const answerInterrupt = useCallback(
+    (assistantMessageId: string, interruptId: string, answer: InteractionAnswer) => {
+      const row = saved.find((item) => item.id === assistantMessageId);
+      if (!row) return;
+      const next = { ...drafts, [interruptId]: answer };
+      const waiting = waitingInteractions(row);
+      if (waiting.every((item) => item.interrupt_id in next)) {
+        setDrafts({});
+        void resume(
+          assistantMessageId,
+          Object.fromEntries(waiting.map((item) => [item.interrupt_id, next[item.interrupt_id]])),
+        );
+      } else {
+        setDrafts(next);
+      }
+    },
+    [drafts, resume, saved],
+  );
+
   const switchBranch = useCallback(
     (messageId: string) => {
       if (runningRef.current) return;
@@ -212,7 +278,13 @@ export function useConversationChat(conversationId: string) {
   const isBusy = status === "submitted" || status === "streaming";
   const lastSaved = saved.at(-1);
   const remoteTurnRunning = !isBusy && isActive(lastSaved);
-  const stopTarget = isBusy ? live?.assistantId : remoteTurnRunning ? lastSaved?.id : undefined;
+  // A paused turn holds the chat until it is answered or stopped.
+  const waitingForUser = !isBusy && lastSaved?.status === "requires_action";
+  const stopTarget = isBusy
+    ? live?.assistantId
+    : remoteTurnRunning || waitingForUser
+      ? lastSaved?.id
+      : undefined;
 
   const stop = useCallback(async () => {
     if (!stopTarget) return;
@@ -238,10 +310,13 @@ export function useConversationChat(conversationId: string) {
     isSwitching: history.isPlaceholderData,
     loadError: history.error,
     remoteTurnRunning,
+    waitingForUser,
+    drafts,
     canStop: !!stopTarget,
     sendMessage,
     editMessage,
     regenerate,
+    answerInterrupt,
     switchBranch,
     stop,
   };

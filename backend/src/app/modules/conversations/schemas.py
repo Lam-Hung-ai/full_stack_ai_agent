@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
+from ag_ui.core import ResumeEntry
 from pydantic import (
     AfterValidator,
     BaseModel,
@@ -126,6 +127,14 @@ class SendMessage(Input):
 class EditMessage(Input):
     #: The new version, with its full list of files (API §4).
     message: ChatMessageInput
+
+
+class ResumeMessage(Input):
+    """Answers to every interrupt the assistant waits on (API §5), in the
+    SDK's own `ResumeEntry` shape (`interruptId`, `status`, `payload`):
+    `{"answer": "..."}` for a question, `{"approved": true}` for a tool."""
+
+    resume: list[ResumeEntry] = Field(min_length=1, max_length=20)
 
 
 class StopResponse(BaseModel):

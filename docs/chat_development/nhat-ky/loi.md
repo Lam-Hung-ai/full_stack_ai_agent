@@ -16,6 +16,7 @@ Lỗi ở đây là **hành vi sai** so với quyết định đã chốt (datab
 | L-06 | Thấp | Tải lại trang thì reasoning của mọi lượt cũ mở bung rồi mới tự đóng | Chạy thật S2, 30/10 | Đã xác minh | CH-S2-FE-02 | Đã sửa (S2) |
 | L-07 | Cao | Sau khi thêm registry tool, mọi lượt chat treo: tập tool truyền cho `lru_cache` là `set` (không hash được) nên runner ném lỗi trước khối `try`, stream không bao giờ đóng | Test S3, 30/10 | Đã xác minh | CH-S3-BE-05 | Đã sửa (S3) |
 | L-08 | Trung bình | Bấm dừng thì câu trả lời giữ đúng nhưng UI báo "Mất kết nối": runner phát `RUN_FINISHED` khi step/text message còn mở, verifier của `@ag-ui/client` từ chối | Chạy thật S3, 30/10 | Đã xác minh | CH-S3-BE-03 | Đã sửa (S3) |
+| L-09 | Cao | Bấm "Cho phép" không có tác dụng và báo "Mất kết nối": `@ag-ui/client` ghi `pendingInterrupts` từ `RUN_FINISHED` có outcome interrupt rồi chặn lần chạy kế tiếp không kèm `resume` khớp id, ném lỗi trước khi gửi request | Chạy thật S4, 30/10 | Đã xác minh | CH-S4-FE-01 | Đã sửa (S4) |
 
 Giá trị cột *Xác minh*:
 - **Đã xác minh:** đã đọc code/tài liệu hoặc chạy thử và chắc chắn.
@@ -66,6 +67,13 @@ Giá trị cột *Xác minh*:
 - **Cách sửa:** `modules/agent/lifecycle.py` theo dõi span đang mở (step, text, reasoning, tool call) và phát event END cho chúng, trong cùng ra trước, rồi mới phát trạng thái cuối và `RUN_FINISHED` có `outcome: {type: "cancelled"}`.
 - **Test chặn tái phát:** `tests/unit/test_lifecycle.py`, `tests/api/conversations/test_stop.py::test_stop_keeps_the_partial_answer`.
 - **Trạng thái:** Đã sửa (S3).
+
+### L-09: SDK chặn trả lời sau khi pause
+- **Vị trí:** `frontend/src/features/chat/agent/chat-agent.ts::runOperation`.
+- **Thực tế:** `AGUIError: Thread has 1 pending interrupt(s) not addressed by resume`; không request nào tới backend. Cũng sẽ chặn câu hỏi mới sau khi dừng lượt đang chờ.
+- **Cách sửa:** server là nơi đối chiếu interrupt (API §5), nên `ChatAgent` xoá `pendingInterrupts` trước mỗi thao tác và chuyển `resume` vào input của lượt resume.
+- **Test chặn tái phát:** `chat-agent.test.ts` "lets the server decide what a paused turn still waits on".
+- **Trạng thái:** Đã sửa (S4).
 
 ## Mẫu ghi
 

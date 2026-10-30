@@ -82,6 +82,22 @@ def apply_schema(connection: psycopg.Connection) -> None:
     _sync_permissions(connection)
 
 
+def setup_checkpoints(url: str) -> None:
+    """The four saver tables, created by the pinned SDK as `uv run db
+    checkpoints` does."""
+    from langgraph.checkpoint.postgres import PostgresSaver
+    from psycopg.rows import dict_row
+
+    with psycopg.connect(
+        url,
+        autocommit=True,
+        row_factory=dict_row,
+        prepare_threshold=0,
+        options="-csearch_path=langgraph_checkpoints,public",
+    ) as connection:
+        PostgresSaver(connection).setup()  # pyrefly: ignore[bad-argument-type]
+
+
 def _sync_permissions(connection: psycopg.Connection) -> None:
     """Same catalog `uv run iam sync-permissions` writes (L-04)."""
     from app.modules.authorization.catalog import PERMISSIONS
