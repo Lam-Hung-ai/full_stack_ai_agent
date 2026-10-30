@@ -60,6 +60,16 @@ Từ S6 (TD-012, QD-24 → QD-26):
 
 Người ngoài tổ chức nhận 404 `organization_not_found` ở mọi route `/organizations/{id}`. Token của link luôn nằm trong body, không trong URL API.
 
+Từ S7 (TD-013, QD-27): tệp đính kèm.
+
+| Method/path | Chức năng | Quyền |
+|---|---|---|
+| POST /workspaces/{id}/uploads | Khai `original_name`, `content_type`, `size_bytes`; nhận `file_id` và presigned PUT (`url`, `method`, `headers` phải gửi đúng, `expires_at`). Chưa ghi gì vào database | `conversation.create` trong workspace |
+| POST /workspaces/{id}/uploads/{fileId}/complete | Gửi lại đúng ba trường đã khai; backend HEAD, so cỡ, soi byte đầu, tính SHA-256, chuyển sang key cuối rồi ghi `stored_files`. Lỗi: 409 `upload_missing`, 422 `upload_size_mismatch`, 415 `file_content_mismatch` / `unsupported_file_type` | Như trên |
+| GET /conversations/{id}/files/{fileId} | URL ký ngắn hạn trong body (`url`, `expires_at`); ảnh mở inline, tệp khác tải về | Chủ chat, tệp phải gắn vào một message của chat |
+
+Gửi câu hỏi (§3) và sửa câu hỏi (§4) nhận `file_ids`: tối đa 10 tệp, mỗi tệp là upload của chính người gửi trong cùng workspace (sai thì 422 `invalid_file`); câu hỏi có tệp được phép không có chữ. Loại được nhận: PNG, JPEG, GIF, WebP, PDF, văn bản (txt, md, csv, json), tối đa 10 MB.
+
 Sidebar (`GET /workspaces/{id}/conversations`) nhận `archived=true` (chỉ chat đã lưu trữ), `folder_id` (chat của một folder) hoặc `unfiled=true` (chat ngoài folder); mặc định là mọi chat chưa lưu trữ. Chat ghim lên đầu, rồi theo `updated_at` giảm dần. `PATCH /conversations/{id}` nhận `title`, `pinned`, `archived`, `folder_id` (null là bỏ khỏi folder); field bỏ trống giữ nguyên, field khác bị từ chối. Các nhóm còn lại chốt khi tới sprint tương ứng. Health endpoints thuộc vận hành service, không phải API agent discovery.
 
 ## 3. Gửi câu hỏi mới
@@ -84,6 +94,7 @@ POST /api/v1/conversations/{id}/messages
 - Lượt đầu có parentMessageId null; các lượt sau chỉ rõ parent đã authorize.
 - Client tạo UUIDv7 user message để hiển thị optimistic. Server tạo UUIDv7 assistant message. runId chỉ phục vụ adapter/protocol AG-UI, không là input nghiệp vụ hoặc trường metadata database.
 - fileIds là file đã upload. Backend kiểm tra ownership/workspace và liên kết qua message_files; không nhận bucket/object_key do browser tùy ý chỉ định.
+- (S7, QD-27) Câu hỏi có tệp lưu `content` là mảng content part của AG-UI 1.0: phần chữ `{"type":"text"}` rồi mỗi tệp một part `image` hoặc `document` có `id` = `stored_files.id`, `source` `{"type":"url","value":"stored-file:<id>","mimeType":…}` và `metadata` `{filename, sizeBytes}`. Không lưu byte hay URL ký. Mỗi lượt backend đọc lại tệp từ storage: ảnh và PDF thành nguồn `data` (base64), tệp văn bản thành phần chữ.
 - Input text/fileIds là DTO gửi hiện tại; backend dựng canonical AG-UI content. Không thay cấu trúc JSONB content/attachments đã chốt.
 - Không append mù danh sách messages từ browser hoặc dùng browser tools để quyết định quyền tool.
 

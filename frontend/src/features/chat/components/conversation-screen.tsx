@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { useConversationChat } from "../hooks/use-conversation-chat";
+import { useConversation } from "../hooks/use-conversations";
 import { usePendingMessageStore } from "../stores/pending-message-store";
 import { chatErrorMessage } from "../utils/history";
 import { ChatComposer } from "./chat-composer";
@@ -12,6 +13,7 @@ import { ChatMessages } from "./chat-messages";
 
 export function ConversationScreen({ conversationId }: { conversationId: string }) {
   const chat = useConversationChat(conversationId);
+  const conversation = useConversation(conversationId);
   const take = usePendingMessageStore((state) => state.take);
   const { isReady, sendMessage, editMessage, regenerate, answerInterrupt, switchBranch, stop } =
     chat;
@@ -19,8 +21,8 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
   // The question typed on the new-chat screen, sent once the chat is ready.
   useEffect(() => {
     if (!isReady) return;
-    const text = take(conversationId);
-    if (text) void sendMessage(text);
+    const draft = take(conversationId);
+    if (draft) void sendMessage(draft);
   }, [conversationId, isReady, sendMessage, take]);
 
   if (chat.isLoading) {
@@ -45,6 +47,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
   return (
     <div className="mx-auto flex h-full w-full max-w-3xl flex-col p-4">
       <ChatMessages
+        conversationId={conversationId}
         actions={{
           onEdit: (id, text) => void editMessage(id, text),
           onRegenerate: (id) => void regenerate(id),
@@ -73,8 +76,9 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
       <ChatComposer
         disabled={composerLocked}
         onStop={chat.canStop ? () => void stop() : undefined}
-        onSubmit={(text) => void sendMessage(text)}
+        onSubmit={(draft) => void sendMessage(draft)}
         status={chat.status}
+        workspaceId={conversation.data?.workspace_id}
       />
     </div>
   );

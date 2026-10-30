@@ -1,5 +1,4 @@
 import asyncio
-from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
 from typing import Any
@@ -15,7 +14,9 @@ from uuid_utils.compat import uuid7
 from app.common.dependencies.auth import Principal
 from app.common.exceptions.handlers import DomainError, fail
 from app.common.schemas.pagination import PageParams, Pagination
+from app.common.storage.client import ObjectStorage
 from app.config.security import now
+from app.database.session import SessionFactory
 from app.modules.agent.bundle import AguiMessage
 from app.modules.agent.checkpoints import durable_saver
 from app.modules.agent.graph import GRAPH_VERSION
@@ -46,6 +47,8 @@ from app.modules.conversations.schemas import (
     StopResponse,
 )
 from app.modules.conversations.tree import MessageTree
+from app.modules.files.repository import FileRepository
+from app.modules.files.service import FileService, file_part, resolve_files
 from app.modules.folders.service import FolderService
 from app.modules.workspaces.schemas import WorkspaceContext
 from app.modules.workspaces.service import WorkspaceService
@@ -54,8 +57,6 @@ TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled"})
 TITLE_LENGTH = 60
 #: How long a stop request waits for the turn to save its partial answer.
 STOP_WAIT_SECONDS = 5.0
-
-type SessionFactory = Callable[[], AsyncSession]
 
 
 def _fallback_title(text: str) -> str:
@@ -233,11 +234,18 @@ class TurnService:
     """
 
     def __init__(
-        self, session: AsyncSession, *, runner: Runner, session_factory: SessionFactory
+        self,
+        session: AsyncSession,
+        *,
+        runner: Runner,
+        session_factory: SessionFactory,
+        storage: ObjectStorage | None = None,
     ) -> None:
         self._session = session
         self._runner = runner
         self._session_factory = session_factory
+        #: Needed by turns that may carry files (send, edit, regenerate).
+        self._storage = storage
         self._conversations = ConversationRepository(session)
         self._messages = MessageRepository(session)
 
@@ -248,7 +256,7 @@ class TurnService:
         text = _question_text(data.message)
         await self._check_parent(conversation_id, data.parent_message_id)
         title = (
-            _fallback_title(text)
+            _fallback_title(text or "Tệp đính kèm")
             if conversation["title"] == DEFAULT_TITLE and data.parent_message_id is None
             else None
         )
@@ -486,17 +494,31 @@ class TurnService:
             if parent_id
             else []
         )
+        files = (
+            await FileService(self._session).attachable(
+                user=user, workspace=workspace, ids=message.file_ids
+            )
+            if message.file_ids
+            else []
+        )
         question: list[AguiMessage] = [
-            {"id": str(message.id), "role": "user", "content": text}
+            {"id": str(message.id), "role": "user", "content": _content(text, files)}
         ]
+        # With files the row is staged pending: links are refused on terminal
+        # messages, and a deferred trigger insists it is completed by commit.
         await self._messages.insert(
             message_id=message.id,
             conversation_id=conversation_id,
             parent_message_id=parent_id,
             role="user",
-            status="completed",
+            status="pending" if files else "completed",
             content=question,
         )
+        if files:
+            await FileRepository(self._session).link(
+                message_id=message.id, file_ids=[row["id"] for row in files]
+            )
+            await self._messages.set_status(message_id=message.id, status="completed")
         return await self._launch(
             user,
             workspace,
@@ -603,8 +625,28 @@ class TurnService:
             finalize=finalize,
             known_ids=known_ids,
             resume_from=resume_from,
+            # A resumed turn continues from its checkpoint, which already holds
+            # the files it was given.
+            prepare=self._with_files if resume_from is None else None,
         )
         return StartedTurn(user_message_id, assistant_id, stream)
+
+    async def _with_files(self, run_input: RunAgentInput) -> RunAgentInput:
+        """Give the model the bytes of attached files (inside the turn)."""
+        messages = [
+            message.model_dump(by_alias=True, exclude_none=True)
+            for message in run_input.messages
+        ]
+        if self._storage is None:
+            return run_input
+        resolved = await resolve_files(
+            messages, session_factory=self._session_factory, storage=self._storage
+        )
+        if resolved is messages:
+            return run_input
+        return RunAgentInput.model_validate(
+            {**run_input.model_dump(by_alias=True), "messages": resolved}
+        )
 
     async def _check_parent(
         self, conversation_id: UUID, parent_id: UUID | None
@@ -684,9 +726,16 @@ class TurnService:
 
 
 def _question_text(message: ChatMessageInput) -> str:
-    if message.file_ids:
-        fail(400, "file_attachments_unavailable")
+    """The question's text; it may be empty when files carry the question."""
     text = message.text.strip()
-    if not text:
+    if not text and not message.file_ids:
         fail(422, "empty_message")
     return text
+
+
+def _content(text: str, files: list[RowMapping]) -> str | list[dict[str, Any]]:
+    """A plain question stays a string; with files, AG-UI content parts."""
+    if not files:
+        return text
+    parts: list[dict[str, Any]] = [{"type": "text", "text": text}] if text else []
+    return [*parts, *(file_part(row) for row in files)]

@@ -13,6 +13,7 @@ from pydantic import (
 
 from app.common.schemas.common import Input
 from app.common.schemas.pagination import Pagination
+from app.modules.files.policy import MAX_FILES_PER_MESSAGE
 
 Title = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
@@ -115,7 +116,7 @@ class HistoryResponse(BaseModel):
 class ChatMessageInput(Input):
     id: UUIDv7
     text: str = Field(max_length=32_000)
-    file_ids: list[UUID] = Field(default_factory=list, max_length=20)
+    file_ids: list[UUID] = Field(default_factory=list, max_length=MAX_FILES_PER_MESSAGE)
 
 
 class SendMessage(Input):

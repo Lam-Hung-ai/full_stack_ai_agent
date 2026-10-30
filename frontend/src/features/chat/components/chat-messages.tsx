@@ -22,10 +22,12 @@ import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "@/componen
 import type { RowView } from "../types/chat.types";
 import { buildItems, findToolResult, parseToolArgs, type Turn } from "../utils/agui-messages";
 import { isActive, isTerminal } from "../utils/history";
+import { attachedFiles, questionText as textOf } from "../utils/files";
 import { ASK_USER_TOOL, type InteractionAnswer, interactionOf } from "../utils/interactions";
 import { BranchSwitcher } from "./branch-switcher";
 import { EditQuestionForm } from "./edit-question-form";
 import { InteractionCard } from "./interaction-card";
+import { MessageFiles } from "./message-files";
 import { ReasoningSummary } from "./reasoning-summary";
 
 export type RowActions = {
@@ -42,12 +44,15 @@ export type RowActions = {
  * none. Without `actions` the rows are read-only.
  */
 export function ChatMessages({
+  conversationId,
   rows,
   isBusy,
   waitingForUser = false,
   actions,
   empty,
 }: {
+  /** Needed to open attached files; absent before the chat exists. */
+  conversationId?: string;
   rows: readonly RowView[];
   isBusy: boolean;
   /** A pause holds the chat: only its questions can be acted on. */
@@ -63,7 +68,13 @@ export function ChatMessages({
           ? empty
           : rows.map((row) =>
               row.role === "user" ? (
-                <QuestionRow actions={actions} disabled={locked} key={row.id} row={row} />
+                <QuestionRow
+                  actions={actions}
+                  conversationId={conversationId}
+                  disabled={locked}
+                  key={row.id}
+                  row={row}
+                />
               ) : (
                 <AnswerRow
                   actions={actions}
@@ -81,22 +92,21 @@ export function ChatMessages({
   );
 }
 
-function questionText(row: RowView): string {
-  const message = row.content.find((item) => item.role === "user");
-  return typeof message?.content === "string" ? message.content : "";
-}
-
 function QuestionRow({
   row,
   actions,
+  conversationId,
   disabled,
 }: {
   row: RowView;
   actions?: RowActions;
+  conversationId?: string;
   disabled: boolean;
 }) {
   const [editing, setEditing] = useState(false);
-  const text = questionText(row);
+  const question = row.content.find((item) => item.role === "user");
+  const text = textOf(question);
+  const files = attachedFiles(question);
 
   if (editing && actions) {
     return (
@@ -112,9 +122,12 @@ function QuestionRow({
   }
   return (
     <Message from="user">
-      <MessageContent>
-        <MessageResponse>{text}</MessageResponse>
-      </MessageContent>
+      {conversationId && <MessageFiles conversationId={conversationId} files={files} />}
+      {text && (
+        <MessageContent>
+          <MessageResponse>{text}</MessageResponse>
+        </MessageContent>
+      )}
       {actions && (
         <MessageActions className="justify-end">
           <BranchSwitcher

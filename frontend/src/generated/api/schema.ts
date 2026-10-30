@@ -223,6 +223,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/{conversation_id}/files/{file_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download File
+         * @description A short-lived link to a file attached in a chat the user owns.
+         */
+        get: operations["download_file_api_v1_conversations__conversation_id__files__file_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/conversations/{conversation_id}/messages": {
         parameters: {
             query?: never;
@@ -673,6 +693,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Upload
+         * @description A file id and a presigned PUT; nothing is recorded until `complete`.
+         */
+        post: operations["create_upload_api_v1_workspaces__workspace_id__uploads_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/uploads/{file_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete Upload
+         * @description Check the uploaded bytes (size, type) and record the file; its id can
+         *     then go in a question's `file_ids`.
+         */
+        post: operations["complete_upload_api_v1_workspaces__workspace_id__uploads__file_id__complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -800,6 +861,19 @@ export interface components {
             /** Title */
             title?: string | null;
         };
+        /**
+         * DownloadResponse
+         * @description A short-lived link; returned in the body, never as a redirect.
+         */
+        DownloadResponse: {
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Url */
+            url: string;
+        };
         /** EditMessage */
         EditMessage: {
             message: components["schemas"]["ChatMessageInput"];
@@ -811,6 +885,23 @@ export interface components {
              * Format: email
              */
             email: string;
+        };
+        /** @enum {string} */
+        FileKind: "image" | "document" | "text";
+        /** FileResponse */
+        FileResponse: {
+            /** Content Type */
+            content_type: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            kind: components["schemas"]["FileKind"];
+            /** Original Name */
+            original_name: string;
+            /** Size Bytes */
+            size_bytes: number;
         };
         /** FolderCreate */
         FolderCreate: {
@@ -1123,6 +1214,22 @@ export interface components {
             /** Resource */
             resource: string;
         };
+        /** PresignedUpload */
+        PresignedUpload: {
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Headers */
+            headers: {
+                [key: string]: string;
+            };
+            /** Method */
+            method: string;
+            /** Url */
+            url: string;
+        };
         /** Register */
         Register: {
             /**
@@ -1275,6 +1382,27 @@ export interface components {
              * @default bearer
              */
             token_type: string;
+        };
+        /**
+         * UploadCreate
+         * @description What the browser is about to upload; `complete` checks it for real.
+         */
+        UploadCreate: {
+            /** Content Type */
+            content_type: string;
+            /** Original Name */
+            original_name: string;
+            /** Size Bytes */
+            size_bytes: number;
+        };
+        /** UploadResponse */
+        UploadResponse: {
+            /**
+             * File Id
+             * Format: uuid
+             */
+            file_id: string;
+            upload: components["schemas"]["PresignedUpload"];
         };
         /** UserResponse */
         UserResponse: {
@@ -1725,6 +1853,38 @@ export interface operations {
                 };
                 content: {
                     "text/event-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_file_api_v1_conversations__conversation_id__files__file_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DownloadResponse"];
                 };
             };
             /** @description Validation Error */
@@ -2796,6 +2956,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FolderResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_upload_api_v1_workspaces__workspace_id__uploads_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UploadCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    complete_upload_api_v1_workspaces__workspace_id__uploads__file_id__complete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UploadCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileResponse"];
                 };
             };
             /** @description Validation Error */

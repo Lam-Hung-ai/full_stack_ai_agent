@@ -6,4 +6,5 @@ pytest_plugins = (
     "tests.fixtures.client",
     "tests.fixtures.database",
     "tests.fixtures.mail",
+    "tests.fixtures.storage",
 )

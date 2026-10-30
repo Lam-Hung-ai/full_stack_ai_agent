@@ -64,6 +64,7 @@ class Pause:
 type Finalizer = Callable[
     [TurnStatus, list[AguiMessage], Pause | None], Awaitable[list[BaseEvent]]
 ]
+type InputPreparer = Callable[[RunAgentInput], Awaitable[RunAgentInput]]
 type AgentFactory = Callable[[frozenset[str], BaseCheckpointSaver], LangGraphAgent]
 
 
@@ -174,10 +175,12 @@ class Runner:
         finalize: Finalizer,
         known_ids: set[str] | None = None,
         resume_from: CheckpointTuple | None = None,
+        prepare: InputPreparer | None = None,
     ) -> RunStream:
         """Run a turn in the background. `known_ids` are protocol messages the
         bundle must not repeat (default: the input); `resume_from` is the
-        stored pause a resumed turn continues from."""
+        stored pause a resumed turn continues from; `prepare` completes the
+        input inside the turn (attached files), where a failure fails the turn."""
         stream = RunStream()
         self._streams[assistant_id] = stream
         self._tasks[assistant_id] = asyncio.create_task(
@@ -192,6 +195,7 @@ class Runner:
                 finalize=finalize,
                 known_ids=known_ids,
                 resume_from=resume_from,
+                prepare=prepare,
             ),
             name=f"assistant-turn-{assistant_id}",
         )
@@ -265,6 +269,7 @@ class Runner:
         finalize: Finalizer,
         known_ids: set[str] | None,
         resume_from: CheckpointTuple | None,
+        prepare: InputPreparer | None,
     ) -> None:
         public_thread = run_input.thread_id
         # ID decisions §1: the native thread is the assistant row; the
@@ -291,6 +296,8 @@ class Runner:
             agent = self._agent_factory(tools, saver)
             async with self._slots:
                 await on_running()
+                if prepare is not None:
+                    run_input = await prepare(run_input)
                 native = run_input.model_copy(update={"thread_id": native_thread})
                 async for event in agent.run(native):
                     if getattr(event, "thread_id", None) is not None:

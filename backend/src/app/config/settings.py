@@ -1,12 +1,15 @@
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlparse
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
 BACKEND_DIR = Path(__file__).resolve().parents[3]
+STORAGE_BUCKET_PATTERN = re.compile(r"^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$")
 
 
 class Settings(BaseSettings):
@@ -63,6 +66,17 @@ class Settings(BaseSettings):
     email_verification_hours: int = Field(default=24, ge=1, le=168)
     password_reset_minutes: int = Field(default=60, ge=5, le=1440)
 
+    #: S3-compatible object storage for chat files (S7; RustFS in dev).
+    storage_endpoint_url: str = "http://localhost:9000"
+    #: Host put into presigned URLs; the browser must reach it.
+    storage_browser_endpoint_url: str | None = None
+    storage_region: str = "us-east-1"
+    storage_access_key_id: str | None = None
+    storage_secret_access_key: SecretStr | None = None
+    storage_bucket: str = "agent-chat"
+    storage_presign_ttl_seconds: int = Field(default=600, ge=60, le=3600)
+    storage_addressing_style: Literal["path", "virtual"] = "path"
+
     allowed_origins: list[str] = ["http://localhost:3000"]
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     log_format: Literal["json", "text"] = "json"
@@ -85,12 +99,50 @@ class Settings(BaseSettings):
             raise ValueError("DATABASE_URL must use postgresql+psycopg://")
         return value
 
+    @field_validator("storage_endpoint_url", "storage_browser_endpoint_url")
+    @classmethod
+    def _storage_url(cls, value: str | None) -> str | None:
+        if not value:
+            return None
+        normalized = value.rstrip("/")
+        parsed = urlparse(normalized)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("storage URL must be an absolute HTTP(S) URL")
+        if parsed.query or parsed.fragment:
+            raise ValueError("storage URL must not contain a query or fragment")
+        return normalized
+
+    @field_validator("storage_secret_access_key", mode="before")
+    @classmethod
+    def _blank_secret_is_unset(cls, value: object) -> object:
+        return value or None
+
+    @field_validator("storage_bucket")
+    @classmethod
+    def _storage_bucket(cls, value: str) -> str:
+        if not STORAGE_BUCKET_PATTERN.fullmatch(value):
+            raise ValueError("STORAGE_BUCKET must be a valid S3 bucket name")
+        return value
+
+    @model_validator(mode="after")
+    def _storage_credentials(self) -> "Settings":
+        if (self.storage_access_key_id is None) != (
+            self.storage_secret_access_key is None
+        ):
+            raise ValueError("storage access key and secret key must be set together")
+        return self
+
+    @property
+    def storage_presign_endpoint_url(self) -> str:
+        return self.storage_browser_endpoint_url or self.storage_endpoint_url
+
     @field_validator(
         "openrouter_reasoning_effort",
         "openrouter_site_url",
         "openrouter_app_name",
         "smtp_host",
         "smtp_username",
+        "storage_access_key_id",
     )
     @classmethod
     def _blank_is_unset(cls, value: str | None) -> str | None:

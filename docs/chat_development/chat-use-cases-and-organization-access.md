@@ -54,7 +54,7 @@ Retry request cũ và regenerate mới là hai thao tác khác nhau. Public thre
 
 | ID | Người dùng muốn | Trạng thái và hành vi |
 |---|---|---|
-| D01 | Upload PDF, biết đã xử lý được chưa | File attach/download hiện tại; extraction/scan/status/retry pipeline để sau, không có files.status |
+| D01 | Upload PDF, biết đã xử lý được chưa | Có từ S7: đính kèm (ảnh, PDF, văn bản) qua presigned upload có xác minh, tải lại qua URL ký; model đọc tệp mỗi lượt. Extraction/scan/status/retry pipeline để sau, không có files.status |
 | D02 | Hỏi tài liệu nội bộ có citation/version | Sau: attachments có chỗ chứa nguồn render nhưng chưa có source/version/ACL/RAG |
 | D03 | Bị chặn đọc lương khi không có quyền HR | Sau: quyền source/row/field trước model; quyền gọi tool không đủ thay ACL |
 | D04 | So sánh hai dataset nhưng chỉ được đọc một | Sau: source scopes và completeness; không để model nhìn dữ liệu ngoài quyền |

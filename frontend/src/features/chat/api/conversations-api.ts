@@ -30,6 +30,10 @@ export function listConversations(
   });
 }
 
+export function getConversation(conversationId: string, signal?: AbortSignal) {
+  return apiClient<Conversation>(`/api/v1/conversations/${conversationId}`, { signal });
+}
+
 export function createConversation(workspaceId: string) {
   return apiClient<Conversation>(`/api/v1/workspaces/${workspaceId}/conversations`, {
     method: "POST",

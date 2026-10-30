@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createConversation,
+  getConversation,
   deleteConversation,
   listConversations,
   updateConversation,
@@ -16,11 +17,20 @@ export const chatKeys = {
   conversationList: (workspaceId: string, filter: ConversationFilter) =>
     [...chatKeys.conversations(workspaceId), filter] as const,
   folders: (workspaceId: string) => ["workspaces", workspaceId, "folders"] as const,
+  conversation: (conversationId: string) => ["conversations", conversationId, "detail"] as const,
   histories: (conversationId: string) => ["conversations", conversationId, "messages"] as const,
   /** `fromMessageId` null is the saved branch. */
   history: (conversationId: string, fromMessageId: string | null) =>
     [...chatKeys.histories(conversationId), fromMessageId] as const,
 };
+
+/** One chat's metadata (its workspace, for attaching files). */
+export function useConversation(conversationId: string) {
+  return useQuery({
+    queryKey: chatKeys.conversation(conversationId),
+    queryFn: ({ signal }) => getConversation(conversationId, signal),
+  });
+}
 
 export function useConversations(workspaceId: string | undefined, filter: ConversationFilter) {
   return useQuery({

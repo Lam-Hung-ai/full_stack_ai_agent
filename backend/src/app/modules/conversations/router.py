@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import StreamingResponse
 
 from app.common.dependencies.auth import CurrentUser
+from app.common.dependencies.storage import OptionalStorageDep
 from app.common.dependencies.workspace import CurrentWorkspace
 from app.common.schemas.pagination import PageParams, page_params
 from app.database.session import SessionDep, SessionLocal
@@ -135,15 +136,16 @@ async def send_message(
     user: CurrentUser,
     session: SessionDep,
     runner: RunnerDep,
+    storage: OptionalStorageDep,
 ) -> StreamingResponse:
     """Start an assistant turn and stream it as AG-UI events.
 
     Errors before the turn starts are JSON (401/403/404/409/422). Leaving the
     stream only detaches this subscriber; the turn continues and is saved.
     """
-    turn = await TurnService(session, runner=runner, session_factory=SessionLocal).send(
-        user=user, conversation_id=conversation_id, data=data
-    )
+    turn = await TurnService(
+        session, runner=runner, session_factory=SessionLocal, storage=storage
+    ).send(user=user, conversation_id=conversation_id, data=data)
     return _turn_stream(turn, request)
 
 
@@ -160,11 +162,12 @@ async def edit_message(
     user: CurrentUser,
     session: SessionDep,
     runner: RunnerDep,
+    storage: OptionalStorageDep,
 ) -> StreamingResponse:
     """Answer a new version of a user question; the old branch stays."""
-    turn = await TurnService(session, runner=runner, session_factory=SessionLocal).edit(
-        user=user, conversation_id=conversation_id, message_id=message_id, data=data
-    )
+    turn = await TurnService(
+        session, runner=runner, session_factory=SessionLocal, storage=storage
+    ).edit(user=user, conversation_id=conversation_id, message_id=message_id, data=data)
     return _turn_stream(turn, request)
 
 
@@ -180,10 +183,11 @@ async def regenerate_message(
     user: CurrentUser,
     session: SessionDep,
     runner: RunnerDep,
+    storage: OptionalStorageDep,
 ) -> StreamingResponse:
     """Answer the same question again beside the given assistant message."""
     turn = await TurnService(
-        session, runner=runner, session_factory=SessionLocal
+        session, runner=runner, session_factory=SessionLocal, storage=storage
     ).regenerate(user=user, conversation_id=conversation_id, message_id=message_id)
     return _turn_stream(turn, request)
 

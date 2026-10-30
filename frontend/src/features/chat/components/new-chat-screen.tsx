@@ -5,7 +5,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useCurrentWorkspace } from "@/features/workspaces";
 import { useCreateConversation } from "../hooks/use-conversations";
 import { usePendingMessageStore } from "../stores/pending-message-store";
-import { ChatComposer } from "./chat-composer";
+import { ChatComposer, type ComposerDraft } from "./chat-composer";
 import { ChatEmptyState } from "./chat-empty-state";
 import { ChatMessages } from "./chat-messages";
 
@@ -16,11 +16,11 @@ export function NewChatScreen() {
   const create = useCreateConversation(workspace?.id);
   const setPending = usePendingMessageStore((state) => state.setPending);
 
-  const start = (text: string) => {
-    if (!text.trim() || create.isPending) return;
+  const start = (draft: ComposerDraft) => {
+    if (create.isPending) return;
     create.mutate(undefined, {
       onSuccess: (conversation) => {
-        setPending(conversation.id, text);
+        setPending(conversation.id, draft);
         router.push(`/c/${conversation.id}`);
       },
     });
@@ -37,6 +37,7 @@ export function NewChatScreen() {
       <ChatComposer
         disabled={!workspace}
         onSubmit={start}
+        workspaceId={workspace?.id}
         status={create.isPending ? "submitted" : "ready"}
       />
     </div>

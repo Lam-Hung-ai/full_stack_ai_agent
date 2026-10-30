@@ -109,3 +109,9 @@ Loại: `BẮT ĐẦU`, `KẾT THÚC`, `LỖI`, `SỬA`, `THAY ĐỔI`, `QUYẾT
 | 30/10/2026 | S6 | LỖI | L-10 | Trang mời không đổi sau khi đăng xuất | CH-S6-FE-03 |
 | 30/10/2026 | S6 | SỬA | L-10 | Tải lại trang sau khi đăng xuất | CH-S6-FE-03 |
 | 30/10/2026 | S6 | KẾT THÚC | — | Xong 11/11 task; backend 106 test, frontend 49 test xanh; 5 kịch bản chạy thật đạt | — |
+| 30/10/2026 | S6 | PHÁT HÀNH | — | Commit Sprint 6 trên `chat` | `44eeb66` |
+| 30/10/2026 | S7 | BẮT ĐẦU | — | Bắt đầu Sprint 7; không có câu hỏi chặn | CH-S7-DOC-01 |
+| 30/10/2026 | S7 | QUYẾT ĐỊNH | QD-27 | Tệp chat: presigned upload có xác minh, media part AG-UI trỏ `stored-file:`, byte đọc lại trong lượt | CH-S7-BE-02 → BE-04 |
+| 30/10/2026 | S7 | THAY ĐỔI | TD-013 | Route upload/complete/tải tệp, `file_ids`, `STORAGE_*`, RustFS, `uv run storage setup`; tài liệu API §2, §3 | CH-S7-BE-01 → FE-02, DOC-02 |
+| 30/10/2026 | S7 | RỦI RO | RR-17 | Tệp không gửi nằm lại storage; đọc lại tệp mỗi lượt | CH-S7-BE-02 |
+| 30/10/2026 | S7 | KẾT THÚC | — | Xong 9/9 task; backend 116 test, frontend 57 test xanh; 3 kịch bản chạy thật đạt | — |

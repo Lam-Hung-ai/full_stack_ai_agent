@@ -8,7 +8,10 @@ import { v7 as uuidv7 } from "uuid";
 import type { ApiError } from "@/lib/api";
 import { ASSISTANT_EVENT, ChatAgent, type AssistantEventValue } from "../agent/chat-agent";
 import { getHistory, stopAssistant } from "../api/conversations-api";
+import type { ChatFile } from "../api/files-api";
+import type { ComposerDraft } from "../components/chat-composer";
 import type { LiveTurn, RowView } from "../types/chat.types";
+import { attachedFiles, questionContent, withText } from "../utils/files";
 import { isActive, shownRows, toChatError, toRowView } from "../utils/history";
 import {
   type InteractionAnswer,
@@ -24,12 +27,17 @@ type TurnStart = Pick<LiveTurn, "kept" | "question" | "questionId"> & {
   continued?: RowView;
 };
 
-function questionRow(id: string, text: string, siblingIds: string[]): RowView {
+function questionRow(
+  id: string,
+  text: string,
+  siblingIds: string[],
+  files: readonly ChatFile[] = [],
+): RowView {
   return {
     id,
     role: "user",
     status: "completed",
-    content: [{ id, role: "user", content: text }],
+    content: [{ id, role: "user", content: questionContent(text, files) } as AGUIMessage],
     siblingIds,
   };
 }
@@ -177,16 +185,16 @@ export function useConversationChat(conversationId: string) {
   );
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async ({ text, files }: ComposerDraft) => {
       const trimmed = text.trim();
-      if (!trimmed) return;
+      if (!trimmed && files.length === 0) return;
       const id = uuidv7();
       await startTurn(
-        { kept: saved, question: questionRow(id, trimmed, [id]), questionId: id },
+        { kept: saved, question: questionRow(id, trimmed, [id], files), questionId: id },
         (agent) =>
           agent.sendMessage({
             parentMessageId: leafId,
-            message: { id, text: trimmed, fileIds: [] },
+            message: { id, text: trimmed, fileIds: files.map((file) => file.id) },
           }),
         [],
       );
@@ -200,14 +208,20 @@ export function useConversationChat(conversationId: string) {
       const index = saved.findIndex((row) => row.id === userMessageId);
       if (!trimmed || index === -1) return;
       const id = uuidv7();
+      // The new version keeps the files of the one it replaces.
+      const original = saved[index].content.find((message) => message.role === "user");
+      const files = attachedFiles(original);
+      const question: RowView = {
+        ...questionRow(id, trimmed, [...saved[index].siblingIds, id]),
+        content: [{ id, role: "user", content: withText(original, trimmed) } as AGUIMessage],
+      };
       await startTurn(
-        {
-          kept: saved.slice(0, index),
-          question: questionRow(id, trimmed, [...saved[index].siblingIds, id]),
-          questionId: id,
-        },
+        { kept: saved.slice(0, index), question, questionId: id },
         (agent) =>
-          agent.editMessage({ userMessageId, message: { id, text: trimmed, fileIds: [] } }),
+          agent.editMessage({
+            userMessageId,
+            message: { id, text: trimmed, fileIds: files.map((file) => file.id) },
+          }),
         [],
       );
     },

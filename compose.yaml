@@ -1,4 +1,4 @@
-# Local development services. RustFS (S7) joins later.
+# Local development services.
 # Start only what the machine lacks, e.g. `docker compose up -d postgres mailpit`.
 services:
   postgres:
@@ -23,6 +23,20 @@ services:
     ports:
       - "127.0.0.1:6379:6379"
 
+  # S3-compatible storage for chat files (S7). API on 9000, console on 9001;
+  # then `uv run storage setup` in backend/ creates the bucket and its CORS.
+  rustfs:
+    image: rustfs/rustfs:1.0.0-rc.5
+    environment:
+      RUSTFS_ACCESS_KEY: agentchat
+      RUSTFS_SECRET_KEY: agentchat-dev-secret
+    command: /data
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - rustfs-data:/data
+
   # Catches every letter the backend sends (S6); read them at http://localhost:8025.
   mailpit:
     image: axllent/mailpit:v1.27
@@ -32,3 +46,4 @@ services:
 
 volumes:
   postgres-data:
+  rustfs-data:

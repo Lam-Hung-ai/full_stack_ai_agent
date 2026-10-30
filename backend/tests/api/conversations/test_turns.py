@@ -172,7 +172,8 @@ async def test_input_validation(client, make_user, login, scripted_model):
     payload = body("x")
     payload["message"]["file_ids"] = [str(uuid4())]
     status, error = await send(client, conversation_id, headers, payload)
-    assert (status, error["error"]["code"]) == (400, "file_attachments_unavailable")
+    # An id that is not an upload of this user and workspace.
+    assert (status, error["error"]["code"]) == (422, "invalid_file")
 
 
 async def test_cannot_send_to_someone_elses_conversation(

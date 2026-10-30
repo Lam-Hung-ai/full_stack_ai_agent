@@ -31,12 +31,14 @@ dependencies = [
     "email-validator>=2.2",
     "uuid-utils>=0.11",
     "redis>=6.4",
+    "boto3>=1.43.98",
 ]
 
 [project.scripts]
 db = "app.tools.database:main"
 iam = "app.tools.iam:main"
 openapi = "app.tools.openapi:main"
+storage = "app.tools.storage:main"
 
 [build-system]
 requires = ["uv_build>=0.12.9,<0.13.0"]
@@ -47,6 +49,7 @@ module-name = "app"
 
 [dependency-groups]
 dev = [
+    "boto3-stubs[s3]~=1.43.98",
     "fakeredis>=2.31",
     "httpx>=0.28.1",
     "pyrefly>=1.2.0",

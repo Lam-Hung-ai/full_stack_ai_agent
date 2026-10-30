@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from typing import Annotated
 
 from fastapi import Depends
@@ -20,6 +20,9 @@ engine = create_async_engine(
     connect_args={"options": f"-csearch_path={SEARCH_PATH}"},
 )
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+#: Opens a session of its own, for work outliving the request (a turn's task).
+type SessionFactory = Callable[[], AsyncSession]
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:

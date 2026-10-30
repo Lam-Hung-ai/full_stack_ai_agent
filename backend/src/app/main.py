@@ -16,6 +16,7 @@ from app.modules.agent.runner import Runner
 from app.modules.auth.router import router as auth_router
 from app.modules.authorization.router import router as authorization_router
 from app.modules.conversations.router import router as conversations_router
+from app.modules.files.router import router as files_router
 from app.modules.folders.router import router as folders_router
 from app.modules.members.router import invitations_router
 from app.modules.members.router import router as members_router
@@ -68,6 +69,7 @@ api_router.include_router(users_router)
 api_router.include_router(workspaces_router)
 api_router.include_router(conversations_router)
 api_router.include_router(folders_router)
+api_router.include_router(files_router)
 api_router.include_router(organizations_router)
 api_router.include_router(members_router)
 api_router.include_router(invitations_router)
