@@ -136,3 +136,4 @@ Loại: `BẮT ĐẦU`, `KẾT THÚC`, `LỖI`, `SỬA`, `THAY ĐỔI`, `QUYẾT
 | 30/10/2026 | Sau S9 | THAY ĐỔI | TD-016 | Xoá chat dừng lượt; copy dở trả 404; 429/422 mới; `uv run storage cleanup`; `van-hanh.md`, API §2 | — |
 | 30/10/2026 | Sau S9 | RỦI RO | RR-05, RR-11, RR-12, RR-17, RR-18 | Bốn mục đã xử lý; RR-18 còn copy trong request và chưa purge dòng | — |
 | 30/10/2026 | Sau S9 | KẾT THÚC | — | Backend 135 test, frontend 61 test xanh; lint, typecheck, build sạch; kiểm thử thật composer, stop, huỷ lượt chờ, cleanup | — |
+| 30/10/2026 | Sau S9 | PHÁT HÀNH | — | Commit sửa lỗi rà soát trên `chat` | `9151e03` |
