@@ -1,3 +1,4 @@
 export { ApiError } from "./api-error";
 export { apiClient, apiUrl, authorizedFetch, refreshAccessToken, send } from "./client";
 export type { ApiClientOptions } from "./client";
+export { allPages, MAX_PAGE_SIZE, type Page } from "./pages";

@@ -1,12 +1,15 @@
 from collections.abc import Collection
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import RowMapping, insert, select
+from sqlalchemy import RowMapping, delete, exists, insert, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.database.generated_tables import t_conversation_copy_files as copy_files
 from app.database.generated_tables import t_message_files as message_files
 from app.database.generated_tables import t_messages as messages
+from app.database.generated_tables import t_share_snapshot_files as snapshot_files
 from app.database.generated_tables import t_stored_files as stored_files
 
 
@@ -63,3 +66,32 @@ class FileRepository:
                     [{"message_id": message_id, "stored_file_id": f} for f in file_ids]
                 )
             )
+
+    async def unattached(
+        self, *, created_before: datetime, limit: int
+    ) -> list[RowMapping]:
+        """Files nothing refers to: no message, snapshot or copy (RR-17)."""
+        statement = (
+            select(stored_files)
+            .where(
+                stored_files.c.deleted_at.is_(None),
+                stored_files.c.created_at < created_before,
+                ~exists().where(message_files.c.stored_file_id == stored_files.c.id),
+                ~exists().where(snapshot_files.c.stored_file_id == stored_files.c.id),
+                ~exists().where(
+                    or_(
+                        copy_files.c.source_stored_file_id == stored_files.c.id,
+                        copy_files.c.target_stored_file_id == stored_files.c.id,
+                    )
+                ),
+            )
+            .order_by(stored_files.c.created_at)
+            .limit(limit)
+        )
+        return list((await self._session.execute(statement)).mappings())
+
+    async def remove(self, *, file_id: UUID) -> None:
+        """The trigger refuses while anything still refers to the file."""
+        await self._session.execute(
+            delete(stored_files).where(stored_files.c.id == file_id)
+        )

@@ -177,11 +177,14 @@ function CreateAccount({ token, invitation }: { token: string; invitation: Invit
   const failure = registerMutation.error ?? loginMutation.error;
 
   const onSubmit = form.handleSubmit(async (values) => {
-    const joined = await registerMutation.mutateAsync({
-      token,
-      name: values.name,
-      password: values.password,
-    });
+    // Once the account exists (the invitation is used), a retry only logs in.
+    const joined =
+      registerMutation.data ??
+      (await registerMutation.mutateAsync({
+        token,
+        name: values.name,
+        password: values.password,
+      }));
     await loginMutation.mutateAsync({
       email: invitation.email,
       password: values.password,

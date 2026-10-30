@@ -300,3 +300,109 @@ async def test_an_edited_question_names_its_files_again(
     )
     # The same upload, linked to both versions of the question.
     assert rows == [{"n": 2}]
+
+
+async def test_complete_stores_the_checked_bytes_and_never_overwrites(
+    client, make_user, login, storage
+):
+    user = make_user("an@example.com")
+    headers = await login(user)
+    workspace = user.personal_workspace_id
+    declared = {
+        "original_name": "a.png",
+        "content_type": "image/png",
+        "size_bytes": len(PNG),
+    }
+    ticket = (
+        await client.post(
+            f"/api/v1/workspaces/{workspace}/uploads", json=declared, headers=headers
+        )
+    ).json()
+    url = ticket["upload"]["url"]
+    complete = f"/api/v1/workspaces/{workspace}/uploads/{ticket['file_id']}/complete"
+    final = f"private/workspaces/{workspace}/files/{ticket['file_id']}"
+    storage.put(url, PNG, "image/png")
+    assert (
+        await client.post(complete, json=declared, headers=headers)
+    ).status_code == 201
+
+    # The same presigned URL again, then `complete` again: refused, and the
+    # recorded object keeps the bytes its checksum describes.
+    storage.put(url, PNG[:-1] + b"\x01", "image/png")
+    again = await client.post(complete, json=declared, headers=headers)
+    assert (again.status_code, again.json()["error"]["code"]) == (
+        409,
+        "upload_completed",
+    )
+    assert storage.keys() == {final}
+    assert (
+        next(body for (_, key), (body, _) in storage.objects.items() if key == final)
+        == PNG
+    )
+
+
+async def test_unattached_files_are_cleaned_up(
+    client, db, make_user, login, storage, scripted_model
+):
+    from datetime import timedelta
+
+    from app.database.session import SessionLocal
+    from app.modules.files.cleanup import purge_unattached
+
+    scripted_model("Đã xem")
+    user = make_user("an@example.com")
+    headers = await login(user)
+    workspace = user.personal_workspace_id
+    kept = (
+        await upload(client, storage, headers, workspace, "a.png", "image/png", PNG)
+    ).json()
+    await upload(client, storage, headers, workspace, "b.png", "image/png", PNG)
+    conversation_id = await new_conversation(client, user, headers)
+    payload = body("Xem")
+    payload["message"]["file_ids"] = [kept["id"]]
+    status, _ = await send(client, conversation_id, headers, payload)
+    assert status == 200
+
+    removed = await purge_unattached(
+        session_factory=SessionLocal, storage=storage, older_than=timedelta(0)
+    )
+    assert removed == 1
+    assert {str(row["id"]) for row in db("SELECT id FROM chat_app.stored_files")} == {
+        kept["id"]
+    }
+    assert storage.keys() == {f"private/workspaces/{workspace}/files/{kept['id']}"}
+
+
+async def test_old_files_beyond_the_turn_budget_are_named_not_sent(
+    client, make_user, login, storage, scripted_model, monkeypatch
+):
+    from app.modules.files import service
+
+    model = scripted_model("Một", "Hai")
+    monkeypatch.setattr(service, "MAX_TURN_FILE_BYTES", len(PNG) + 10)
+    user = make_user("an@example.com")
+    headers = await login(user)
+    workspace = user.personal_workspace_id
+    first = (
+        await upload(client, storage, headers, workspace, "cũ.png", "image/png", PNG)
+    ).json()
+    second = (
+        await upload(client, storage, headers, workspace, "mới.png", "image/png", PNG)
+    ).json()
+    conversation_id = await new_conversation(client, user, headers)
+    payload = body("Ảnh một")
+    payload["message"]["file_ids"] = [first["id"]]
+    await send(client, conversation_id, headers, payload)
+    answer = (await history(client, conversation_id, headers))["data"][-1]["id"]
+    payload = body("Ảnh hai", answer)
+    payload["message"]["file_ids"] = [second["id"]]
+    await send(client, conversation_id, headers, payload)
+
+    prompt = model.prompts[1]
+    old_question = next(
+        m for m in prompt if isinstance(m.content, list) and "Ảnh một" in str(m.content)
+    )
+    texts = [b.get("text", "") for b in old_question.content if isinstance(b, dict)]
+    assert any("cũ.png" in text and "không gửi lại" in text for text in texts)
+    new_blocks = prompt[-1].content
+    assert any(b.get("type") == "image_url" for b in new_blocks if isinstance(b, dict))

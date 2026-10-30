@@ -22,6 +22,14 @@ uv run iam sync-permissions  # danh mục quyền; owner nhận quyền mới (Q
 uv run storage setup         # bucket, CORS, hết hạn object tạm (lần đầu mỗi bucket)
 ```
 
+Chạy hằng ngày (cron hoặc job lịch của nền tảng), mỗi lúc chỉ một bản:
+
+```bash
+cd backend && uv run storage cleanup
+```
+
+Lệnh xoá tệp đã tải lên nhưng không gắn vào câu hỏi nào sau 1 ngày (dòng `stored_files` trước, object sau), chuyển job copy bỏ dở quá 1 ngày sang `cancelled` và xoá byte của mọi bản copy đã huỷ; dòng của bản copy giữ lại vì message không bao giờ bị xoá (QD-30, RR-17, RR-18).
+
 ## 3. Proxy trước backend (RR-13)
 
 Stream SSE phải đi qua không bị gom. Backend đã gửi `Cache-Control: no-cache` và `X-Accel-Buffering: no`; proxy vẫn cần tắt buffer và nén cho đường dẫn API, và đặt timeout đọc dài hơn một lượt:
@@ -42,10 +50,21 @@ location /api/v1/ {
 
 Frontend Next đã tắt nén (L-05).
 
+Rate limit đếm theo IP client mà uvicorn đưa vào `request.client`. Sau proxy, chạy uvicorn với địa chỉ của proxy (nginx, hoặc server Next khi rewrite `/api/v1`) để nó lấy IP thật từ `X-Forwarded-For`; không đặt `*` vì client sẽ tự khai IP:
+
+```bash
+uv run uvicorn app.main:app --proxy-headers --forwarded-allow-ips=10.0.0.5
+```
+
 ## 4. Sức chứa và backpressure
 
 - Mỗi process chạy tối đa `MAX_CONCURRENT_TURNS` lượt cùng lúc; tối đa `MAX_QUEUED_TURNS` lượt chờ slot. Quá đó, gửi/sửa/tạo lại/trả lời nhận 503 `server_busy` kèm `Retry-After: 5`, không ghi gì vào database (QD-29).
-- Rate limit `/auth`, `/invitations`, `/shares` theo IP, cửa sổ một phút, đếm chung qua Redis; Redis lỗi thì mỗi process tự đếm trong bộ nhớ.
+- Rate limit đếm chung qua Redis (Redis lỗi thì mỗi process tự đếm trong bộ nhớ), cửa sổ cố định (QD-30):
+  - `auth`: đăng ký, đăng nhập, xác minh email, đặt lại mật khẩu, nhận lời mời; `AUTH_RATE_LIMIT`/phút mỗi IP.
+  - `session`: refresh, session, đăng xuất; 300/phút mỗi IP.
+  - `shares`: xem share và tệp của share; 300/phút mỗi IP. Copy share dùng bucket `share-copy` theo `AUTH_RATE_LIMIT`.
+  - Gửi lời mời: 50 thư/giờ mỗi người gửi, bất kể IP.
+- Mỗi lượt gửi cho model tối đa 20 MB tệp đính kèm, ưu tiên câu hỏi mới nhất; tệp cũ hơn chỉ được nêu tên.
 
 ## 5. Log và trace
 

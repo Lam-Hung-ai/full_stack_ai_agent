@@ -16,12 +16,16 @@ from app.modules.shares.schemas import (
 )
 from app.modules.shares.service import ShareService
 
+SHARE_RATE_LIMIT = 300
+
 router = APIRouter(tags=["Shares"])
 #: Reached with a link token, signed in or not.
 links_router = APIRouter(
     prefix="/shares/{token}",
     tags=["Shares"],
-    dependencies=[Depends(rate_limit("shares"))],
+    # One request per image of a shared chat: wide. A link token cannot be
+    # guessed (QD-28); the limit only brakes scraping.
+    dependencies=[Depends(rate_limit("shares", SHARE_RATE_LIMIT))],
 )
 
 
@@ -75,7 +79,11 @@ async def share_file(
     )
 
 
-@links_router.post("/copy", response_model=CopyResponse)
+@links_router.post(
+    "/copy",
+    response_model=CopyResponse,
+    dependencies=[Depends(rate_limit("share-copy"))],
+)
 async def copy_share(
     token: str,
     data: CopyRequest,

@@ -355,3 +355,58 @@ async def test_a_failed_pause_write_rolls_the_checkpoint_back(
     assert events[-1]["code"] == "persist_failed"
     assert assistant["status"] == "running"  # no recovery (RR-01)
     assert checkpoints(db, assistant["id"]) == 0
+
+
+async def test_stop_racing_a_resume_leaves_the_resumed_turn_alone(
+    client, db, make_user, login, scripted_model, monkeypatch
+):
+    """Stop read the turn waiting; a resume claimed it before stop's cancel."""
+    from app.modules.agent.runner import Runner
+
+    scripted_model(ASK_ROOM)
+    user = make_user("an@example.com")
+    headers = await login(user)
+    conversation_id, assistant, _ = await paused_turn(client, user, headers)
+    calls = []
+
+    async def racing_stop(self, assistant_id, *, timeout):
+        calls.append(assistant_id)
+        if len(calls) == 1:
+            db(
+                "UPDATE chat_app.messages SET status = 'running' WHERE id = %s",
+                (assistant["id"],),
+            )
+            return "orphan"
+        return "local"
+
+    monkeypatch.setattr(Runner, "stop", racing_stop)
+    response = await client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/{assistant['id']}/stop",
+        headers=headers,
+    )
+    # The cancel matched nothing and rolled back; the running process was
+    # asked to stop instead.
+    assert response.json()["status"] == "running"
+    assert len(calls) == 2
+    assert checkpoints(db, assistant["id"]) > 0
+
+
+async def test_deleting_a_chat_cancels_its_waiting_turn(
+    client, db, make_user, login, scripted_model
+):
+    scripted_model(ASK_ROOM)
+    user = make_user("an@example.com")
+    headers = await login(user)
+    conversation_id, assistant, _ = await paused_turn(client, user, headers)
+
+    response = await client.delete(
+        f"/api/v1/conversations/{conversation_id}", headers=headers
+    )
+    assert response.status_code == 204
+    (row,) = db(
+        "SELECT status, metadata FROM chat_app.messages WHERE id = %s",
+        (assistant["id"],),
+    )
+    assert row["status"] == "cancelled"
+    assert "pending_action" not in row["metadata"]
+    assert checkpoints(db, assistant["id"]) == 0

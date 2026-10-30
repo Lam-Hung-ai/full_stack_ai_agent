@@ -19,13 +19,17 @@ function filterQuery(filter: ConversationFilter) {
   }
 }
 
+/** Chats shown per sidebar page; more load on demand. */
+export const CONVERSATION_PAGE_SIZE = 50;
+
 export function listConversations(
   workspaceId: string,
   filter: ConversationFilter,
+  page: number,
   signal?: AbortSignal,
 ) {
   return apiClient<ConversationList>(`/api/v1/workspaces/${workspaceId}/conversations`, {
-    query: { page: 1, page_size: 100, ...filterQuery(filter) },
+    query: { page, page_size: CONVERSATION_PAGE_SIZE, ...filterQuery(filter) },
     signal,
   });
 }

@@ -8,6 +8,8 @@ copied server-side in the request under a lease (no worker yet, QD-15,
 QD-28); a request that loses the lease cannot record a copy.
 """
 
+import logging
+from datetime import timedelta
 from uuid import UUID
 
 from sqlalchemy import RowMapping
@@ -18,6 +20,8 @@ from app.common.dependencies.auth import Principal
 from app.common.exceptions.handlers import fail
 from app.common.storage.client import ObjectStorage
 from app.common.storage.exceptions import ObjectStorageError
+from app.config.security import now
+from app.database.session import SessionFactory
 from app.modules.authorization.service import AuthorizationService
 from app.modules.conversations.repository import (
     ConversationRepository,
@@ -31,7 +35,10 @@ from app.modules.shares.service import ShareService, remap_bundle
 from app.modules.workspaces.repository import WorkspaceRepository
 from app.modules.workspaces.service import WorkspaceService
 
+logger = logging.getLogger(__name__)
+
 LEASE_SECONDS = 120
+PURGE_BATCH = 100
 
 
 class CopyService:
@@ -162,6 +169,8 @@ class CopyService:
             fail(409, "copy_in_progress")
         await self._session.commit()
         pending = await self._shares.pending_copies(job_id=job["id"])
+        # No transaction stays open across storage calls (AGENTS §19).
+        await self._session.commit()
         try:
             for item in pending:
                 await self._storage.copy_object(
@@ -210,3 +219,36 @@ class CopyService:
         if row is None:
             fail(404, "share_not_found")
         return row["id"]
+
+
+async def purge_abandoned_copies(
+    *, session_factory: SessionFactory, storage: ObjectStorage, older_than: timedelta
+) -> int:
+    """Give up on copies left unfinished for `older_than` and delete the
+    bytes of every cancelled copy; returns how many jobs were purged (RR-18).
+
+    A cancelled copy never becomes readable, but its rows stay: messages are
+    never deleted and no purge is designed yet (database phase 1 §9).
+    """
+    async with session_factory() as session:
+        await ShareRepository(session).abandon_stale(updated_before=now() - older_than)
+        await session.commit()
+    purged = 0
+    while True:
+        async with session_factory() as session:
+            shares = ShareRepository(session)
+            jobs = await shares.unpurged_cancelled(limit=PURGE_BATCH)
+            if not jobs:
+                return purged
+            for job_id in jobs:
+                try:
+                    for target in await shares.copy_targets(job_id=job_id):
+                        await storage.delete_object(
+                            bucket=target["bucket"], object_key=target["object_key"]
+                        )
+                except ObjectStorageError:
+                    logger.warning("Could not purge copy job %s", job_id)
+                    return purged
+                await shares.mark_purged(job_id=job_id)
+                await session.commit()
+                purged += 1

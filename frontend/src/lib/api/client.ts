@@ -30,26 +30,31 @@ export function apiUrl(path: string, query?: Record<string, QueryValue>): string
   return search ? `${url}?${search}` : url;
 }
 
-let refreshing: Promise<boolean> | null = null;
+/** `expired`: the server refused the refresh cookie. `unavailable`: no answer
+ * (network, proxy 5xx during a deploy); the session may still be fine. */
+type RefreshResult = "refreshed" | "expired" | "unavailable";
+
+let refreshing: Promise<RefreshResult> | null = null;
 
 /**
  * Exchange the refresh cookie for a new access token. Concurrent 401s share
  * one call: two refreshes with the same cookie would look like token reuse to
  * the backend and revoke the whole session.
  */
-export function refreshAccessToken(): Promise<boolean> {
-  refreshing ??= (async () => {
+export function refreshAccessToken(): Promise<RefreshResult> {
+  refreshing ??= (async (): Promise<RefreshResult> => {
     try {
       const response = await fetch(apiUrl(`${AUTH_PREFIX}refresh`), {
         method: "POST",
         credentials: "include",
       });
-      if (!response.ok) return false;
+      if (response.status === 401 || response.status === 403) return "expired";
+      if (!response.ok) return "unavailable";
       const body = (await response.json()) as { access_token: string };
       setAccessToken(body.access_token);
-      return true;
+      return "refreshed";
     } catch {
-      return false;
+      return "unavailable";
     } finally {
       refreshing = null;
     }
@@ -76,10 +81,14 @@ export async function authorizedFetch(url: string, init: RequestInit = {}): Prom
   const hadToken = getAccessToken() !== null;
   let response = await fetch(url, withAuthorization(init));
   if (response.status === 401 && hadToken && !url.includes(AUTH_PREFIX)) {
-    if (await refreshAccessToken()) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed === "refreshed") {
       response = await fetch(url, withAuthorization(init));
-    } else {
+    } else if (refreshed === "expired") {
       notifySessionExpired();
+    } else {
+      // Fails like a lost connection: reads retry, the user stays signed in.
+      throw new TypeError("Could not refresh the session");
     }
   }
   return response;

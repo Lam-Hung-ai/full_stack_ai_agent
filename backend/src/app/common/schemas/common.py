@@ -4,8 +4,18 @@ from typing import Annotated
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, StringConstraints
 
+
+def _printable(value: str) -> str:
+    if any(ord(c) < 32 or ord(c) == 127 for c in value):
+        raise ValueError("Name must not contain control characters")
+    return value
+
+
+#: Names also go into letter subjects and bodies: no control characters.
 Name = Annotated[
-    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=200),
+    AfterValidator(_printable),
 ]
 
 

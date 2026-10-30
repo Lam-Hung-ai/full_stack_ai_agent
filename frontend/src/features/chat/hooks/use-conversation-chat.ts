@@ -75,6 +75,13 @@ export function useConversationChat(conversationId: string) {
   // Answers given so far when one pause asks several things at once.
   const [drafts, setDrafts] = useState<Record<string, InteractionAnswer>>({});
   const runErrorRef = useRef<ApiError | null>(null);
+  // Told once whether the server took the turn's question (an assistant row
+  // exists), so the composer clears only then.
+  const acceptRef = useRef<((accepted: boolean) => void) | null>(null);
+  const settleAccepted = useCallback((accepted: boolean) => {
+    acceptRef.current?.(accepted);
+    acceptRef.current = null;
+  }, []);
 
   const updateLive = useCallback((next: (current: LiveTurn | null) => LiveTurn | null) => {
     liveRef.current = next(liveRef.current);
@@ -107,6 +114,7 @@ export function useConversationChat(conversationId: string) {
           (current) =>
             current && { ...current, assistantId: value.assistantMessageId, status: value.status },
         );
+        settleAccepted(true);
       },
       onRunErrorEvent: ({ event }) => {
         runErrorRef.current = toChatError({
@@ -124,17 +132,26 @@ export function useConversationChat(conversationId: string) {
       agentRef.current = null;
       if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
     };
-  }, [conversationId, scheduleMessages, updateLive]);
+  }, [conversationId, scheduleMessages, settleAccepted, updateLive]);
 
   const saved = useMemo(() => history.data?.data.map(toRowView) ?? [], [history.data]);
   const rows = useMemo(() => shownRows(saved, live, liveMessages), [saved, live, liveMessages]);
   const leafId = history.data?.current_message_id ?? null;
 
   const startTurn = useCallback(
-    async (turn: TurnStart, execute: (agent: ChatAgent) => Promise<unknown>, seed: AGUIMessage[]) => {
+    async (
+      turn: TurnStart,
+      execute: (agent: ChatAgent) => Promise<unknown>,
+      seed: AGUIMessage[],
+      onAccepted?: (accepted: boolean) => void,
+    ) => {
       const agent = agentRef.current;
-      if (!agent || runningRef.current) return;
+      if (!agent || runningRef.current) {
+        onAccepted?.(false);
+        return;
+      }
       runningRef.current = true;
+      acceptRef.current = onAccepted ?? null;
       agent.setMessages(seed);
       setLiveMessages(seed);
       updateLive(() => ({
@@ -177,28 +194,35 @@ export function useConversationChat(conversationId: string) {
         }
         // Without an assistant the request was refused (409, network) and
         // nothing was saved.
+        settleAccepted(Boolean(assistantId));
         updateLive(() => null);
         await queryClient.invalidateQueries({ queryKey: ["workspaces"] });
       }
     },
-    [conversationId, queryClient, updateLive],
+    [conversationId, queryClient, settleAccepted, updateLive],
   );
 
+  /** Resolves once the server took the question (true) or refused it. */
   const sendMessage = useCallback(
-    async ({ text, files }: ComposerDraft) => {
-      const trimmed = text.trim();
-      if (!trimmed && files.length === 0) return;
-      const id = uuidv7();
-      await startTurn(
-        { kept: saved, question: questionRow(id, trimmed, [id], files), questionId: id },
-        (agent) =>
-          agent.sendMessage({
-            parentMessageId: leafId,
-            message: { id, text: trimmed, fileIds: files.map((file) => file.id) },
-          }),
-        [],
-      );
-    },
+    ({ text, files }: ComposerDraft) =>
+      new Promise<boolean>((resolve) => {
+        const trimmed = text.trim();
+        if (!trimmed && files.length === 0) {
+          resolve(false);
+          return;
+        }
+        const id = uuidv7();
+        void startTurn(
+          { kept: saved, question: questionRow(id, trimmed, [id], files), questionId: id },
+          (agent) =>
+            agent.sendMessage({
+              parentMessageId: leafId,
+              message: { id, text: trimmed, fileIds: files.map((file) => file.id) },
+            }),
+          [],
+          resolve,
+        );
+      }),
     [leafId, saved, startTurn],
   );
 

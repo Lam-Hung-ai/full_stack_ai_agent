@@ -402,17 +402,49 @@ class TurnService:
             user=user, conversation_id=conversation_id
         )
         target = await self._target(conversation_id, message_id, "assistant")
-        if target["status"] in ACTIVE_STATUSES:
+        target = await self._stop_target(conversation_id, target)
+        return StopResponse(id=message_id, status=target["status"])
+
+    async def delete(self, *, user: Principal, conversation_id: UUID) -> None:
+        """Delete a chat; a turn still running or waiting in it is stopped
+        first, since nobody could open the chat to stop it afterwards."""
+        conversations = ConversationService(self._session)
+        await conversations.require_owned(user=user, conversation_id=conversation_id)
+        await self._stop_active(conversation_id)
+        await conversations.delete(user=user, conversation_id=conversation_id)
+        # A turn started between the stop and the delete.
+        await self._stop_active(conversation_id)
+
+    async def _stop_active(self, conversation_id: UUID) -> None:
+        active = await self._messages.active_assistant(conversation_id=conversation_id)
+        if active is not None:
+            target = await self._target(conversation_id, active["id"], "assistant")
+            await self._stop_target(conversation_id, target)
+
+    async def _stop_target(
+        self, conversation_id: UUID, target: RowMapping
+    ) -> RowMapping:
+        """Stop an assistant row; returns it as saved afterwards."""
+        message_id = target["id"]
+        # Twice at most: a resume may claim the turn between the read and the
+        # cancel, and then a process runs it after all.
+        for _ in range(2):
+            if target["status"] not in ACTIVE_STATUSES:
+                break
             where = await self._runner.stop(message_id, timeout=STOP_WAIT_SECONDS)
             if where == "orphan":
                 # No process runs it: it waits for the user, or a restart
                 # orphaned it (RR-01, RR-10). Cancel it in place.
-                await self._cancel_in_place(target)
-                await self._session.commit()
+                if await self._cancel_in_place(target):
+                    await self._session.commit()
+                else:
+                    await self._session.rollback()
             elif where == "remote":
                 await self._await_end(conversation_id, message_id)
             target = await self._target(conversation_id, message_id, "assistant")
-        return StopResponse(id=message_id, status=target["status"])
+            if where != "orphan":
+                break
+        return target
 
     async def stop_departed(self, *, workspace_id: UUID, user_id: UUID) -> None:
         """The user left the workspace's organization (O07): end their
@@ -422,8 +454,9 @@ class TurnService:
             workspace_id=workspace_id, owner_user_id=user_id
         ):
             where = await self._runner.stop(target["id"], timeout=STOP_WAIT_SECONDS)
-            if where == "orphan":
-                await self._cancel_in_place(target)
+            if where == "orphan" and not await self._cancel_in_place(target):
+                # Claimed meanwhile: stop the process that runs it now.
+                await self._runner.stop(target["id"], timeout=STOP_WAIT_SECONDS)
         await self._session.commit()
 
     def _ensure_room(self) -> None:
@@ -440,7 +473,9 @@ class TurnService:
                 return
             await asyncio.sleep(0.1)
 
-    async def _cancel_in_place(self, target: RowMapping) -> None:
+    async def _cancel_in_place(self, target: RowMapping) -> bool:
+        """Cancel the row as it was read; False when it changed since (a
+        resume claimed it), in which case the caller rolls back."""
         pending = target["metadata"].get("pending_action")
         content = metadata = None
         if pending:
@@ -453,11 +488,12 @@ class TurnService:
                 content = interactions.resolve_activities(
                     target["content"], pending, status="cancelled"
                 )
-        await self._messages.set_status(
+        return await self._messages.set_status(
             message_id=target["id"],
             status="cancelled",
             content=content,
             metadata=metadata,
+            expected=frozenset({target["status"]}),
         )
 
     async def _open(
@@ -734,12 +770,17 @@ class TurnService:
                 content = [*content, *activities]
                 metadata["pending_action"] = pending
                 events = interactions.activity_events(activities)
-            await MessageRepository(session).set_status(
+            saved = await MessageRepository(session).set_status(
                 message_id=assistant_id,
                 status=status,
                 content=content,
                 metadata=metadata,
             )
+            if not saved:
+                # Cancelled in place meanwhile: that outcome stands, and
+                # nothing of this run (a new pause) may outlive it.
+                await session.rollback()
+                return []
             await session.commit()
         return events
 

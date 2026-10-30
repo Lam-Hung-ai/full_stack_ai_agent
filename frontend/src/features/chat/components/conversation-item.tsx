@@ -14,6 +14,7 @@ import {
   Share2Icon,
   Trash2Icon,
 } from "lucide-react";
+import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { NameDialog } from "@/components/shared/name-dialog";
 import { Button } from "@/components/ui/button";
@@ -53,10 +54,14 @@ export function ConversationItem({
   const [dialog, setDialog] = useState<"rename" | "share" | "delete" | null>(null);
   const archived = conversation.archived_at !== null;
 
+  // Menu actions close at once: a failure is reported by a toast.
   const change = (changes: ConversationUpdate, leave = false) =>
     update.mutate(
       { id: conversation.id, changes },
-      { onSuccess: () => leave && active && router.push("/") },
+      {
+        onSuccess: () => leave && active && router.push("/"),
+        onError: () => toast.error("Không cập nhật được cuộc trò chuyện. Vui lòng thử lại."),
+      },
     );
 
   return (
@@ -178,7 +183,10 @@ export function ConversationItem({
           description={`"${conversation.title}" sẽ bị xoá khỏi danh sách.`}
           onClose={() => setDialog(null)}
           onConfirm={() =>
-            remove.mutate(conversation.id, { onSuccess: () => active && router.push("/") })
+            remove.mutate(conversation.id, {
+              onSuccess: () => active && router.push("/"),
+              onError: () => toast.error("Không xoá được cuộc trò chuyện. Vui lòng thử lại."),
+            })
           }
           title="Xoá cuộc trò chuyện?"
         />

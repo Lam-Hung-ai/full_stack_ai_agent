@@ -131,6 +131,24 @@ describe("apiClient with a session", () => {
     unsubscribe();
   });
 
+  it("keeps the session when the refresh gets no answer", async () => {
+    setAccessToken("old");
+    const expired = vi.fn();
+    const unsubscribe = onSessionExpired(expired);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        url.endsWith("/api/v1/auth/refresh")
+          ? new Response("Bad gateway", { status: 502 })
+          : Response.json({ error: { code: "x" } }, { status: 401 }),
+      ),
+    );
+    await expect(apiClient("/api/v1/a")).rejects.toMatchObject({ status: 0, code: "network_error" });
+    expect(expired).not.toHaveBeenCalled();
+    expect(getAccessToken()).toBe("old");
+    unsubscribe();
+  });
+
   it("does not refresh for auth endpoints or anonymous requests", async () => {
     const fetchMock = vi.fn(async () =>
       Response.json({ error: { code: "invalid_credentials" } }, { status: 401 }),

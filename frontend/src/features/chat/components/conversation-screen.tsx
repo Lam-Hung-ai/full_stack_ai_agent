@@ -78,7 +78,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
       <ChatComposer
         disabled={composerLocked}
         onStop={chat.canStop ? () => void stop() : undefined}
-        onSubmit={(draft) => void sendMessage(draft)}
+        onSubmit={sendMessage}
         status={chat.status}
         workspaceId={conversation.data?.workspace_id}
       />

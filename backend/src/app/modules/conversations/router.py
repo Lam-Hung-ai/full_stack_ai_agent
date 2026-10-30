@@ -102,9 +102,9 @@ async def update_conversation(
     "/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT
 )
 async def delete_conversation(
-    conversation_id: UUID, user: CurrentUser, session: SessionDep
+    conversation_id: UUID, user: CurrentUser, session: SessionDep, runner: RunnerDep
 ) -> None:
-    await ConversationService(session).delete(
+    await TurnService(session, runner=runner, session_factory=SessionLocal).delete(
         user=user, conversation_id=conversation_id
     )
 

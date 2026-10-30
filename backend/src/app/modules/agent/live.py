@@ -142,6 +142,13 @@ class LiveStore:
             for entry_id, fields in entries
         ]
 
+    async def reset(self, assistant_id: UUID) -> None:
+        """Forget an earlier run of this assistant (a pause before a resume):
+        its ending must not be replayed as the new run's."""
+        await self.redis.delete(
+            _key(assistant_id, "events"), _key(assistant_id, "view")
+        )
+
     async def end(self, assistant_id: UUID) -> None:
         async with self.redis.pipeline(transaction=False) as pipe:
             for part in ("events", "view"):

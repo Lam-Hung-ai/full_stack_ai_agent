@@ -5,7 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, status
 
 from app.common.dependencies.auth import CurrentUser
 from app.common.dependencies.organization import CurrentOrganization
-from app.common.dependencies.rate_limit import rate_limit
+from app.common.dependencies.rate_limit import rate_limit, user_rate_limit
 from app.common.email import MailerDep, deliver
 from app.common.schemas.pagination import PageParams, page_params
 from app.database.session import SessionDep
@@ -23,6 +23,8 @@ from app.modules.members.schemas import (
     MemberUpdate,
 )
 from app.modules.members.service import MemberService
+
+INVITATIONS_PER_HOUR = 50
 
 router = APIRouter(prefix="/organizations/{organization_id}", tags=["Members"])
 #: Token endpoints: whoever holds an invitation link, signed in or not.
@@ -84,6 +86,12 @@ async def list_invitations(
     "/invitations",
     status_code=status.HTTP_201_CREATED,
     response_model=InvitationResponse,
+    # Each invitation is a letter from our address: bounded per sender.
+    dependencies=[
+        Depends(
+            user_rate_limit("invitation-letters", INVITATIONS_PER_HOUR, window=3600)
+        )
+    ],
 )
 async def invite(
     data: InvitationCreate,

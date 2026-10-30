@@ -16,14 +16,16 @@ export function NewChatScreen() {
   const create = useCreateConversation(workspace?.id);
   const setPending = usePendingMessageStore((state) => state.setPending);
 
-  const start = (draft: ComposerDraft) => {
-    if (create.isPending) return;
-    create.mutate(undefined, {
-      onSuccess: (conversation) => {
-        setPending(conversation.id, draft);
-        router.push(`/c/${conversation.id}`);
-      },
-    });
+  const start = async (draft: ComposerDraft) => {
+    if (create.isPending) return false;
+    try {
+      const conversation = await create.mutateAsync();
+      setPending(conversation.id, draft);
+      router.push(`/c/${conversation.id}`);
+      return true;
+    } catch {
+      return false; // shown by create.isError; the draft stays
+    }
   };
 
   return (

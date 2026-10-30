@@ -1,4 +1,4 @@
-import { apiClient } from "@/lib/api";
+import { allPages, apiClient, MAX_PAGE_SIZE } from "@/lib/api";
 import type {
   Invitation,
   InvitationPreview,
@@ -31,11 +31,12 @@ export function leaveOrganization(organizationId: string) {
 }
 
 export function getMembers(organizationId: string, signal?: AbortSignal) {
-  // One page holds every member of the organizations this screen serves.
-  return apiClient<MemberList>(`${base(organizationId)}/members`, {
-    query: { page_size: 100 },
-    signal,
-  });
+  return allPages((page) =>
+    apiClient<MemberList>(`${base(organizationId)}/members`, {
+      query: { page, page_size: MAX_PAGE_SIZE },
+      signal,
+    }),
+  );
 }
 
 export function updateMemberRoles(organizationId: string, memberId: string, roleIds: string[]) {

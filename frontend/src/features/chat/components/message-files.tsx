@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { FileIcon } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FileLink, getFileLink } from "../api/files-api";
@@ -53,26 +54,45 @@ function linkQuery(source: FileLinkSource, fileId: string) {
   };
 }
 
+/** Opens a file with a link fresh enough to work (a shown one may be old). */
+function useOpenFile(source: FileLinkSource, file: AttachedFile) {
+  const queryClient = useQueryClient();
+  const [failed, setFailed] = useState(false);
+  const open = async () => {
+    setFailed(false);
+    try {
+      const link = await queryClient.fetchQuery(linkQuery(source, file.id));
+      // A new tab, never as the app's origin.
+      window.open(link.url, "_blank", "noopener,noreferrer");
+    } catch {
+      setFailed(true);
+    }
+  };
+  return { open, failed };
+}
+
 function FileImage({ source, file }: { source: FileLinkSource; file: AttachedFile }) {
-  const link = useQuery(linkQuery(source, file.id));
+  // Refreshed before the signed link expires while the chat stays open.
+  const link = useQuery({ ...linkQuery(source, file.id), refetchInterval: LINK_STALE_TIME });
+  const { open, failed } = useOpenFile(source, file);
   if (!link.data) {
-    return <div aria-busy className="size-32 animate-pulse rounded-md bg-muted" />;
+    return link.isError ? (
+      <FileButton file={file} source={source} />
+    ) : (
+      <div aria-busy className="size-32 animate-pulse rounded-md bg-muted" />
+    );
   }
   return (
-    <a href={link.data.url} rel="noopener noreferrer" target="_blank">
+    <button className="flex flex-col items-end gap-1" onClick={() => void open()} type="button">
       {/* eslint-disable-next-line @next/next/no-img-element -- a presigned URL, not a static asset */}
       <img alt={file.name} className="max-h-48 max-w-64 rounded-md border object-contain" src={link.data.url} />
-    </a>
+      {failed && <OpenFailed />}
+    </button>
   );
 }
 
 function FileButton({ source, file }: { source: FileLinkSource; file: AttachedFile }) {
-  const queryClient = useQueryClient();
-  const open = async () => {
-    // A fresh link on demand; opened in a new tab, never as the app's origin.
-    const link = await queryClient.fetchQuery(linkQuery(source, file.id));
-    window.open(link.url, "_blank", "noopener,noreferrer");
-  };
+  const { open, failed } = useOpenFile(source, file);
   return (
     <button
       className="flex max-w-64 items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-left text-sm hover:bg-muted"
@@ -83,7 +103,12 @@ function FileButton({ source, file }: { source: FileLinkSource; file: AttachedFi
       <span className="min-w-0">
         <span className="block truncate">{file.name}</span>
         <span className="text-muted-foreground text-xs">{formatBytes(file.sizeBytes)}</span>
+        {failed && <OpenFailed />}
       </span>
     </button>
   );
+}
+
+function OpenFailed() {
+  return <span className="block text-destructive text-xs">Không mở được tệp, thử lại sau.</span>;
 }

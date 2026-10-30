@@ -238,3 +238,86 @@ async def test_shared_files_follow_the_link(
     assert ok.status_code == 200
     other = await client.get(f"/api/v1/shares/{token}/files/{loose['id']}")
     assert other.status_code == 404
+
+
+async def test_unfinished_copy_stays_hidden_and_is_purged(
+    client, db, make_user, login, storage, scripted_model
+):
+    from datetime import timedelta
+
+    from app.common.storage.exceptions import ObjectStorageError
+    from app.database.session import SessionLocal
+    from app.modules.shares.copies import purge_abandoned_copies
+
+    scripted_model("Ảnh đỏ")
+    owner = make_user("an@example.com")
+    reader = make_user("binh@example.com")
+    headers = await login(owner)
+    image = (
+        await upload(
+            client,
+            storage,
+            headers,
+            owner.personal_workspace_id,
+            "a.png",
+            "image/png",
+            PNG,
+        )
+    ).json()
+    conversation_id = await new_conversation(client, owner, headers)
+    payload = body("Ảnh gì?")
+    payload["message"]["file_ids"] = [image["id"]]
+    await send(client, conversation_id, headers, payload)
+    token = token_of((await share(client, conversation_id, headers))["url"])
+    reader_headers = await login(reader)
+
+    async def broken_copy(**_):
+        raise ObjectStorageError("down")
+
+    copy_object = storage.copy_object
+    storage.copy_object = broken_copy
+    failed = await client.post(
+        f"/api/v1/shares/{token}/copy",
+        json={"client_request_id": "r1"},
+        headers=reader_headers,
+    )
+    assert failed.status_code == 503
+    (job,) = db(
+        "SELECT status, target_conversation_id FROM chat_app.conversation_copy_jobs"
+    )
+    assert job["status"] == "failed"
+    target = job["target_conversation_id"]
+
+    # Not in the sidebar, not openable, not continuable.
+    listing = await client.get(
+        f"/api/v1/workspaces/{reader.personal_workspace_id}/conversations",
+        headers=reader_headers,
+    )
+    assert all(row["id"] != str(target) for row in listing.json()["data"])
+    opened = await client.get(f"/api/v1/conversations/{target}", headers=reader_headers)
+    assert opened.status_code == 404
+
+    storage.copy_object = copy_object
+    objects = set(storage.keys())
+    # Bytes a copy attempt managed to write before it failed.
+    (written,) = db(
+        "SELECT f.bucket, f.object_key FROM chat_app.conversation_copy_files c "
+        "JOIN chat_app.stored_files f ON f.id = c.target_stored_file_id"
+    )
+    await storage.put_object(
+        bucket=written["bucket"],
+        object_key=written["object_key"],
+        content_type="image/png",
+        body=PNG,
+    )
+    purged = await purge_abandoned_copies(
+        session_factory=SessionLocal, storage=storage, older_than=timedelta(0)
+    )
+    assert purged == 1
+    (job,) = db("SELECT status, last_error FROM chat_app.conversation_copy_jobs")
+    assert (job["status"], job["last_error"]) == ("cancelled", "purged")
+    assert storage.keys() == objects
+    again = await purge_abandoned_copies(
+        session_factory=SessionLocal, storage=storage, older_than=timedelta(0)
+    )
+    assert again == 0

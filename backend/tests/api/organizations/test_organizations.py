@@ -58,3 +58,12 @@ async def test_outsiders_cannot_see_the_organization(
         response = await client.request(method, path, headers=headers)
         assert response.status_code == 404, path
         assert response.json()["error"]["code"] == "organization_not_found"
+
+
+async def test_names_with_control_characters_are_refused(client, make_user, login):
+    """Organization names go into letter subjects (header injection)."""
+    headers = await login(make_user("an@example.com"))
+    response = await client.post(
+        ORGS, json={"name": "Công ty\nBcc: x@evil.example"}, headers=headers
+    )
+    assert response.status_code == 422

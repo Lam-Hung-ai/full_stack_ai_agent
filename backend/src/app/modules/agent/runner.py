@@ -313,6 +313,11 @@ class Runner:
         )
         spans = OpenSpans()
         channel = _Channel(stream, self._live, assistant_id)
+        if resume_from is not None and self._live is not None:
+            try:
+                await self._live.reset(assistant_id)
+            except Exception:
+                logger.warning("Could not reset live keys of %s", assistant_id)
         heartbeat = asyncio.create_task(self._own(assistant_id))
         saver = TurnSaver()
         # Tasks the graph spawns copy this context, so tool calls see the guard.
@@ -457,8 +462,10 @@ class Runner:
                 )
             )
         else:
+            # A stop landing while the pause was read leaves the adapter's
+            # interrupt outcome behind: the saved status decides.
             await channel.publish(
-                finished
+                (finished if status != "cancelled" else None)
                 or RunFinishedEvent(
                     thread_id=run_input.thread_id,
                     run_id=run_input.run_id,

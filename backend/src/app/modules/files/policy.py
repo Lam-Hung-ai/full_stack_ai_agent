@@ -22,6 +22,9 @@ MAX_FILE_BYTES = 10 * 1024 * 1024
 MAX_FILES_PER_MESSAGE = 10
 #: Characters of a text file given to the model; the rest is cut.
 MAX_TEXT_CHARS = 200_000
+#: Bytes of files given to the model in one turn, newest first; older files
+#: beyond it are named but not sent again (RR-17).
+MAX_TURN_FILE_BYTES = 20 * 1024 * 1024
 
 #: image: the model sees the picture; document: the provider reads the PDF;
 #: text: the model reads the file's text inline.

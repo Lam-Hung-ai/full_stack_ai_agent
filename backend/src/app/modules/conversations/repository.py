@@ -1,10 +1,20 @@
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import RowMapping, func, insert, literal, select, update
+from sqlalchemy import (
+    ColumnElement,
+    RowMapping,
+    exists,
+    func,
+    insert,
+    literal,
+    select,
+    update,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.security import now
+from app.database.generated_tables import t_conversation_copy_jobs as copy_jobs
 from app.database.generated_tables import t_conversations as conversations
 from app.database.generated_tables import t_messages as messages
 from app.modules.conversations.schemas import ACTIVE_STATUSES
@@ -43,6 +53,7 @@ class ConversationRepository:
             conversations.c.workspace_id == workspace_id,
             conversations.c.owner_user_id == owner_user_id,
             conversations.c.deleted_at.is_(None),
+            _not_unfinished_copy(),
             conversations.c.archived_at.is_not(None)
             if archived
             else conversations.c.archived_at.is_(None),
@@ -86,6 +97,7 @@ class ConversationRepository:
             conversations.c.id == conversation_id,
             conversations.c.owner_user_id == owner_user_id,
             conversations.c.deleted_at.is_(None),
+            _not_unfinished_copy(),
         )
         if lock:
             statement = statement.with_for_update()
@@ -254,3 +266,12 @@ class MessageRepository:
         )
         statement = select(path).order_by(path.c.depth.desc())
         return list((await self._session.execute(statement)).mappings().all())
+
+
+def _not_unfinished_copy() -> ColumnElement[bool]:
+    """A copy stays hidden until its job completes, as
+    `can_read_conversation` says (database phase 1 §13)."""
+    return ~exists().where(
+        copy_jobs.c.target_conversation_id == conversations.c.id,
+        copy_jobs.c.status != "completed",
+    )

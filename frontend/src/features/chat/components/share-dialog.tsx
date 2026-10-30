@@ -44,12 +44,17 @@ export function ShareDialog({
 }) {
   const share = useShare(conversationId);
   const { publish, revoke } = useShareActions(conversationId);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<boolean | "failed">(false);
   const error = publish.error ?? revoke.error;
 
   const copyLink = async (url: string) => {
-    await navigator.clipboard.writeText(url);
-    setCopied(true);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+    } catch {
+      // No clipboard access (permission, plain HTTP): copy it by hand.
+      setCopied("failed");
+    }
   };
 
   return (
@@ -81,9 +86,14 @@ export function ShareDialog({
                 size="icon"
                 variant="outline"
               >
-                {copied ? <CheckIcon /> : <CopyIcon />}
+                {copied === true ? <CheckIcon /> : <CopyIcon />}
               </Button>
             </div>
+            {copied === "failed" && (
+              <p className="text-destructive text-xs">
+                Không sao chép tự động được; hãy chọn link ở trên và sao chép.
+              </p>
+            )}
             <p className="text-muted-foreground text-xs">
               Phiên bản {share.data.version}, cập nhật {dateFormat.format(new Date(share.data.published_at))}
             </p>

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response, status
 
 from app.common.dependencies.auth import CurrentUser
-from app.common.dependencies.rate_limit import rate_limit
+from app.common.dependencies.rate_limit import SESSION_RATE_LIMIT, rate_limit
 from app.common.email import MailerDep, deliver
 from app.common.exceptions.handlers import fail
 from app.config.settings import get_settings
@@ -10,11 +10,12 @@ from app.modules.auth import schemas
 from app.modules.auth.service import AuthService
 from app.modules.users.schemas import UserResponse
 
-router = APIRouter(
-    prefix="/auth",
-    tags=["Authentication"],
-    dependencies=[Depends(rate_limit("auth"))],
-)
+router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+#: Passwords, accounts and mail: tight, against guessing and flooding.
+GUARDED = [Depends(rate_limit("auth"))]
+#: Every page load refreshes or reads the session: a separate, wider bucket.
+SESSION = [Depends(rate_limit("session", SESSION_RATE_LIMIT))]
 
 REFRESH_COOKIE = "refresh_token"
 REMEMBER_COOKIE = "remember_login"
@@ -54,7 +55,10 @@ def _require_trusted_origin(request: Request) -> None:
 
 
 @router.post(
-    "/register", status_code=status.HTTP_201_CREATED, response_model=UserResponse
+    "/register",
+    status_code=status.HTTP_201_CREATED,
+    response_model=UserResponse,
+    dependencies=GUARDED,
 )
 async def register(
     data: schemas.Register,
@@ -67,7 +71,7 @@ async def register(
     return user
 
 
-@router.post("/login", response_model=schemas.TokenResponse)
+@router.post("/login", response_model=schemas.TokenResponse, dependencies=GUARDED)
 async def login(
     data: schemas.Login, session: SessionDep, response: Response
 ) -> schemas.TokenResponse:
@@ -76,7 +80,7 @@ async def login(
     return body
 
 
-@router.post("/refresh", response_model=schemas.TokenResponse)
+@router.post("/refresh", response_model=schemas.TokenResponse, dependencies=SESSION)
 async def refresh(
     request: Request, response: Response, session: SessionDep
 ) -> schemas.TokenResponse:
@@ -88,7 +92,7 @@ async def refresh(
     return body
 
 
-@router.post("/session", response_model=schemas.SessionResponse)
+@router.post("/session", response_model=schemas.SessionResponse, dependencies=SESSION)
 async def start_session(
     request: Request, response: Response, session: SessionDep
 ) -> schemas.SessionResponse:
@@ -101,13 +105,15 @@ async def start_session(
     return body
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, dependencies=SESSION)
 async def logout(user: CurrentUser, session: SessionDep, response: Response) -> None:
     await AuthService(session).logout(user_id=user.id, family_id=user.family_id)
     _clear_session_cookies(response)
 
 
-@router.post("/logout-all", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/logout-all", status_code=status.HTTP_204_NO_CONTENT, dependencies=SESSION
+)
 async def logout_all(
     user: CurrentUser, session: SessionDep, response: Response
 ) -> None:
@@ -117,7 +123,11 @@ async def logout_all(
     _clear_session_cookies(response)
 
 
-@router.post("/email-verification/request", status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/email-verification/request",
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=GUARDED,
+)
 async def request_email_verification(
     data: schemas.EmailInput,
     session: SessionDep,
@@ -132,12 +142,20 @@ async def request_email_verification(
         background.add_task(deliver, mailer, letter)
 
 
-@router.post("/email-verification/confirm", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/email-verification/confirm",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=GUARDED,
+)
 async def confirm_email(data: schemas.TokenInput, session: SessionDep) -> None:
     await AuthService(session).confirm_email(data.token)
 
 
-@router.post("/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/password-reset/request",
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=GUARDED,
+)
 async def request_password_reset(
     data: schemas.EmailInput,
     session: SessionDep,
@@ -152,7 +170,11 @@ async def request_password_reset(
         background.add_task(deliver, mailer, letter)
 
 
-@router.post("/password-reset/confirm", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/password-reset/confirm",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=GUARDED,
+)
 async def confirm_password_reset(
     data: schemas.PasswordReset, session: SessionDep
 ) -> None:

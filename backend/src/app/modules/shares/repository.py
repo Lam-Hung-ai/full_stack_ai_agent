@@ -302,3 +302,56 @@ class ShareRepository:
             .returning(copy_jobs.c.id)
         )
         return (await self._session.execute(statement)).first() is not None
+
+    async def abandon_stale(self, *, updated_before: datetime) -> int:
+        """Unfinished jobs nobody has touched since `updated_before` and whose
+        lease has run out become `cancelled`; they can no longer complete."""
+        statement = (
+            update(copy_jobs)
+            .where(
+                copy_jobs.c.status.in_(("pending", "copying", "failed")),
+                copy_jobs.c.updated_at < updated_before,
+                (copy_jobs.c.lease_expires_at.is_(None))
+                | (copy_jobs.c.lease_expires_at < now()),
+            )
+            .values(
+                status="cancelled",
+                lease_token=None,
+                lease_expires_at=None,
+                last_error="abandoned",
+            )
+            .returning(copy_jobs.c.id)
+        )
+        return len((await self._session.execute(statement)).all())
+
+    async def unpurged_cancelled(self, *, limit: int) -> list[UUID]:
+        statement = (
+            select(copy_jobs.c.id)
+            .where(
+                copy_jobs.c.status == "cancelled",
+                copy_jobs.c.last_error.is_distinct_from(PURGED),
+            )
+            .order_by(copy_jobs.c.updated_at)
+            .limit(limit)
+        )
+        return list((await self._session.execute(statement)).scalars())
+
+    async def copy_targets(self, *, job_id: UUID) -> list[RowMapping]:
+        """Objects a job wrote (or may have written) for its copy."""
+        statement = (
+            select(stored_files.c.bucket, stored_files.c.object_key)
+            .join(copy_files, copy_files.c.target_stored_file_id == stored_files.c.id)
+            .where(copy_files.c.job_id == job_id)
+        )
+        return list((await self._session.execute(statement)).mappings())
+
+    async def mark_purged(self, *, job_id: UUID) -> None:
+        await self._session.execute(
+            update(copy_jobs)
+            .where(copy_jobs.c.id == job_id, copy_jobs.c.status == "cancelled")
+            .values(last_error=PURGED)
+        )
+
+
+#: `last_error` of a cancelled job whose copied bytes are gone.
+PURGED = "purged"

@@ -25,7 +25,7 @@ Các path dưới đây tương đối với `/api/v1`.
 | GET /workspaces/{workspaceId}/conversations | Sidebar theo workspace, lọc pin/folder/archive và phân trang | JSON |
 | GET /conversations/{id} | Metadata, con trỏ nhánh đã lưu và assistant active nếu có | JSON |
 | PATCH /conversations/{id} | Rename, pin, archive, chuyển folder theo allowlist | JSON |
-| DELETE /conversations/{id} | Xóa mềm và revoke share nguồn | JSON hoặc empty theo convention chung |
+| DELETE /conversations/{id} | Dừng assistant đang chạy hoặc chờ (như stop), rồi xóa mềm và revoke share nguồn (TD-016) | JSON hoặc empty theo convention chung |
 | GET /conversations/{id}/messages | History theo nhánh và dữ liệu chuyển nhánh | JSON |
 | POST /conversations/{id}/messages | Gửi câu hỏi mới, chạy assistant | AG-UI SSE |
 | POST /conversations/{id}/messages/{userMessageId}/edit | Tạo nhánh từ câu hỏi đã sửa | AG-UI SSE |
@@ -65,7 +65,7 @@ Từ S7 (TD-013, QD-27): tệp đính kèm.
 | Method/path | Chức năng | Quyền |
 |---|---|---|
 | POST /workspaces/{id}/uploads | Khai `original_name`, `content_type`, `size_bytes`; nhận `file_id` và presigned PUT (`url`, `method`, `headers` phải gửi đúng, `expires_at`). Chưa ghi gì vào database | `conversation.create` trong workspace |
-| POST /workspaces/{id}/uploads/{fileId}/complete | Gửi lại đúng ba trường đã khai; backend HEAD, so cỡ, soi byte đầu, tính SHA-256, chuyển sang key cuối rồi ghi `stored_files`. Lỗi: 409 `upload_missing`, 422 `upload_size_mismatch`, 415 `file_content_mismatch` / `unsupported_file_type` | Như trên |
+| POST /workspaces/{id}/uploads/{fileId}/complete | Gửi lại đúng ba trường đã khai; backend HEAD, so cỡ, soi byte đầu, tính SHA-256, chuyển sang key cuối rồi ghi `stored_files`; key cuối nhận đúng byte đã kiểm. Lỗi: 409 `upload_missing`, 409 `upload_completed` (đã xong; object không đổi), 422 `upload_size_mismatch`, 415 `file_content_mismatch` / `unsupported_file_type` | Như trên |
 | GET /conversations/{id}/files/{fileId} | URL ký ngắn hạn trong body (`url`, `expires_at`); ảnh mở inline, tệp khác tải về | Chủ chat, tệp phải gắn vào một message của chat |
 
 Gửi câu hỏi (§3) và sửa câu hỏi (§4) nhận `file_ids`: tối đa 10 tệp, mỗi tệp là upload của chính người gửi trong cùng workspace (sai thì 422 `invalid_file`); câu hỏi có tệp được phép không có chữ. Loại được nhận: PNG, JPEG, GIF, WebP, PDF, văn bản (txt, md, csv, json), tối đa 10 MB.
@@ -79,7 +79,7 @@ Từ S8 (TD-014, QD-28): chia sẻ và copy.
 | DELETE /conversations/{id}/share | Thu hồi vĩnh viễn; chia sẻ lại là link mới | Chủ chat |
 | GET /shares/{token} | Snapshot: `title`, `mode`, `version`, `messages` (cả cây, kèm `sibling_ids`), `current_message_id`, `can_copy` | Public: ai cũng xem; tổ chức: thành viên đang hoạt động. Còn lại 404 |
 | GET /shares/{token}/files/{fileId} | URL ký của tệp trong snapshot | Như trên |
-| POST /shares/{token}/copy | `client_request_id`; tạo chat riêng của người gọi (public → workspace cá nhân, tổ chức → workspace tổ chức đó) với message, tệp và object mới; gọi lại cùng id trả cùng bản sao | Đăng nhập, đọc được share, `conversation.create` ở workspace đích |
+| POST /shares/{token}/copy | `client_request_id`; tạo chat riêng của người gọi (public → workspace cá nhân, tổ chức → workspace tổ chức đó) với message, tệp và object mới; gọi lại cùng id trả cùng bản sao. Bản sao chưa hoàn tất (đang copy, lỗi, bị huỷ) không hiện và trả 404 cho mọi route conversation (TD-016) | Đăng nhập, đọc được share, `conversation.create` ở workspace đích |
 
 Sidebar (`GET /workspaces/{id}/conversations`) nhận `archived=true` (chỉ chat đã lưu trữ), `folder_id` (chat của một folder) hoặc `unfiled=true` (chat ngoài folder); mặc định là mọi chat chưa lưu trữ. Chat ghim lên đầu, rồi theo `updated_at` giảm dần. `PATCH /conversations/{id}` nhận `title`, `pinned`, `archived`, `folder_id` (null là bỏ khỏi folder); field bỏ trống giữ nguyên, field khác bị từ chối. Các nhóm còn lại chốt khi tới sprint tương ứng. Health endpoints thuộc vận hành service, không phải API agent discovery.
 

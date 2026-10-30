@@ -214,3 +214,15 @@ async def test_auth_is_rate_limited(client, monkeypatch):
         (await client.post(f"{AUTH}/login", json=payload)).status_code for _ in range(3)
     ]
     assert codes == [401, 401, 429]
+
+
+async def test_failed_logins_do_not_lock_out_session_reads(client, monkeypatch):
+    """Every page load reads the session: it has a bucket of its own."""
+    from app.config.settings import get_settings
+
+    monkeypatch.setattr(get_settings(), "auth_rate_limit", 2)
+    payload = {"email": "x@example.com", "password": "Wrong!pass1"}
+    for _ in range(3):
+        await client.post(f"{AUTH}/login", json=payload)
+    session = await client.post(f"{AUTH}/session")
+    assert session.status_code != 429

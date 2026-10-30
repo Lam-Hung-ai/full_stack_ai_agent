@@ -82,5 +82,5 @@ async def deliver(mailer: Mailer, letter: Letter) -> None:
         await mailer.send(letter)
     except EmailNotConfigured:
         logger.warning("Email not configured; %s letter dropped", letter.purpose)
-    except (OSError, smtplib.SMTPException):
+    except (OSError, ValueError, smtplib.SMTPException):
         logger.warning("Could not send %s letter", letter.purpose, exc_info=True)

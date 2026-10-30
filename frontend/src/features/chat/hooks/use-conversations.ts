@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createConversation,
   getConversation,
@@ -32,10 +32,14 @@ export function useConversation(conversationId: string) {
   });
 }
 
+/** One sidebar filter's chats, a page at a time (`fetchNextPage` for more). */
 export function useConversations(workspaceId: string | undefined, filter: ConversationFilter) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: chatKeys.conversationList(workspaceId ?? "", filter),
-    queryFn: ({ signal }) => listConversations(workspaceId!, filter, signal),
+    queryFn: ({ pageParam, signal }) => listConversations(workspaceId!, filter, pageParam, signal),
+    initialPageParam: 1,
+    getNextPageParam: (last) =>
+      last.pagination.has_next_page ? last.pagination.page + 1 : undefined,
     enabled: !!workspaceId,
   });
 }

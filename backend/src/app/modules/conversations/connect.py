@@ -56,6 +56,9 @@ class ConnectService:
             if leaf
             else []
         )
+        # The request's session lives as long as the stream: end the read
+        # transaction so its connection goes back to the pool now.
+        await self._session.commit()
         view = None
         if active is not None and active["status"] in LIVE_STATUSES:
             view = await self._live_view(active["id"])

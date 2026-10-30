@@ -8,6 +8,7 @@ import {
   PencilIcon,
   Trash2Icon,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -101,7 +102,11 @@ export function FolderGroup({
         <ConfirmDialog
           description="Các cuộc trò chuyện trong folder được giữ lại và chuyển về danh sách chung."
           onClose={() => setDialog(null)}
-          onConfirm={() => remove.mutate(folder.id)}
+          onConfirm={() =>
+            remove.mutate(folder.id, {
+              onError: () => toast.error("Không xoá được folder. Vui lòng thử lại."),
+            })
+          }
           title={`Xoá folder "${folder.name}"?`}
         />
       )}

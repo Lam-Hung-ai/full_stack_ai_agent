@@ -130,3 +130,9 @@ Loại: `BẮT ĐẦU`, `KẾT THÚC`, `LỖI`, `SỬA`, `THAY ĐỔI`, `QUYẾT
 | 30/10/2026 | S9 | RỦI RO | RR-13, RR-16, RR-10 | SSE qua proxy và dọn checkpoint đã xử lý; runner trong process đủ theo load test | CH-S9-BE-05, BE-06, QA-01 |
 | 30/10/2026 | S9 | KẾT THÚC | — | Xong 9/9 task; backend 126 test, frontend 59 test xanh; load test đạt; use case 13 Đạt, 7 Một phần, 12 Sau | — |
 | 30/10/2026 | S9 | PHÁT HÀNH | — | Commit Sprint 9 trên `chat` | `aa24411` |
+| 30/10/2026 | Sau S9 | BẮT ĐẦU | — | Rà soát lỗi và nợ kỹ thuật toàn bộ S0–S9 (backend chat/agent, tổ chức/tệp/share, frontend) | — |
+| 30/10/2026 | Sau S9 | LỖI | L-12 → L-29 | 18 lỗi từ rà soát: upload ghi đè, copy dở hiện ra, connect giữ kết nối DB, stop đè resume, rate limit sau proxy, spam lời mời, mất câu hỏi ở composer, link ảnh hết hạn… Đã sửa, có test | — |
+| 30/10/2026 | Sau S9 | QUYẾT ĐỊNH | QD-30 | Cách sửa: bucket rate limit, `storage cleanup` hằng ngày, 20 MB tệp mỗi lượt, toast, sidebar theo trang, lint vendor sửa tại chỗ | — |
+| 30/10/2026 | Sau S9 | THAY ĐỔI | TD-016 | Xoá chat dừng lượt; copy dở trả 404; 429/422 mới; `uv run storage cleanup`; `van-hanh.md`, API §2 | — |
+| 30/10/2026 | Sau S9 | RỦI RO | RR-05, RR-11, RR-12, RR-17, RR-18 | Bốn mục đã xử lý; RR-18 còn copy trong request và chưa purge dòng | — |
+| 30/10/2026 | Sau S9 | KẾT THÚC | — | Backend 135 test, frontend 61 test xanh; lint, typecheck, build sạch; kiểm thử thật composer, stop, huỷ lượt chờ, cleanup | — |

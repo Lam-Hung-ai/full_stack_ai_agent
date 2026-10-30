@@ -34,6 +34,7 @@ from app.modules.files.policy import (
     MAX_FILE_BYTES,
     MAX_FILES_PER_MESSAGE,
     MAX_TEXT_CHARS,
+    MAX_TURN_FILE_BYTES,
     STORED_FILE_SCHEME,
     ChatFileType,
     file_key,
@@ -107,48 +108,56 @@ class FileService:
         file_id: UUID,
         data: UploadCreate,
     ) -> FileResponse:
-        """Check the uploaded bytes against what was declared, move them to
-        the final key and record the file. The temporary object goes either way."""
+        """Check the uploaded bytes against what was declared, record the file
+        and write those same bytes to the final key. The row is committed
+        before the write, so a second `complete` can never overwrite a recorded
+        object; the temporary object goes either way."""
         await AuthorizationService(self._session).require(workspace, *UPLOAD_PERMISSION)
         chat_type = _accepted(data)
+        # No transaction stays open across storage calls (AGENTS §19).
+        await self._session.commit()
         bucket = get_settings().storage_bucket
         temporary = upload_key(
             workspace_id=workspace.id, user_id=user.id, file_id=file_id
         )
         final = file_key(workspace_id=workspace.id, file_id=file_id)
         try:
-            content = await self._verified_bytes(bucket, temporary, data, chat_type)
-            await self._storage.copy_object(
-                source_bucket=bucket,
-                source_key=temporary,
-                destination_bucket=bucket,
-                destination_key=final,
-            )
-        except ObjectStorageError:
-            fail(503, "storage_unavailable")
+            try:
+                # The browser may PUT again while this reads: only the bytes
+                # checked here are stored, never the temporary object itself.
+                content = await self._verified_bytes(bucket, temporary, data, chat_type)
+            except ObjectStorageError:
+                fail(503, "storage_unavailable")
+            try:
+                row = await self._files.add(
+                    id=file_id,
+                    bucket=bucket,
+                    object_key=final,
+                    original_name=data.original_name,
+                    content_type=chat_type.type.mime,
+                    visibility="private",
+                    size_bytes=len(content),
+                    checksum_sha256=hashlib.sha256(content).hexdigest(),
+                    uploaded_by=user.id,
+                )
+                await self._session.commit()
+            except IntegrityError:
+                # Completed already: that row owns the final object, keep it.
+                await self._session.rollback()
+                fail(409, "upload_completed")
+            try:
+                await self._storage.put_object(
+                    bucket=bucket,
+                    object_key=final,
+                    content_type=chat_type.type.mime,
+                    body=content,
+                )
+            except ObjectStorageError:
+                await self._files.remove(file_id=file_id)
+                await self._session.commit()
+                fail(503, "storage_unavailable")
         finally:
             await self._discard(bucket, temporary)
-        try:
-            row = await self._files.add(
-                id=file_id,
-                bucket=bucket,
-                object_key=final,
-                original_name=data.original_name,
-                content_type=chat_type.type.mime,
-                visibility="private",
-                size_bytes=len(content),
-                checksum_sha256=hashlib.sha256(content).hexdigest(),
-                uploaded_by=user.id,
-            )
-            await self._session.commit()
-        except IntegrityError:
-            # Completed already: that row owns the final object, keep it.
-            await self._session.rollback()
-            fail(409, "upload_completed")
-        except Exception:
-            await self._session.rollback()
-            await self._discard(bucket, final)
-            raise
         return file_response(row)
 
     async def attachable(
@@ -264,21 +273,32 @@ async def resolve_files(
     """Model input for a turn: each stored file part becomes what the model
     can read (picture or PDF inline, text files as text). Runs inside the
     turn, after the request's transaction has committed."""
-    ids = {
-        UUID(part["id"])
-        for message in messages
-        if message.get("role") == "user" and isinstance(message.get("content"), list)
-        for part in message["content"]
-        if _stored(part)
-    }
+    # Newest question first, so the budget keeps the files asked about now.
+    ids = list(
+        dict.fromkeys(
+            UUID(part["id"])
+            for message in reversed(messages)
+            if message.get("role") == "user"
+            and isinstance(message.get("content"), list)
+            for part in message["content"]
+            if _stored(part)
+        )
+    )
     if not ids:
         return messages
     async with session_factory() as session:
         rows = {row["id"]: row for row in await FileRepository(session).by_ids(ids)}
     resolved: dict[str, dict[str, Any]] = {}
+    budget = MAX_TURN_FILE_BYTES
     for file_id in ids:
         row = rows.get(file_id)
-        resolved[str(file_id)] = await _model_part(row, storage) if row else _gone()
+        if row is None:
+            resolved[str(file_id)] = _gone()
+        elif row["size_bytes"] > budget:
+            resolved[str(file_id)] = _not_sent(row["original_name"])
+        else:
+            budget -= row["size_bytes"]
+            resolved[str(file_id)] = await _model_part(row, storage)
     return [
         {
             **message,
@@ -324,3 +344,10 @@ async def _model_part(row: RowMapping, storage: ObjectStorage) -> dict[str, Any]
 
 def _gone() -> dict[str, Any]:
     return {"type": "text", "text": "[Tệp đính kèm không còn]"}
+
+
+def _not_sent(name: str) -> dict[str, Any]:
+    return {
+        "type": "text",
+        "text": f"[Tệp đính kèm {name} không gửi lại: vượt dung lượng tệp mỗi lượt]",
+    }

@@ -94,3 +94,34 @@ def _secret(value):
     from pydantic import SecretStr
 
     return SecretStr(value)
+
+
+async def test_user_rate_limit_counts_per_user_not_per_ip():
+    """Invitation letters are bounded per sender, whatever the IP."""
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    import pytest
+    from starlette.requests import Request
+
+    from app.common.dependencies import rate_limit
+    from app.common.dependencies.auth import Principal
+    from app.common.exceptions.handlers import DomainError
+
+    rate_limit.reset()
+    limit = rate_limit.user_rate_limit("letters", 2, window=3600)
+
+    def principal():
+        return Principal(uuid4(), uuid4(), "An", "an@example.com", False)
+
+    def request(ip):
+        app = SimpleNamespace(state=SimpleNamespace())
+        return Request({"type": "http", "client": (ip, 1), "app": app, "headers": []})
+
+    sender, other = principal(), principal()
+    await limit(request("10.0.0.1"), sender)
+    await limit(request("10.0.0.2"), sender)
+    with pytest.raises(DomainError) as refused:
+        await limit(request("10.0.0.3"), sender)
+    assert refused.value.headers == {"Retry-After": "3600"}
+    await limit(request("10.0.0.3"), other)
