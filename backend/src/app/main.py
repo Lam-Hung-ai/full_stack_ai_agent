@@ -13,6 +13,7 @@ from app.config.settings import get_settings
 from app.modules.agent.agui import turn_agent
 from app.modules.agent.live import LiveStore
 from app.modules.agent.runner import Runner
+from app.modules.agent.tracing import flush_traces
 from app.modules.auth.router import router as auth_router
 from app.modules.authorization.router import router as authorization_router
 from app.modules.conversations.router import router as conversations_router
@@ -36,9 +37,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     runner = Runner(
         agent_factory=turn_agent,
         max_concurrent=settings.max_concurrent_turns,
+        max_queued=settings.max_queued_turns,
         live=LiveStore(client),
     )
     app.state.runner = runner
+    #: Shared counters (rate limits) across processes.
+    app.state.redis = client
     stops = asyncio.create_task(runner.listen_for_stops(), name="turn-stop-listener")
     yield
     # Let running turns finish and save before the process exits.
@@ -47,6 +51,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     with suppress(asyncio.CancelledError):
         await stops
     await client.aclose()
+    flush_traces()
 
 
 app = FastAPI(title="Agent Backend", version="0.1.0", lifespan=lifespan)

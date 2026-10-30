@@ -18,6 +18,7 @@ running turn from any process, and stop requests reach the owning process.
 
 import asyncio
 import logging
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -65,7 +66,10 @@ type Finalizer = Callable[
     [TurnStatus, list[AguiMessage], Pause | None], Awaitable[list[BaseEvent]]
 ]
 type InputPreparer = Callable[[RunAgentInput], Awaitable[RunAgentInput]]
-type AgentFactory = Callable[[frozenset[str], BaseCheckpointSaver], LangGraphAgent]
+#: (tools, saver, trace ids) -> the turn's agent.
+type AgentFactory = Callable[
+    [frozenset[str], BaseCheckpointSaver, dict[str, str]], LangGraphAgent
+]
 
 
 class RunStream:
@@ -141,16 +145,34 @@ class _Channel:
                 logger.warning("Could not expire live keys of %s", self.assistant_id)
 
 
+def usage_fields(finished: BaseEvent | None) -> dict[str, Any]:
+    """Token counts the provider reported for the turn (`RUN_FINISHED.usage`),
+    summed over its model calls, with the models used."""
+    usage = getattr(finished, "usage", None) or []
+    if not usage:
+        return {}
+    return {
+        "input_tokens": sum(item.input_tokens or 0 for item in usage),
+        "output_tokens": sum(item.output_tokens or 0 for item in usage),
+        "models": sorted({item.model for item in usage if item.model}),
+    }
+
+
 class Runner:
     def __init__(
         self,
         *,
         agent_factory: AgentFactory,
         max_concurrent: int,
+        max_queued: int | None = None,
         live: LiveStore | None = None,
     ) -> None:
         self._agent_factory = agent_factory
         self._slots = asyncio.Semaphore(max_concurrent)
+        #: Turns this process holds at most, running or waiting for a slot.
+        self._capacity = max_concurrent + (
+            max_queued if max_queued is not None else max_concurrent
+        )
         self._live = live
         #: Names this process as a turn's owner in Redis.
         self.process_id = str(uuid4())
@@ -162,6 +184,11 @@ class Runner:
     @property
     def live(self) -> LiveStore | None:
         return self._live
+
+    def has_room(self) -> bool:
+        """Whether one more turn may start or queue here. Callers refuse a
+        new turn otherwise instead of letting the queue grow without bound."""
+        return len(self._tasks) < self._capacity
 
     def start(
         self,
@@ -176,6 +203,7 @@ class Runner:
         known_ids: set[str] | None = None,
         resume_from: CheckpointTuple | None = None,
         prepare: InputPreparer | None = None,
+        log_fields: dict[str, Any] | None = None,
     ) -> RunStream:
         """Run a turn in the background. `known_ids` are protocol messages the
         bundle must not repeat (default: the input); `resume_from` is the
@@ -196,6 +224,7 @@ class Runner:
                 known_ids=known_ids,
                 resume_from=resume_from,
                 prepare=prepare,
+                log_fields=log_fields or {},
             ),
             name=f"assistant-turn-{assistant_id}",
         )
@@ -270,8 +299,10 @@ class Runner:
         known_ids: set[str] | None,
         resume_from: CheckpointTuple | None,
         prepare: InputPreparer | None,
+        log_fields: dict[str, Any],
     ) -> None:
         public_thread = run_input.thread_id
+        began = time.monotonic()
         # ID decisions §1: the native thread is the assistant row; the
         # protocol stream keeps the conversation as its thread.
         native_thread = str(assistant_id)
@@ -293,7 +324,15 @@ class Runner:
         try:
             if resume_from is not None:
                 saver.seed(resume_from)
-            agent = self._agent_factory(tools, saver)
+            agent = self._agent_factory(
+                tools,
+                saver,
+                {
+                    **log_fields,
+                    "assistant_id": str(assistant_id),
+                    "conversation_id": public_thread,
+                },
+            )
             async with self._slots:
                 await on_running()
                 if prepare is not None:
@@ -347,6 +386,20 @@ class Runner:
                 self._streams.pop(assistant_id, None)
                 self._tasks.pop(assistant_id, None)
                 self._finishing.discard(assistant_id)
+                logger.info(
+                    "Assistant turn ended",
+                    extra={
+                        "fields": {
+                            **log_fields,
+                            "assistant_id": str(assistant_id),
+                            "conversation_id": public_thread,
+                            "status": status,
+                            "resumed": resume_from is not None,
+                            "duration_ms": round((time.monotonic() - began) * 1000),
+                            **usage_fields(finished),
+                        }
+                    },
+                )
 
     async def _own(self, assistant_id: UUID) -> None:
         """Keep this process named as the turn's owner while it runs."""

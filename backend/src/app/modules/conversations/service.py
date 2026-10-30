@@ -18,7 +18,7 @@ from app.common.storage.client import ObjectStorage
 from app.config.security import now
 from app.database.session import SessionFactory
 from app.modules.agent.bundle import AguiMessage
-from app.modules.agent.checkpoints import durable_saver
+from app.modules.agent.checkpoints import drop_checkpoints, durable_saver
 from app.modules.agent.graph import GRAPH_VERSION
 from app.modules.agent.runner import Pause, Runner, RunStream, TurnStatus
 from app.modules.agent.tools import TOOL_RESOURCE, TOOLS
@@ -57,6 +57,8 @@ TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled"})
 TITLE_LENGTH = 60
 #: How long a stop request waits for the turn to save its partial answer.
 STOP_WAIT_SECONDS = 5.0
+#: Suggested wait before retrying a turn refused for lack of room.
+RETRY_AFTER_SECONDS = 5
 
 
 def _fallback_title(text: str) -> str:
@@ -324,6 +326,7 @@ class TurnService:
         check happens before the claim, so a refused answer leaves the turn
         waiting; the claim, the answers and the activity commit together."""
         _, workspace = await self._open(user, conversation_id)
+        self._ensure_room()
         target = await self._target(conversation_id, message_id, "assistant")
         pending = target["metadata"].get("pending_action")
         if target["status"] != "requires_action" or not pending:
@@ -423,6 +426,11 @@ class TurnService:
                 await self._cancel_in_place(target)
         await self._session.commit()
 
+    def _ensure_room(self) -> None:
+        if not self._runner.has_room():
+            # Nothing was committed: the client may retry the same request.
+            fail(503, "server_busy", headers={"Retry-After": str(RETRY_AFTER_SECONDS)})
+
     async def _await_end(self, conversation_id: UUID, message_id: UUID) -> None:
         """Watch the row while another process saves the stopped turn."""
         deadline = asyncio.get_running_loop().time() + STOP_WAIT_SECONDS
@@ -436,6 +444,8 @@ class TurnService:
         pending = target["metadata"].get("pending_action")
         content = metadata = None
         if pending:
+            # The question will never be answered: its checkpoint goes too.
+            await drop_checkpoints(self._session, target["id"])
             metadata = interactions.resolved_metadata(
                 target["metadata"], pending, status="cancelled"
             )
@@ -539,6 +549,7 @@ class TurnService:
         title: str | None = None,
     ) -> StartedTurn:
         """Insert the pending answer, make it the saved branch, commit, run."""
+        self._ensure_room()
         try:
             assistant = await self._messages.insert(
                 conversation_id=conversation_id,
@@ -609,6 +620,7 @@ class TurnService:
                 [*(base_content or []), *bundle],
                 base_metadata or {},
                 pause,
+                resumed=resume_from is not None,
             )
 
         stream = self._runner.start(
@@ -628,6 +640,7 @@ class TurnService:
             # A resumed turn continues from its checkpoint, which already holds
             # the files it was given.
             prepare=self._with_files if resume_from is None else None,
+            log_fields={"workspace_id": str(workspace.id), "user_id": str(user.id)},
         )
         return StartedTurn(user_message_id, assistant_id, stream)
 
@@ -697,13 +710,19 @@ class TurnService:
         content: list[AguiMessage],
         metadata: dict[str, Any],
         pause: Pause | None,
+        *,
+        resumed: bool = False,
     ) -> list[BaseEvent]:
         """Save the outcome. A pause stores its checkpoint, the waiting
         activities and `pending_action` in one transaction (phase 4 §6) and
-        returns the activities to announce once that has committed."""
+        returns the activities to announce once that has committed. A resumed
+        turn drops the checkpoint it came from in that transaction too: once
+        it ends or pauses anew, nothing resumes from the old one (RR-16)."""
         metadata = {k: v for k, v in metadata.items() if k != "pending_action"}
         events: list[BaseEvent] = []
         async with self._session_factory() as session:
+            if resumed:
+                await drop_checkpoints(session, assistant_id)
             if pause is not None:
                 saver = await durable_saver(session)
                 pending = interactions.new_pending_action(

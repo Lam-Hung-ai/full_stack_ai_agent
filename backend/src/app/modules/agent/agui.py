@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from typing import Any, Literal
 
 from ag_ui_langgraph import LangGraphAgent
@@ -6,6 +7,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.types import Command
 
 from app.modules.agent.graph import get_agent
+from app.modules.agent.tracing import tracing_config
 
 
 class TurnAgent(LangGraphAgent):
@@ -34,13 +36,19 @@ class TurnAgent(LangGraphAgent):
         return Command(resume={entry.interrupt_id: entry.payload for entry in entries})
 
 
-def turn_agent(tool_names: frozenset[str], saver: BaseCheckpointSaver) -> TurnAgent:
+def turn_agent(
+    tool_names: frozenset[str],
+    saver: BaseCheckpointSaver,
+    trace: Mapping[str, str] | None = None,
+) -> TurnAgent:
     """A fresh wrapper per turn: LangGraphAgent keeps per-run state on the
     instance, and the shared compiled graph must not have its saver swapped
-    under a turn that is using it, so the turn gets a copy."""
+    under a turn that is using it, so the turn gets a copy. `trace` names
+    the turn for Langfuse when tracing is on."""
     return TurnAgent(
         name="agent",
         graph=get_agent(tool_names).copy(update={"checkpointer": saver}),
+        config=tracing_config(trace or {}),
         # RAW callback events are verbose; flip on for debugging.
         emit_raw_events=False,
         # Interrupts end the run as RUN_FINISHED with an interrupt outcome.

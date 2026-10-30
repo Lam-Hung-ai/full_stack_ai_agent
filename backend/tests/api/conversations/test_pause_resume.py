@@ -136,6 +136,8 @@ async def test_question_pauses_then_resumes_after_a_restart(
     (row,) = db("SELECT metadata FROM chat_app.messages WHERE id = %s", (final["id"],))
     assert "pending_action" not in row["metadata"]
     assert row["metadata"]["actions"][0]["status"] == "answered"
+    # Nothing resumes a finished turn: its checkpoint went with it (RR-16).
+    assert checkpoints(db, assistant["id"]) == 0
 
 
 async def test_an_ordinary_turn_stores_no_checkpoint(
@@ -323,6 +325,7 @@ async def test_stop_cancels_a_waiting_turn(
     assert activity["content"]["status"] == "cancelled"
     (row,) = db("SELECT metadata FROM chat_app.messages WHERE id = %s", (final["id"],))
     assert "pending_action" not in row["metadata"]
+    assert checkpoints(db, assistant["id"]) == 0
 
     # The unanswered ask_user call is left out of the next turn's context.
     status, _ = await send(

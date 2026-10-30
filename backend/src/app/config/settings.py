@@ -45,6 +45,8 @@ class Settings(BaseSettings):
 
     #: Assistant turns running at once in this process (QD-15); more wait.
     max_concurrent_turns: int = Field(default=10, ge=1)
+    #: Turns waiting for a slot; beyond that a new turn gets 503 server_busy.
+    max_queued_turns: int = Field(default=20, ge=0)
     #: On shutdown, how long running turns get to finish before being cancelled.
     shutdown_grace_seconds: float = Field(default=20, ge=0)
     #: Tools that pause the turn for the user's approval before they run.
@@ -77,9 +79,17 @@ class Settings(BaseSettings):
     storage_presign_ttl_seconds: int = Field(default=600, ge=60, le=3600)
     storage_addressing_style: Literal["path", "virtual"] = "path"
 
+    #: Langfuse tracing of turns (S9); off while the keys are empty.
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: SecretStr | None = None
+    langfuse_host: str = "https://cloud.langfuse.com"
+
     allowed_origins: list[str] = ["http://localhost:3000"]
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     log_format: Literal["json", "text"] = "json"
+
+    #: Answer with a local fake model instead of OpenRouter: load tests only.
+    agent_fake_model: bool = False
 
     openrouter_api_key: SecretStr | None = None
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
@@ -112,7 +122,7 @@ class Settings(BaseSettings):
             raise ValueError("storage URL must not contain a query or fragment")
         return normalized
 
-    @field_validator("storage_secret_access_key", mode="before")
+    @field_validator("storage_secret_access_key", "langfuse_secret_key", mode="before")
     @classmethod
     def _blank_secret_is_unset(cls, value: object) -> object:
         return value or None
@@ -143,6 +153,7 @@ class Settings(BaseSettings):
         "smtp_host",
         "smtp_username",
         "storage_access_key_id",
+        "langfuse_public_key",
     )
     @classmethod
     def _blank_is_unset(cls, value: str | None) -> str | None:

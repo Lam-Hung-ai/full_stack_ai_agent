@@ -18,6 +18,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from copy import deepcopy
 from typing import Any
+from uuid import UUID
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
@@ -143,3 +144,9 @@ async def durable_saver(session: AsyncSession) -> AsyncPostgresSaver:
     driver = raw.driver_connection
     assert isinstance(driver, AsyncConnection)
     return AsyncPostgresSaver(driver)
+
+
+async def drop_checkpoints(session: AsyncSession, assistant_id: UUID) -> None:
+    """Delete an assistant's checkpoint thread within the session's transaction."""
+    saver = await durable_saver(session)
+    await saver.adelete_thread(str(assistant_id))

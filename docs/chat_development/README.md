@@ -16,7 +16,8 @@ Cập nhật: **29/10/2026**. Backend FastAPI + LangGraph OSS + LangGraphAgent/E
 
 ## Kế hoạch và nhật ký
 
-- [Kế hoạch sprint](ke-hoach-sprint.md): lộ trình đề xuất S0 → S8, mốc, Definition of Done, nhánh/commit, nghi thức sprint. File từng sprint ở [sprints/](sprints/) (bắt đầu từ [mẫu](sprints/_mau-sprint.md)).
+- [Kế hoạch sprint](ke-hoach-sprint.md): lộ trình S0 → S9, mốc, Definition of Done, nhánh/commit, nghi thức sprint. File từng sprint ở [sprints/](sprints/) (bắt đầu từ [mẫu](sprints/_mau-sprint.md)).
+- [Vận hành](van-hanh.md): dịch vụ cần có, lệnh mỗi lần triển khai, proxy cho SSE, sức chứa, log/trace, kết quả load test.
 - [Nhật ký dự án](nhat-ky/README.md): dòng thời gian chung, thay đổi (`TD`), lỗi (`L`), quyết định và câu hỏi (`QD`, `Q`), rủi ro (`RR`). Ghi khi phát sinh, chỉ thêm không sửa lịch sử.
 
 ## LangGraph và AG-UI

@@ -89,6 +89,9 @@ export function toChatError(error: unknown): ApiError {
 
 const MESSAGES: Record<string, string> = {
   assistant_active: "Câu trả lời trước vẫn đang được tạo. Vui lòng đợi.",
+  server_busy: "Hệ thống đang quá tải. Vui lòng gửi lại sau vài giây.",
+  invalid_file: "Có tệp đính kèm không dùng được. Hãy bỏ tệp đó rồi gửi lại.",
+  too_many_files: "Mỗi câu hỏi đính kèm tối đa 10 tệp.",
   invalid_parent: "Cuộc trò chuyện đã thay đổi. Hãy tải lại trang.",
   parent_required: "Cuộc trò chuyện đã thay đổi. Hãy tải lại trang.",
   message_not_found: "Tin nhắn không còn trong cuộc trò chuyện. Hãy tải lại trang.",

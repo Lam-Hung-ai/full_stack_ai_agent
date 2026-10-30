@@ -32,6 +32,7 @@ dependencies = [
     "uuid-utils>=0.11",
     "redis>=6.4",
     "boto3>=1.43.98",
+    "langfuse>=3",
 ]
 
 [project.scripts]
@@ -39,6 +40,7 @@ db = "app.tools.database:main"
 iam = "app.tools.iam:main"
 openapi = "app.tools.openapi:main"
 storage = "app.tools.storage:main"
+loadtest = "app.tools.loadtest:main"
 
 [build-system]
 requires = ["uv_build>=0.12.9,<0.13.0"]

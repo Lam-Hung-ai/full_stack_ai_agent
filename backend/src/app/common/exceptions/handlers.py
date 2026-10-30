@@ -30,6 +30,7 @@ class DomainError(Exception):
         code: str,
         message: str | None = None,
         details: dict | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> None:
         super().__init__(code)
         self.status = status
@@ -37,12 +38,19 @@ class DomainError(Exception):
         self.message = message
         #: Safe data that helps the frontend react; never internals.
         self.details = details
+        #: Response headers such as `Retry-After`.
+        self.headers = headers
 
 
 def fail(
-    status: int, code: str, message: str | None = None, details: dict | None = None
+    status: int,
+    code: str,
+    message: str | None = None,
+    details: dict | None = None,
+    *,
+    headers: Mapping[str, str] | None = None,
 ) -> NoReturn:
-    raise DomainError(status, code, message, details)
+    raise DomainError(status, code, message, details, headers)
 
 
 def error_response(
@@ -82,7 +90,11 @@ def install_handlers(app: FastAPI) -> None:
     @app.exception_handler(DomainError)
     async def domain_error(request: Request, exc: DomainError):
         return error_response(
-            exc.status, exc.code, message=exc.message, details=exc.details
+            exc.status,
+            exc.code,
+            message=exc.message,
+            details=exc.details,
+            headers=exc.headers,
         )
 
     @app.exception_handler(DBAPIError)

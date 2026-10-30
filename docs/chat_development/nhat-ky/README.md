@@ -123,3 +123,9 @@ Loại: `BẮT ĐẦU`, `KẾT THÚC`, `LỖI`, `SỬA`, `THAY ĐỔI`, `QUYẾT
 | 30/10/2026 | S8 | SỬA | L-11 | Khoá query gồm người xem | CH-S8-FE-02 |
 | 30/10/2026 | S8 | RỦI RO | RR-18 | Copy trong request, job dở không được dọn | CH-S8-BE-03 |
 | 30/10/2026 | S8 | KẾT THÚC | — | Xong 7/7 task; backend 122 test, frontend 59 test xanh; 4 kịch bản đạt (3 chạy thật, 1 test API) | — |
+| 30/10/2026 | S8 | PHÁT HÀNH | — | Commit Sprint 8 trên `chat` | `c60df17` |
+| 30/10/2026 | S9 | BẮT ĐẦU | — | Bắt đầu Sprint 9; không có câu hỏi chặn | CH-S9-DOC-01 |
+| 30/10/2026 | S9 | QUYẾT ĐỊNH | QD-29 | Trần hàng đợi lượt, rate limit qua Redis, log lượt, Langfuse tuỳ chọn, dọn checkpoint, model giả cho load test | CH-S9-BE-01 → QA-01 |
+| 30/10/2026 | S9 | THAY ĐỔI | TD-015 | 503 `server_busy`, `MAX_QUEUED_TURNS`, `LANGFUSE_*`, `AGENT_FAKE_MODEL`, `uv run loadtest`; `van-hanh.md`; chấm lại use case | CH-S9-BE-01 → DOC-02 |
+| 30/10/2026 | S9 | RỦI RO | RR-13, RR-16, RR-10 | SSE qua proxy và dọn checkpoint đã xử lý; runner trong process đủ theo load test | CH-S9-BE-05, BE-06, QA-01 |
+| 30/10/2026 | S9 | KẾT THÚC | — | Xong 9/9 task; backend 126 test, frontend 59 test xanh; load test đạt; use case 13 Đạt, 7 Một phần, 12 Sau | — |

@@ -22,6 +22,10 @@ GRAPH_VERSION = "chat-agent-v1"
 def build_model() -> BaseChatModel:
     """The chat model; tests replace this function with a scripted fake."""
     settings = get_settings()
+    if settings.agent_fake_model:
+        from app.modules.agent.fake_model import LoadTestModel
+
+        return LoadTestModel()
     effort = settings.openrouter_reasoning_effort
     return ChatOpenRouter(
         model=settings.openrouter_model,
