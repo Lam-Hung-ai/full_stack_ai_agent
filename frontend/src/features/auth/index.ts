@@ -1,5 +1,13 @@
 export { AuthGate } from "./components/auth-gate";
+export { ForgotPasswordForm } from "./components/forgot-password-form";
 export { LoginForm } from "./components/login-form";
+export { NewPasswordFields } from "./components/new-password-fields";
 export { RegisterForm } from "./components/register-form";
+export { ResetPasswordForm } from "./components/reset-password-form";
 export { UserMenu } from "./components/user-menu";
+export { VerifyEmailScreen } from "./components/verify-email-screen";
+export { useLogin, useLogout } from "./hooks/use-auth-mutations";
+export { authErrorMessage } from "./utils/error-message";
+export { nameSchema, newPasswordSchema, passwordSchema } from "./schemas/auth.schema";
+export { safeNext } from "./utils/safe-next";
 export { useSession } from "./hooks/use-session";

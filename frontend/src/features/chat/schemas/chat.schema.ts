@@ -5,14 +5,9 @@ export const questionSchema = z.object({
   text: z.string().trim().min(1, "Nhập câu hỏi").max(32_000, "Câu hỏi quá dài"),
 });
 
-export const nameSchema = z.object({
-  name: z.string().trim().min(1, "Nhập tên").max(200, "Tên quá dài"),
-});
-
 export const answerSchema = z.object({
   answer: z.string().trim().min(1, "Nhập câu trả lời").max(4_000, "Câu trả lời quá dài"),
 });
 
 export type AnswerValues = z.infer<typeof answerSchema>;
 export type QuestionValues = z.infer<typeof questionSchema>;
-export type NameValues = z.infer<typeof nameSchema>;

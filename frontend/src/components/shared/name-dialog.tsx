@@ -2,6 +2,7 @@
 
 import { useId } from "react";
 import { useForm } from "react-hook-form";
+import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -14,11 +15,17 @@ import {
 } from "@/components/ui/dialog";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { nameSchema, type NameValues } from "../schemas/chat.schema";
+
+// Mirrors the backend `Name` (1–200 characters); FastAPI stays the authority.
+const nameSchema = z.object({
+  name: z.string().trim().min(1, "Nhập tên").max(200, "Tên quá dài"),
+});
+
+type NameValues = z.infer<typeof nameSchema>;
 
 /**
- * Asks for one name (rename a chat, create or rename a folder). Mounted only
- * while open, so each opening starts from `defaultName`.
+ * Asks for one name (a chat, a folder, an organization). Mounted only while
+ * open, so each opening starts from `defaultName`.
  */
 export function NameDialog({
   title,

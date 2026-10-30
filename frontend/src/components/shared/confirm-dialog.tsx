@@ -11,14 +11,17 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-export function ConfirmDeleteDialog({
+/** Asks before a destructive action; mounted only while open. */
+export function ConfirmDialog({
   title,
   description,
+  confirmLabel = "Xoá",
   onClose,
   onConfirm,
 }: {
   title: string;
   description: string;
+  confirmLabel?: string;
   onClose: () => void;
   onConfirm: () => void;
 }) {
@@ -32,7 +35,7 @@ export function ConfirmDeleteDialog({
         <AlertDialogFooter>
           <AlertDialogCancel>Huỷ</AlertDialogCancel>
           <AlertDialogAction onClick={onConfirm} variant="destructive">
-            Xoá
+            {confirmLabel}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

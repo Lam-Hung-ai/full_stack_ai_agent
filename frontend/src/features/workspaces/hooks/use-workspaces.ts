@@ -1,6 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { getWorkspaces } from "../api/get-workspaces";
 import type { Workspace } from "../types/workspace.types";
@@ -23,4 +24,20 @@ export function useCurrentWorkspace(): Workspace | undefined {
   const { data } = useWorkspaces();
   const selectedId = useWorkspaceStore((state) => state.selectedWorkspaceId);
   return data ? pickWorkspace(data.data, selectedId) : undefined;
+}
+
+/** Switch the UI to another workspace, dropping data cached for the
+ *  previous one so it is never shown under the new one. */
+export function useSelectWorkspace() {
+  const queryClient = useQueryClient();
+  const selectWorkspace = useWorkspaceStore((state) => state.selectWorkspace);
+  return useCallback(
+    (workspaceId: string) => {
+      selectWorkspace(workspaceId);
+      queryClient.removeQueries({
+        predicate: (query) => query.queryKey[0] === "workspaces" && query.queryKey.length > 1,
+      });
+    },
+    [queryClient, selectWorkspace],
+  );
 }

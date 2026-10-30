@@ -12,6 +12,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.email import Letter
 from app.common.exceptions.handlers import fail
 from app.common.schemas.pagination import MAX_PAGE_SIZE, PageParams
 from app.config.security import (
@@ -23,8 +24,15 @@ from app.config.security import (
     verify_password,
 )
 from app.config.settings import get_settings
+from app.modules.auth.letters import Purpose, account_letter
 from app.modules.auth.repository import AuthRepository
-from app.modules.auth.schemas import Login, Register, SessionResponse, TokenResponse
+from app.modules.auth.schemas import (
+    Login,
+    PasswordReset,
+    Register,
+    SessionResponse,
+    TokenResponse,
+)
 from app.modules.users.schemas import UserResponse
 from app.modules.users.service import UserService
 from app.modules.workspaces.service import WorkspaceService
@@ -41,18 +49,96 @@ class AuthService:
         self._session = session
         self._auth = repository or AuthRepository(session)
 
-    async def register(self, data: Register) -> UserResponse:
+    async def register(self, data: Register) -> tuple[UserResponse, Letter]:
+        """New account and the letter that verifies its email."""
         if not get_settings().registration_enabled:
             fail(403, "registration_disabled")
-        if await self._auth.user_by_email(email=str(data.email)):
-            fail(409, "email_exists")
-        # The insert trigger provisions the personal workspace.
-        user = await self._auth.create_user(name=data.name, email=str(data.email))
-        await self._auth.add_password(
-            user_id=user["id"], password_hash=await hash_password(data.password)
+        user = await self.create_account(
+            name=data.name, email=str(data.email), password=data.password
         )
+        letter = await self._verification_letter(user, "email_verify")
         await self._session.commit()
-        return UserResponse.model_validate(dict(user))
+        return UserResponse.model_validate(dict(user)), letter
+
+    async def create_account(
+        self, *, name: str, email: str, password: str, email_verified: bool = False
+    ):
+        """Uncommitted; the insert trigger provisions the personal workspace."""
+        if await self._auth.user_by_email(email=email):
+            fail(409, "email_exists")
+        user = await self._auth.create_user(
+            name=name, email=email, email_verified=email_verified
+        )
+        await self._auth.add_password(
+            user_id=user["id"], password_hash=await hash_password(password)
+        )
+        return user
+
+    async def request_link(self, *, email: str, purpose: Purpose) -> Letter | None:
+        """A verification or reset link, if the account can use one. The
+        caller answers the same either way, so no answer reveals an account."""
+        user = await self._auth.user_by_email(email=email, lock=True)
+        if (
+            user is None
+            or not user["is_active"]
+            or (purpose == "email_verify" and user["email_verified"])
+            or (
+                purpose == "password_reset"
+                and await self._auth.password_hash(user_id=user["id"]) is None
+            )
+        ):
+            return None
+        letter = await self._verification_letter(user, purpose)
+        await self._session.commit()
+        return letter
+
+    async def confirm_email(self, raw: str) -> None:
+        user = await self._consume(raw, "email_verify")
+        await self._auth.mark_email_verified(user_id=user["id"])
+        await self._session.commit()
+
+    async def reset_password(self, data: PasswordReset) -> None:
+        """New password; every session of the account is signed out."""
+        user = await self._consume(data.token, "password_reset")
+        if not await self._auth.set_password(
+            user_id=user["id"], password_hash=await hash_password(data.password)
+        ):
+            fail(400, "invalid_token")
+        await self._auth.revoke(user_id=user["id"])
+        # The link reached the mailbox, which is what verifying proves.
+        await self._auth.mark_email_verified(user_id=user["id"])
+        await self._session.commit()
+
+    async def _verification_letter(self, user, purpose: Purpose) -> Letter:
+        settings = get_settings()
+        lifetime = (
+            timedelta(hours=settings.email_verification_hours)
+            if purpose == "email_verify"
+            else timedelta(minutes=settings.password_reset_minutes)
+        )
+        raw = new_token()
+        await self._auth.replace_verification(
+            identifier=user["email"],
+            purpose=purpose,
+            token_hash=digest(raw),
+            expires_at=now() + lifetime,
+        )
+        return account_letter(
+            to=user["email"], name=user["name"], purpose=purpose, token=raw
+        )
+
+    async def _consume(self, raw: str, purpose: Purpose):
+        """Mark a link used; one invalid answer for every cause."""
+        row = await self._auth.verification_for_update(
+            token_hash=digest(raw), purpose=purpose
+        )
+        if row is None or row["consumed_at"] is not None or row["expires_at"] <= now():
+            fail(400, "invalid_token")
+        user = await self._auth.user_by_email(email=row["identifier"], lock=True)
+        if user is None or not user["is_active"]:
+            fail(400, "invalid_token")
+        await self._auth.consume_verification(verification_id=row["id"])
+        return user
 
     async def login(self, data: Login) -> IssuedTokens:
         user = await self._auth.user_by_email(email=str(data.email), lock=True)

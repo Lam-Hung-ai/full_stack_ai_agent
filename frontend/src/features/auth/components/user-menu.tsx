@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { LogOutIcon } from "lucide-react";
+import { LogOutIcon, MailCheckIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -11,13 +11,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useLogout } from "../hooks/use-auth-mutations";
+import { useLogout, useRequestEmailVerification } from "../hooks/use-auth-mutations";
 import { useSession } from "../hooks/use-session";
 
 export function UserMenu() {
   const router = useRouter();
   const { data } = useSession();
   const logoutMutation = useLogout();
+  const verifyMutation = useRequestEmailVerification();
   if (!data) return null;
 
   return (
@@ -32,6 +33,19 @@ export function UserMenu() {
           {data.user.email}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {!data.user.email_verified && (
+          <DropdownMenuItem
+            disabled={verifyMutation.isPending || verifyMutation.isSuccess}
+            // Keep the menu open so the label can say the letter went out.
+            onSelect={(event) => {
+              event.preventDefault();
+              verifyMutation.mutate(data.user.email);
+            }}
+          >
+            <MailCheckIcon />
+            {verifyMutation.isSuccess ? "Đã gửi thư xác minh" : "Gửi thư xác minh email"}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem
           disabled={logoutMutation.isPending}
           onSelect={() =>

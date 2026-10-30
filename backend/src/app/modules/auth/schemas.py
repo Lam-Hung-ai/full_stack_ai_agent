@@ -25,6 +25,16 @@ class Login(EmailInput):
     remember: bool = False
 
 
+class TokenInput(Input):
+    """A single-use token from a letter's link."""
+
+    token: str = Field(min_length=1, max_length=256)
+
+
+class PasswordReset(TokenInput):
+    password: Password
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

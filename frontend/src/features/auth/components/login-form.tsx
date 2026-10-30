@@ -57,7 +57,15 @@ export function LoginForm() {
               <FieldError errors={[errors.email]} />
             </Field>
             <Field data-invalid={!!errors.password}>
-              <FieldLabel htmlFor={`${id}-password`}>Mật khẩu</FieldLabel>
+              <div className="flex items-center justify-between">
+                <FieldLabel htmlFor={`${id}-password`}>Mật khẩu</FieldLabel>
+                <Link
+                  className="text-muted-foreground text-sm underline-offset-4 hover:underline"
+                  href="/forgot-password"
+                >
+                  Quên mật khẩu?
+                </Link>
+              </div>
               <Input
                 autoComplete="current-password"
                 id={`${id}-password`}

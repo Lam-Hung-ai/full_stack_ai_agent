@@ -28,6 +28,8 @@ def pg():
             AUTH_RATE_LIMIT="10000",
             # Never call a real model with the dev machine's key.
             OPENROUTER_API_KEY="",
+            # Letters go to the `mailbox` fixture or nowhere, never to SMTP.
+            SMTP_HOST="",
         )
         # Settings are cached on first use and the engine is built when
         # app.database.session is imported: both must see the test database.

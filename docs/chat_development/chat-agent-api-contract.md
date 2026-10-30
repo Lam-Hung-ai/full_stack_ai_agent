@@ -38,6 +38,28 @@ Tạo và liệt kê lấy workspace từ path (QD-10, QD-12); các route còn l
 
 Folder, upload/download, share/copy, auth/workspace/RBAC dùng REST API riêng theo database đã chốt. Đã có từ S1 (TD-007): `/auth/{register,login,refresh,session,logout,logout-all}`, `GET /users/me`, `GET /workspaces`, `GET /workspaces/{id}`. Từ S3 (TD-009): `GET/POST /workspaces/{id}/folders`, `PATCH/DELETE /folders/{id}`; xoá folder chuyển chat trong đó về danh sách chung. Payload theo OpenAPI của backend.
 
+Từ S6 (TD-012, QD-24 → QD-26):
+
+| Method/path | Chức năng | Quyền |
+|---|---|---|
+| POST /auth/email-verification/request, /auth/password-reset/request | Gửi link xác minh email / đặt lại mật khẩu; luôn 202, cùng nội dung | Công khai, rate limit |
+| POST /auth/email-verification/confirm, /auth/password-reset/confirm | Dùng link (`token`; đặt lại kèm `password`); đặt lại thu hồi mọi phiên | Công khai |
+| POST /organizations | Tạo tổ chức; người tạo là owner | Đăng nhập |
+| GET /organizations/{id} | Tên, workspace, `permissions` và `is_owner` của người gọi | Thành viên |
+| PATCH /organizations/{id} | Đổi tên | `organization.manage` |
+| POST /organizations/{id}/leave | Rời tổ chức; owner cuối cùng bị từ chối (`last_owner`) | Thành viên |
+| GET /organizations/{id}/members | Thành viên đang hoạt động và vai trò | `member.manage` |
+| PATCH /organizations/{id}/members/{memberId} | Đặt lại toàn bộ vai trò (`role_ids`) | `role.manage`; vai trò owner chỉ owner |
+| DELETE /organizations/{id}/members/{memberId} | Xoá khỏi tổ chức, dừng lượt đang chạy của họ trong workspace | `member.manage`; xoá owner chỉ owner |
+| GET/POST /organizations/{id}/invitations, DELETE …/{invitationId} | Lời mời đang chờ, mời (gửi thư; mời lại thay link), thu hồi | `member.manage` |
+| POST /invitations/preview | Tổ chức, email, trạng thái, `account_exists` của một link | Người có link |
+| POST /invitations/accept | Nhận lời mời bằng tài khoản đúng email | Đăng nhập |
+| POST /invitations/register | Tạo tài khoản cho email được mời rồi tham gia | Người có link |
+| GET /permissions | Danh mục quyền (`resource.action`) | Đăng nhập |
+| GET/POST /organizations/{id}/roles, PATCH/DELETE …/{roleId} | Vai trò kèm quyền; owner khoá; vai trò có sẵn không đổi tên/xoá; không cấp quyền mình không có (`permission_escalation`) | `role.manage` |
+
+Người ngoài tổ chức nhận 404 `organization_not_found` ở mọi route `/organizations/{id}`. Token của link luôn nằm trong body, không trong URL API.
+
 Sidebar (`GET /workspaces/{id}/conversations`) nhận `archived=true` (chỉ chat đã lưu trữ), `folder_id` (chat của một folder) hoặc `unfiled=true` (chat ngoài folder); mặc định là mọi chat chưa lưu trữ. Chat ghim lên đầu, rồi theo `updated_at` giảm dần. `PATCH /conversations/{id}` nhận `title`, `pinned`, `archived`, `folder_id` (null là bỏ khỏi folder); field bỏ trống giữ nguyên, field khác bị từ chối. Các nhóm còn lại chốt khi tới sprint tương ứng. Health endpoints thuộc vận hành service, không phải API agent discovery.
 
 ## 3. Gửi câu hỏi mới

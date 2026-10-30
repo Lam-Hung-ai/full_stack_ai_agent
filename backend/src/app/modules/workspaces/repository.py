@@ -73,3 +73,11 @@ class WorkspaceRepository:
     ) -> RowMapping | None:
         statement = self._accessible(user_id).where(workspaces.c.id == workspace_id)
         return (await self._session.execute(statement)).mappings().one_or_none()
+
+    async def accessible_by_organization(
+        self, *, user_id: UUID, organization_id: UUID
+    ) -> RowMapping | None:
+        statement = self._accessible(user_id).where(
+            workspaces.c.organization_id == organization_id
+        )
+        return (await self._session.execute(statement)).mappings().one_or_none()

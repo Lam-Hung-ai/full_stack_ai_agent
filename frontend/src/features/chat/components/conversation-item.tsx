@@ -27,8 +27,8 @@ import {
 import { cn } from "@/lib/utils";
 import { useConversationActions } from "../hooks/use-conversations";
 import type { ConversationListItem, ConversationUpdate, Folder } from "../types/chat.types";
-import { ConfirmDeleteDialog } from "./confirm-delete-dialog";
-import { NameDialog } from "./name-dialog";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { NameDialog } from "@/components/shared/name-dialog";
 
 /** One chat in the sidebar with its menu: pin, rename, file, archive, delete. */
 export function ConversationItem({
@@ -158,7 +158,7 @@ export function ConversationItem({
         />
       )}
       {dialog === "delete" && (
-        <ConfirmDeleteDialog
+        <ConfirmDialog
           description={`"${conversation.title}" sẽ bị xoá khỏi danh sách.`}
           onClose={() => setDialog(null)}
           onConfirm={() =>

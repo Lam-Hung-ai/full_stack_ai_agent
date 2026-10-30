@@ -17,6 +17,7 @@ Lỗi ở đây là **hành vi sai** so với quyết định đã chốt (datab
 | L-07 | Cao | Sau khi thêm registry tool, mọi lượt chat treo: tập tool truyền cho `lru_cache` là `set` (không hash được) nên runner ném lỗi trước khối `try`, stream không bao giờ đóng | Test S3, 30/10 | Đã xác minh | CH-S3-BE-05 | Đã sửa (S3) |
 | L-08 | Trung bình | Bấm dừng thì câu trả lời giữ đúng nhưng UI báo "Mất kết nối": runner phát `RUN_FINISHED` khi step/text message còn mở, verifier của `@ag-ui/client` từ chối | Chạy thật S3, 30/10 | Đã xác minh | CH-S3-BE-03 | Đã sửa (S3) |
 | L-09 | Cao | Bấm "Cho phép" không có tác dụng và báo "Mất kết nối": `@ag-ui/client` ghi `pendingInterrupts` từ `RUN_FINISHED` có outcome interrupt rồi chặn lần chạy kế tiếp không kèm `resume` khớp id, ném lỗi trước khi gửi request | Chạy thật S4, 30/10 | Đã xác minh | CH-S4-FE-01 | Đã sửa (S4) |
+| L-10 | Trung bình | Trang nhận lời mời: bấm "Đăng xuất để đổi tài khoản" thì phiên bị thu hồi nhưng màn vẫn báo đang đăng nhập email cũ: `queryClient.clear()` không làm query đang hiển thị tải lại | Chạy thật S6, 30/10 | Đã xác minh | CH-S6-FE-03 | Đã sửa (S6) |
 
 Giá trị cột *Xác minh*:
 - **Đã xác minh:** đã đọc code/tài liệu hoặc chạy thử và chắc chắn.
@@ -74,6 +75,13 @@ Giá trị cột *Xác minh*:
 - **Cách sửa:** server là nơi đối chiếu interrupt (API §5), nên `ChatAgent` xoá `pendingInterrupts` trước mỗi thao tác và chuyển `resume` vào input của lượt resume.
 - **Test chặn tái phát:** `chat-agent.test.ts` "lets the server decide what a paused turn still waits on".
 - **Trạng thái:** Đã sửa (S4).
+
+### L-10: Trang mời không đổi sau khi đăng xuất
+- **Vị trí:** `frontend/src/features/organizations/components/invitation-screen.tsx::SignedIn`.
+- **Thực tế:** `useLogout` gọi `queryClient.clear()`; query phiên và lời mời đang được component dùng không tự tải lại, nên màn giữ trạng thái đã đăng nhập.
+- **Cách sửa:** đăng xuất xong thì tải lại trang, bắt đầu lại ở trạng thái chưa đăng nhập (form tạo tài khoản hoặc nút đăng nhập).
+- **Test chặn tái phát:** chạy thật kịch bản 1 của S6 (không có test tự động: hành vi nằm ở tải lại trang).
+- **Trạng thái:** Đã sửa (S6).
 
 ## Mẫu ghi
 

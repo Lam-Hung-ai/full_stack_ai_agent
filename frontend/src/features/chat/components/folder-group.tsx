@@ -20,9 +20,9 @@ import { cn } from "@/lib/utils";
 import { useFolderActions } from "../hooks/use-conversations";
 import type { Folder } from "../types/chat.types";
 import { folderErrorMessage } from "../utils/folders";
-import { ConfirmDeleteDialog } from "./confirm-delete-dialog";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { ConversationList } from "./conversation-list";
-import { NameDialog } from "./name-dialog";
+import { NameDialog } from "@/components/shared/name-dialog";
 
 /** A folder that lists its chats when opened. */
 export function FolderGroup({
@@ -98,7 +98,7 @@ export function FolderGroup({
         />
       )}
       {dialog === "delete" && (
-        <ConfirmDeleteDialog
+        <ConfirmDialog
           description="Các cuộc trò chuyện trong folder được giữ lại và chuyển về danh sách chung."
           onClose={() => setDialog(null)}
           onConfirm={() => remove.mutate(folder.id)}

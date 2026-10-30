@@ -11,7 +11,7 @@ import { useFolderActions, useFolders } from "../hooks/use-conversations";
 import { ConversationList } from "./conversation-list";
 import { folderErrorMessage } from "../utils/folders";
 import { FolderGroup } from "./folder-group";
-import { NameDialog } from "./name-dialog";
+import { NameDialog } from "@/components/shared/name-dialog";
 
 export function ConversationSidebar() {
   const workspace = useCurrentWorkspace();

@@ -1,6 +1,7 @@
 import { apiClient } from "@/lib/api";
 import type {
   LoginInput,
+  PasswordResetInput,
   RegisterInput,
   SessionResponse,
   TokenResponse,
@@ -22,4 +23,31 @@ export function startSession() {
 
 export function logout() {
   return apiClient<void>("/api/v1/auth/logout", { method: "POST" });
+}
+
+/** 202 whether or not the email has an account. */
+export function requestPasswordReset(email: string) {
+  return apiClient<void>("/api/v1/auth/password-reset/request", {
+    method: "POST",
+    body: { email },
+  });
+}
+
+export function confirmPasswordReset(input: PasswordResetInput) {
+  return apiClient<void>("/api/v1/auth/password-reset/confirm", { method: "POST", body: input });
+}
+
+/** 202 whether or not the email has an unverified account. */
+export function requestEmailVerification(email: string) {
+  return apiClient<void>("/api/v1/auth/email-verification/request", {
+    method: "POST",
+    body: { email },
+  });
+}
+
+export function confirmEmail(token: string) {
+  return apiClient<void>("/api/v1/auth/email-verification/confirm", {
+    method: "POST",
+    body: { token },
+  });
 }

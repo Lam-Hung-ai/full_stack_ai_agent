@@ -101,3 +101,11 @@ Loại: `BẮT ĐẦU`, `KẾT THÚC`, `LỖI`, `SỬA`, `THAY ĐỔI`, `QUYẾT
 | 30/10/2026 | S5 | THAY ĐỔI | TD-011 | Route connect, live store Redis, stop qua Redis, `REDIS_URL`; tài liệu API §6, §7 | CH-S5-BE-01 → FE-01, DOC-02 |
 | 30/10/2026 | S5 | RỦI RO | RR-14, RR-02, RR-10 | Mở lại thấy phần đang sinh (đã xử lý); cập nhật giảm thiểu | — |
 | 30/10/2026 | S5 | KẾT THÚC | — | Xong 7/7 task; backend 84 test, frontend 42 test xanh; 3 kịch bản chạy thật đạt | — |
+| 30/10/2026 | S5 | PHÁT HÀNH | — | Commit Sprint 5 trên `chat` | `95dd134` |
+| 30/10/2026 | S6 | BẮT ĐẦU | — | Bắt đầu Sprint 6; không có câu hỏi chặn | CH-S6-DOC-01 |
+| 30/10/2026 | S6 | QUYẾT ĐỊNH | QD-24, QD-25, QD-26 | Vai trò owner khoá và đủ quyền, chống leo thang; lời mời và rời tổ chức; gửi thư sau commit | CH-S6-BE-01 → BE-06 |
+| 30/10/2026 | S6 | THAY ĐỔI | TD-012 | Route tổ chức, thành viên, lời mời, vai trò, xác minh email, đặt lại mật khẩu; `SMTP_*`, `FRONTEND_URL`; tài liệu API §2 | CH-S6-BE-01 → FE-03, DOC-02 |
+| 30/10/2026 | S6 | RỦI RO | RR-15 | Vai trò owner nhận quyền mới khi đồng bộ (đã xử lý) | CH-S6-BE-05 |
+| 30/10/2026 | S6 | LỖI | L-10 | Trang mời không đổi sau khi đăng xuất | CH-S6-FE-03 |
+| 30/10/2026 | S6 | SỬA | L-10 | Tải lại trang sau khi đăng xuất | CH-S6-FE-03 |
+| 30/10/2026 | S6 | KẾT THÚC | — | Xong 11/11 task; backend 106 test, frontend 49 test xanh; 5 kịch bản chạy thật đạt | — |

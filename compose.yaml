@@ -1,4 +1,5 @@
-# Local development services. Redis (sprint S5) and RustFS (S7) join later.
+# Local development services. RustFS (S7) joins later.
+# Start only what the machine lacks, e.g. `docker compose up -d postgres mailpit`.
 services:
   postgres:
     image: postgres:18.0
@@ -16,6 +17,18 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  redis:
+    image: redis:8.2
+    ports:
+      - "127.0.0.1:6379:6379"
+
+  # Catches every letter the backend sends (S6); read them at http://localhost:8025.
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
 
 volumes:
   postgres-data:

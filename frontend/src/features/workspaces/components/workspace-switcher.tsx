@@ -2,7 +2,6 @@
 
 import { BuildingIcon, CheckIcon, ChevronsUpDownIcon, UserIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -12,26 +11,20 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useWorkspaceStore } from "@/stores/workspace-store";
-import { useCurrentWorkspace, useWorkspaces } from "../hooks/use-workspaces";
+import { useCurrentWorkspace, useSelectWorkspace, useWorkspaces } from "../hooks/use-workspaces";
 import { workspaceLabel } from "../utils/pick-workspace";
 
-export function WorkspaceSwitcher() {
+/** `actions`: menu items composed in by the app (organization admin links). */
+export function WorkspaceSwitcher({ actions }: { actions?: React.ReactNode }) {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const { data } = useWorkspaces();
   const current = useCurrentWorkspace();
-  const selectWorkspace = useWorkspaceStore((state) => state.selectWorkspace);
+  const selectWorkspace = useSelectWorkspace();
   if (!data || !current) return null;
 
   const choose = (workspaceId: string) => {
     if (workspaceId === current.id) return;
     selectWorkspace(workspaceId);
-    // Drop data of the previous workspace so it is never shown under the new one.
-    queryClient.removeQueries({
-      predicate: (query) =>
-        query.queryKey[0] === "workspaces" && query.queryKey.length > 1,
-    });
     // An open chat belongs to the previous workspace.
     router.push("/");
   };
@@ -54,6 +47,12 @@ export function WorkspaceSwitcher() {
             {workspace.id === current.id && <CheckIcon className="ml-auto" />}
           </DropdownMenuItem>
         ))}
+        {actions && (
+          <>
+            <DropdownMenuSeparator />
+            {actions}
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

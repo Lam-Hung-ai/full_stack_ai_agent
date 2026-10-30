@@ -142,6 +142,22 @@ class MessageRepository:
         )
         return (await self._session.execute(statement)).mappings().one_or_none()
 
+    async def active_of_owner(
+        self, *, workspace_id: UUID, owner_user_id: UUID
+    ) -> list[RowMapping]:
+        """Unfinished assistant rows in every chat the user owns in a workspace."""
+        statement = (
+            select(messages)
+            .join(conversations, conversations.c.id == messages.c.conversation_id)
+            .where(
+                conversations.c.workspace_id == workspace_id,
+                conversations.c.owner_user_id == owner_user_id,
+                messages.c.role == "assistant",
+                messages.c.status.in_(ACTIVE_STATUSES),
+            )
+        )
+        return list((await self._session.execute(statement)).mappings())
+
     async def active_assistant(self, *, conversation_id: UUID) -> RowMapping | None:
         statement = select(messages.c.id, messages.c.status).where(
             messages.c.conversation_id == conversation_id,

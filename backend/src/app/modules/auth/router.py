@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response, status
 
 from app.common.dependencies.auth import CurrentUser
 from app.common.dependencies.rate_limit import rate_limit
+from app.common.email import MailerDep, deliver
 from app.common.exceptions.handlers import fail
 from app.config.settings import get_settings
 from app.database.session import SessionDep
@@ -55,8 +56,15 @@ def _require_trusted_origin(request: Request) -> None:
 @router.post(
     "/register", status_code=status.HTTP_201_CREATED, response_model=UserResponse
 )
-async def register(data: schemas.Register, session: SessionDep) -> UserResponse:
-    return await AuthService(session).register(data)
+async def register(
+    data: schemas.Register,
+    session: SessionDep,
+    mailer: MailerDep,
+    background: BackgroundTasks,
+) -> UserResponse:
+    user, letter = await AuthService(session).register(data)
+    background.add_task(deliver, mailer, letter)
+    return user
 
 
 @router.post("/login", response_model=schemas.TokenResponse)
@@ -107,3 +115,45 @@ async def logout_all(
         user_id=user.id, family_id=user.family_id, all_sessions=True
     )
     _clear_session_cookies(response)
+
+
+@router.post("/email-verification/request", status_code=status.HTTP_202_ACCEPTED)
+async def request_email_verification(
+    data: schemas.EmailInput,
+    session: SessionDep,
+    mailer: MailerDep,
+    background: BackgroundTasks,
+) -> None:
+    """Same answer whether or not the email has an unverified account."""
+    letter = await AuthService(session).request_link(
+        email=str(data.email), purpose="email_verify"
+    )
+    if letter:
+        background.add_task(deliver, mailer, letter)
+
+
+@router.post("/email-verification/confirm", status_code=status.HTTP_204_NO_CONTENT)
+async def confirm_email(data: schemas.TokenInput, session: SessionDep) -> None:
+    await AuthService(session).confirm_email(data.token)
+
+
+@router.post("/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
+async def request_password_reset(
+    data: schemas.EmailInput,
+    session: SessionDep,
+    mailer: MailerDep,
+    background: BackgroundTasks,
+) -> None:
+    """Same answer whether or not the email has an account."""
+    letter = await AuthService(session).request_link(
+        email=str(data.email), purpose="password_reset"
+    )
+    if letter:
+        background.add_task(deliver, mailer, letter)
+
+
+@router.post("/password-reset/confirm", status_code=status.HTTP_204_NO_CONTENT)
+async def confirm_password_reset(
+    data: schemas.PasswordReset, session: SessionDep
+) -> None:
+    await AuthService(session).reset_password(data)

@@ -35,12 +35,18 @@ class WorkspaceService:
 
     async def context(self, *, user_id: UUID, workspace_id: UUID) -> WorkspaceContext:
         row = await self._require(user_id=user_id, workspace_id=workspace_id)
-        return WorkspaceContext(
-            id=row["id"],
-            kind=row["kind"],
-            organization_id=row["organization_id"],
-            member_id=row["member_id"],
+        return _context(row)
+
+    async def organization_context(
+        self, *, user_id: UUID, organization_id: UUID
+    ) -> WorkspaceContext:
+        """The workspace of an organization the user is an active member of."""
+        row = await self._workspaces.accessible_by_organization(
+            user_id=user_id, organization_id=organization_id
         )
+        if row is None:
+            fail(404, "organization_not_found")
+        return _context(row)
 
     async def _require(self, *, user_id: UUID, workspace_id: UUID):
         row = await self._workspaces.accessible_by_id(
@@ -50,3 +56,19 @@ class WorkspaceService:
         if row is None:
             fail(404, "workspace_not_found")
         return row
+
+
+def _context(row) -> WorkspaceContext:
+    return WorkspaceContext(
+        id=row["id"],
+        kind=row["kind"],
+        organization_id=row["organization_id"],
+        member_id=row["member_id"],
+    )
+
+
+def organization_of(workspace: WorkspaceContext) -> UUID:
+    """The organization of an organization workspace; 404 for a personal one."""
+    if workspace.organization_id is None:
+        fail(404, "organization_not_found")
+    return workspace.organization_id

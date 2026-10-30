@@ -403,6 +403,18 @@ class TurnService:
             target = await self._target(conversation_id, message_id, "assistant")
         return StopResponse(id=message_id, status=target["status"])
 
+    async def stop_departed(self, *, workspace_id: UUID, user_id: UUID) -> None:
+        """The user left the workspace's organization (O07): end their
+        unfinished turns there. Their requests are refused already; this stops
+        model and tool work that nobody may read any more."""
+        for target in await self._messages.active_of_owner(
+            workspace_id=workspace_id, owner_user_id=user_id
+        ):
+            where = await self._runner.stop(target["id"], timeout=STOP_WAIT_SECONDS)
+            if where == "orphan":
+                await self._cancel_in_place(target)
+        await self._session.commit()
+
     async def _await_end(self, conversation_id: UUID, message_id: UUID) -> None:
         """Watch the row while another process saves the stopped turn."""
         deadline = asyncio.get_running_loop().time() + STOP_WAIT_SECONDS

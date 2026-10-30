@@ -5,3 +5,4 @@ export type SessionResponse = components["schemas"]["SessionResponse"];
 export type User = components["schemas"]["UserResponse"];
 export type LoginInput = components["schemas"]["Login"];
 export type RegisterInput = components["schemas"]["Register"];
+export type PasswordResetInput = components["schemas"]["PasswordReset"];

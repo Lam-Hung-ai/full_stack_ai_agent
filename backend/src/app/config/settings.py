@@ -50,6 +50,19 @@ class Settings(BaseSettings):
     #: Live view of running turns, stop signals across processes (S5).
     redis_url: str = "redis://localhost:6379/0"
 
+    #: Outgoing mail (S6). Without a host, letters are dropped with a warning.
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: SecretStr | None = None
+    smtp_from: str = "noreply@example.com"
+    smtp_starttls: bool = True
+    #: Where links in letters point (invitations, verification, reset).
+    frontend_url: str = "http://localhost:3000"
+    invitation_days: int = Field(default=7, ge=1, le=30)
+    email_verification_hours: int = Field(default=24, ge=1, le=168)
+    password_reset_minutes: int = Field(default=60, ge=5, le=1440)
+
     allowed_origins: list[str] = ["http://localhost:3000"]
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     log_format: Literal["json", "text"] = "json"
@@ -73,7 +86,11 @@ class Settings(BaseSettings):
         return value
 
     @field_validator(
-        "openrouter_reasoning_effort", "openrouter_site_url", "openrouter_app_name"
+        "openrouter_reasoning_effort",
+        "openrouter_site_url",
+        "openrouter_app_name",
+        "smtp_host",
+        "smtp_username",
     )
     @classmethod
     def _blank_is_unset(cls, value: str | None) -> str | None:
