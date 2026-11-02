@@ -25,8 +25,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from uuid_utils.compat import uuid7
 
 from app.common.dependencies.auth import Principal
-from app.modules.agent.live import LiveStore, LiveView
-from app.modules.agent.runner import ASSISTANT_EVENT
+from app.modules.ai.runtime.live import LiveStore, LiveView
+from app.modules.ai.runtime.runner import ASSISTANT_EVENT
 from app.modules.conversations.repository import MessageRepository
 from app.modules.conversations.service import ConversationService
 

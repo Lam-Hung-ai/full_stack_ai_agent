@@ -148,9 +148,9 @@ async def test_stop_reaches_the_process_running_the_turn(
     client, make_user, make_redis, login, scripted_model
 ):
     from app.main import app
-    from app.modules.agent.agui import turn_agent
-    from app.modules.agent.live import LiveStore
-    from app.modules.agent.runner import Runner
+    from app.modules.ai.runtime.agui import turn_agent
+    from app.modules.ai.runtime.live import LiveStore
+    from app.modules.ai.runtime.runner import Runner
 
     model = scripted_model(LONG, word_delay=0.02)
     user = make_user("an@example.com")

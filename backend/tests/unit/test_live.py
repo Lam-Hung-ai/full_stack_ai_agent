@@ -3,7 +3,7 @@ from uuid import uuid4
 import fakeredis
 from ag_ui.core import TextMessageContentEvent
 
-from app.modules.agent.live import LiveStore, LiveView
+from app.modules.ai.runtime.live import LiveStore, LiveView
 
 
 async def test_a_trimmed_stream_is_not_continued_after_the_view():

@@ -62,12 +62,12 @@ def checkpoints(db, thread_id):
 def needs_approval(monkeypatch):
     """Make get_current_time ask for approval (TOOLS_REQUIRING_APPROVAL)."""
     from app.config.settings import get_settings
-    from app.modules.agent import graph
+    from app.modules.ai import agents
 
     monkeypatch.setattr(
         get_settings(), "tools_requiring_approval", ["get_current_time"]
     )
-    graph.get_agent.cache_clear()
+    agents.get_agent.cache_clear()
 
 
 async def paused_turn(client, user, headers, text="Đặt phòng họp"):
@@ -99,12 +99,12 @@ async def test_question_pauses_then_resumes_after_a_restart(
 
     # A new process: nothing in memory survives but the database.
     from app.main import app
-    from app.modules.agent import graph
-    from app.modules.agent.agui import turn_agent
-    from app.modules.agent.runner import Runner
+    from app.modules.ai import agents
+    from app.modules.ai.runtime.agui import turn_agent
+    from app.modules.ai.runtime.runner import Runner
 
     app.state.runner = Runner(agent_factory=turn_agent, max_concurrent=2)
-    graph.get_agent.cache_clear()
+    agents.get_agent.cache_clear()
 
     status, events = await resume(
         client,
@@ -361,7 +361,7 @@ async def test_stop_racing_a_resume_leaves_the_resumed_turn_alone(
     client, db, make_user, login, scripted_model, monkeypatch
 ):
     """Stop read the turn waiting; a resume claimed it before stop's cancel."""
-    from app.modules.agent.runner import Runner
+    from app.modules.ai.runtime.runner import Runner
 
     scripted_model(ASK_ROOM)
     user = make_user("an@example.com")

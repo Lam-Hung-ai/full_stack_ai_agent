@@ -1,7 +1,7 @@
 """Collect the AG-UI messages of one assistant turn from its event stream.
 
 The stored bundle is what the user saw: messages in stream order, with the
-final MESSAGES_SNAPSHOT version (minus the input history) where the agent sent
+final MESSAGES_SNAPSHOT version (minus the input history) where the ai sent
 one, so a failed or stopped turn still keeps its partial text (database
 decisions §6: content is the AG-UI Message[] of one logical row).
 """

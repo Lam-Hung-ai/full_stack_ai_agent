@@ -29,7 +29,7 @@ class LoadTestModel(BaseChatModel):
         return "load-test"
 
     def bind_tools(self, tools: Sequence[Any], **kwargs: Any) -> "LoadTestModel":
-        # It never calls tools; accepting them keeps the agent graph unchanged.
+        # It never calls tools; accepting them keeps the ai graph unchanged.
         return self
 
     def _answer(self) -> list[str]:

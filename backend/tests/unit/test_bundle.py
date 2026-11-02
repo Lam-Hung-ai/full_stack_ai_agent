@@ -16,7 +16,7 @@ from ag_ui.core import (
     UserMessage,
 )
 
-from app.modules.agent.bundle import BundleBuilder
+from app.modules.ai.runtime.bundle import BundleBuilder
 
 
 def stream_tool_turn(builder: BundleBuilder) -> None:

@@ -1,4 +1,4 @@
-"""Files the agent creates with `create_file` (D06, QD-31)."""
+"""Files the ai creates with `create_file` (D06, QD-31)."""
 
 import io
 import json

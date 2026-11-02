@@ -17,7 +17,7 @@ from langgraph.types import Interrupt
 from uuid_utils.compat import uuid7
 
 from app.common.exceptions.handlers import fail
-from app.modules.agent.bundle import AguiMessage
+from app.modules.ai.runtime.bundle import AguiMessage
 
 ACTIVITY_TYPE = "user_interaction"
 KINDS = frozenset({"user_question", "tool_approval"})

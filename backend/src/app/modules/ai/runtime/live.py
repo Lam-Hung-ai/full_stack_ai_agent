@@ -26,7 +26,7 @@ from ag_ui.core import BaseEvent, Event
 from pydantic import TypeAdapter
 from redis.asyncio import Redis
 
-from app.modules.agent.bundle import AguiMessage
+from app.modules.ai.runtime.bundle import AguiMessage
 
 logger = logging.getLogger(__name__)
 

@@ -13,7 +13,7 @@ from app.common.dependencies.storage import OptionalStorageDep
 from app.common.dependencies.workspace import CurrentWorkspace
 from app.common.schemas.pagination import PageParams, page_params
 from app.database.session import SessionDep, SessionLocal
-from app.modules.agent.dependencies import RunnerDep
+from app.modules.ai.dependencies import RunnerDep
 from app.modules.conversations.connect import ConnectService
 from app.modules.conversations.export import content_disposition
 from app.modules.conversations.schemas import (

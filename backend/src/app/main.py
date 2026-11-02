@@ -10,10 +10,10 @@ from app.common.exceptions.handlers import install_handlers
 from app.common.logging import configure_logging
 from app.common.request_context import RequestIdMiddleware
 from app.config.settings import get_settings
-from app.modules.agent.agui import turn_agent
-from app.modules.agent.live import LiveStore
-from app.modules.agent.runner import Runner
-from app.modules.agent.tracing import flush_traces
+from app.modules.ai.observability.tracing import flush_traces
+from app.modules.ai.runtime.agui import turn_agent
+from app.modules.ai.runtime.live import LiveStore
+from app.modules.ai.runtime.runner import Runner
 from app.modules.auth.router import router as auth_router
 from app.modules.authorization.router import router as authorization_router
 from app.modules.conversations.router import router as conversations_router

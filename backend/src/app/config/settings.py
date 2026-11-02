@@ -29,8 +29,8 @@ class Settings(BaseSettings):
     db_pool_timeout: int = Field(default=10, ge=1)
 
     jwt_secret: SecretStr = Field(min_length=32)
-    jwt_issuer: str = "agent-chat"
-    jwt_audience: str = "agent-chat-api"
+    jwt_issuer: str = "ai-chat"
+    jwt_audience: str = "ai-chat-api"
     access_token_minutes: int = Field(default=15, ge=1, le=60)
     refresh_token_days: int = Field(default=30, ge=1, le=90)
     #: A token rotated this recently may be presented again without counting as
@@ -75,7 +75,7 @@ class Settings(BaseSettings):
     storage_region: str = "us-east-1"
     storage_access_key_id: str | None = None
     storage_secret_access_key: SecretStr | None = None
-    storage_bucket: str = "agent-chat"
+    storage_bucket: str = "ai-chat"
     storage_presign_ttl_seconds: int = Field(default=600, ge=60, le=3600)
     storage_addressing_style: Literal["path", "virtual"] = "path"
 
@@ -94,12 +94,15 @@ class Settings(BaseSettings):
     openrouter_api_key: SecretStr | None = None
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     openrouter_model: str = "anthropic/claude-sonnet-4.5"
+    #: OpenRouter models tried in order when a call to `openrouter_model` fails
+    #: (ModelFallbackMiddleware); empty turns fallback off.
+    openrouter_fallback_models: list[str] = []
     # "high" | "medium" | "low", or empty to turn reasoning off. Only takes effect
     # on models OpenRouter marks as reasoning-capable; streamed as AG-UI REASONING_*.
     openrouter_reasoning_effort: str | None = "high"
     # Optional, recommended by OpenRouter for attributing requests on their dashboard.
     openrouter_site_url: str | None = None
-    openrouter_app_name: str | None = "agent-backend"
+    openrouter_app_name: str | None = "ai-backend"
 
     @field_validator("database_url")
     @classmethod

@@ -68,7 +68,7 @@ async def test_grant_revoked_during_the_turn_refuses_the_call(
     model = scripted_model(CLOCK_CALL, "Không xem được giờ")
     headers = await login(owner)
     conversation_id = await org_chat(client, headers, workspace_id)
-    # The agent is built with the tool; the grant goes before the call runs.
+    # The ai is built with the tool; the grant goes before the call runs.
     model.before_reply = revoke
 
     status, _ = await send(client, conversation_id, headers, body("Mấy giờ rồi?"))

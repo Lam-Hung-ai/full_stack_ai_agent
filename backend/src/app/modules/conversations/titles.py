@@ -13,7 +13,7 @@ from uuid import UUID
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.database.session import SessionFactory
-from app.modules.agent import graph
+from app.modules.ai import models
 from app.modules.conversations.repository import ConversationRepository
 
 logger = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ async def suggest(question: str) -> str | None:
         f"Câu hỏi của người dùng:\n<<<\n{question[:QUESTION_CHARS]}\n>>>\n\n"
         "Chỉ trả về tên cuộc trò chuyện."
     )
-    reply = await graph.build_title_model().ainvoke(
+    reply = await models.build_title_model().ainvoke(
         [SystemMessage(PROMPT), HumanMessage(framed)]
     )
     usage = getattr(reply, "usage_metadata", None) or {}

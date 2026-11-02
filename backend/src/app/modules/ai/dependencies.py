@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
-from app.modules.agent.runner import Runner
+from app.modules.ai.runtime.runner import Runner
 
 
 def get_runner(request: Request) -> Runner:

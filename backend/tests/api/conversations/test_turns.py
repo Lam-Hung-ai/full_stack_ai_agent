@@ -17,7 +17,7 @@ async def test_turn_streams_and_is_saved(client, make_user, login, scripted_mode
     message_id = uuid7()
 
     status, events = await send(
-        client, conversation_id, headers, body("  Chào agent  ", message_id=message_id)
+        client, conversation_id, headers, body("  Chào ai  ", message_id=message_id)
     )
     assert status == 200
     types = [event["type"] for event in events]
@@ -34,7 +34,7 @@ async def test_turn_streams_and_is_saved(client, make_user, login, scripted_mode
     assert saved["current_message_id"] == assistant_row["id"]
     assert assistant_row["id"] == custom[0]["assistantMessageId"]
     assert user_row["content"] == [
-        {"id": str(message_id), "role": "user", "content": "Chào agent"}
+        {"id": str(message_id), "role": "user", "content": "Chào ai"}
     ]
     assert user_row["status"] == "completed"
     assert assistant_row["status"] == "completed"
@@ -45,7 +45,7 @@ async def test_turn_streams_and_is_saved(client, make_user, login, scripted_mode
     conversation = (
         await client.get(f"/api/v1/conversations/{conversation_id}", headers=headers)
     ).json()
-    assert conversation["title"] == "Chào agent"
+    assert conversation["title"] == "Chào ai"
     assert conversation["active_assistant"] is None
 
 

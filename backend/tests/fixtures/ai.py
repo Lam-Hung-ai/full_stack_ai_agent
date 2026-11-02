@@ -3,7 +3,7 @@
 import json
 import re
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from typing import Any
 
 import pytest
@@ -14,7 +14,7 @@ from langchain_core.outputs import ChatGenerationChunk
 
 class ScriptedModel(GenericFakeChatModel):
     """Streams the scripted replies word by word and records every prompt
-    and every tool list the agent binds."""
+    and every tool list the ai binds."""
 
     prompts: list[list[BaseMessage]] = []
     bound_tools: list[list[str]] = []
@@ -61,36 +61,50 @@ class ScriptedModel(GenericFakeChatModel):
             yield ChatGenerationChunk(message=AIMessageChunk(content=token))
 
 
+def scripted(
+    *replies: str | AIMessage,
+    fail_after_words: int | None = None,
+    word_delay: float = 0,
+    before_reply: Callable[[], None] | None = None,
+) -> ScriptedModel:
+    return ScriptedModel(
+        messages=iter(
+            [r if isinstance(r, AIMessage) else AIMessage(content=r) for r in replies]
+        ),
+        prompts=[],
+        bound_tools=[],
+        fail_after_words=fail_after_words,
+        word_delay=word_delay,
+        before_reply=before_reply,
+    )
+
+
 @pytest.fixture
 def scripted_model(monkeypatch):
-    """Replace the model; call with the replies the agent should give."""
-    from app.modules.agent import graph
+    """Replace the model; call with the replies the ai should give.
+    `fallbacks` stand in for OPENROUTER_FALLBACK_MODELS."""
+    from app.modules.ai import agents, models
 
     def install(
         *replies: str | AIMessage,
         fail_after_words: int | None = None,
         word_delay: float = 0,
         before_reply: Callable[[], None] | None = None,
+        fallbacks: Sequence[ScriptedModel] = (),
     ) -> ScriptedModel:
-        model = ScriptedModel(
-            messages=iter(
-                [
-                    r if isinstance(r, AIMessage) else AIMessage(content=r)
-                    for r in replies
-                ]
-            ),
-            prompts=[],
-            bound_tools=[],
+        model = scripted(
+            *replies,
             fail_after_words=fail_after_words,
             word_delay=word_delay,
             before_reply=before_reply,
         )
-        monkeypatch.setattr(graph, "build_model", lambda: model)
-        graph.get_agent.cache_clear()
+        monkeypatch.setattr(models, "build_chat_model", lambda: model)
+        monkeypatch.setattr(models, "build_fallback_models", lambda: list(fallbacks))
+        agents.get_agent.cache_clear()
         return model
 
     yield install
-    graph.get_agent.cache_clear()
+    agents.get_agent.cache_clear()
 
 
 @pytest.fixture(autouse=True)
@@ -101,16 +115,16 @@ def title_model(request, monkeypatch):
         return None  # no app here: unit tests
     # The app may be imported only once the test database exists.
     request.getfixturevalue("pg")
-    from app.modules.agent import graph
+    from app.modules.ai import models
 
     def unavailable():
         raise RuntimeError("no title model in tests")
 
-    monkeypatch.setattr(graph, "build_title_model", unavailable)
+    monkeypatch.setattr(models, "build_title_model", unavailable)
 
     def install(reply: str) -> GenericFakeChatModel:
         model = GenericFakeChatModel(messages=iter([AIMessage(content=reply)]))
-        monkeypatch.setattr(graph, "build_title_model", lambda: model)
+        monkeypatch.setattr(models, "build_title_model", lambda: model)
         return model
 
     return install

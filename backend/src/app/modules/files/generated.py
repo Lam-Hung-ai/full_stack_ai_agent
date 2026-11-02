@@ -1,4 +1,4 @@
-"""Files the agent writes for the user (use case D06, QD-31).
+"""Files the ai writes for the user (use case D06, QD-31).
 
 The `create_file` tool hands over a name, a format and either text or rows.
 This module renders the bytes, stores them under the workspace's key and

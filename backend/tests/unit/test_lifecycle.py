@@ -8,7 +8,7 @@ from ag_ui.core import (
     ToolCallStartEvent,
 )
 
-from app.modules.agent.lifecycle import OpenSpans
+from app.modules.ai.runtime.lifecycle import OpenSpans
 
 
 def test_closes_what_is_still_open_innermost_first():

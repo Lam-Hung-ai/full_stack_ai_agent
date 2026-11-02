@@ -19,7 +19,7 @@ from app.common.schemas.pagination import PageParams, Pagination
 from app.config.security import digest, new_token, now
 from app.config.settings import get_settings
 from app.database.session import SessionLocal
-from app.modules.agent.runner import Runner
+from app.modules.ai.runtime.runner import Runner
 from app.modules.auth.repository import AuthRepository
 from app.modules.auth.service import AuthService
 from app.modules.authorization.repository import AuthorizationRepository

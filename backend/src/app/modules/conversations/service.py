@@ -18,11 +18,12 @@ from app.common.schemas.pagination import PageParams, Pagination
 from app.common.storage.client import ObjectStorage
 from app.config.security import now
 from app.database.session import SessionFactory
-from app.modules.agent.bundle import AguiMessage
-from app.modules.agent.checkpoints import drop_checkpoints, durable_saver
-from app.modules.agent.graph import GRAPH_VERSION
-from app.modules.agent.runner import Pause, Runner, RunStream, TurnStatus
-from app.modules.agent.tools import TOOL_RESOURCE, TOOLS
+from app.modules.ai.agents import DEFAULT_AGENT
+from app.modules.ai.memory.checkpoints import drop_checkpoints, durable_saver
+from app.modules.ai.runtime.bundle import AguiMessage
+from app.modules.ai.runtime.runner import Pause, Runner, TurnStatus
+from app.modules.ai.runtime.stream import RunStream
+from app.modules.ai.tools import TOOL_RESOURCE, TOOLS
 from app.modules.authorization.service import AuthorizationService
 from app.modules.conversations import interactions, search, titles
 from app.modules.conversations.context import branch_messages
@@ -408,7 +409,7 @@ class TurnService:
         pending = target["metadata"].get("pending_action")
         if target["status"] != "requires_action" or not pending:
             fail(409, "not_waiting")
-        if pending.get("graph_version") != GRAPH_VERSION:
+        if pending.get("graph_version") != DEFAULT_AGENT.version:
             # RR-07: an older graph's checkpoint is not run on a new graph.
             fail(409, "graph_version_changed")
         values = interactions.validate_answers(pending, data.resume)
@@ -821,7 +822,7 @@ class TurnService:
         content: str | None,
         rows: list[list[Any]] | None,
     ) -> dict[str, Any]:
-        """A file the agent creates in the turn, attached to its answer (D06)."""
+        """A file the ai creates in the turn, attached to its answer (D06)."""
         assert self._storage is not None
         saved = await save_generated(
             session_factory=self._session_factory,
@@ -869,7 +870,7 @@ class TurnService:
                 pending = interactions.new_pending_action(
                     checkpoint=await pause.saver.export(saver, pause.thread_id),
                     interrupts=pause.interrupts,
-                    graph_version=GRAPH_VERSION,
+                    graph_version=DEFAULT_AGENT.version,
                 )
                 activities = interactions.waiting_activities(pending)
                 content = [*content, *activities]

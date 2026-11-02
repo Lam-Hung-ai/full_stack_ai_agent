@@ -1,4 +1,4 @@
-from app.modules.agent.tools import TOOL_RESOURCE, TOOLS
+from app.modules.ai.tools import TOOL_RESOURCE, TOOLS
 from app.modules.authorization.catalog import PERMISSIONS
 
 

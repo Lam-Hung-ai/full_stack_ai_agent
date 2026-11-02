@@ -64,7 +64,7 @@ class OpenSpans:
 
     @property
     def idle(self) -> bool:
-        """Nothing open: a safe point to snapshot the turn (agent/live.py)."""
+        """Nothing open: a safe point to snapshot the turn (runtime/live.py)."""
         return not self._open
 
     def closing_events(self) -> list[BaseEvent]:

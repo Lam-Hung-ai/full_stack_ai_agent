@@ -10,16 +10,16 @@ Database decisions §6: content is written once the turn ends. The terminal
 RUN_FINISHED / RUN_ERROR is published only after that write commits, so a
 client that saw the end can reload and find the same result. A turn that
 stops on an interrupt ends as `requires_action`; its checkpoint is handed to
-the finalizer to be stored in the same transaction (agent/checkpoints.py).
+the finalizer to be stored in the same transaction (ai/memory/checkpoints.py).
 
-Every event is also mirrored to Redis (agent/live.py) so `connect` can show a
+Every event is also mirrored to Redis (runtime/live.py) so `connect` can show a
 running turn from any process, and stop requests reach the owning process.
 """
 
 import asyncio
 import logging
 import time
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 from uuid import UUID, uuid4
@@ -38,16 +38,12 @@ from ag_ui_langgraph import LangGraphAgent
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointTuple
 from langgraph.types import Interrupt
 
-from app.modules.agent.bundle import AguiMessage, BundleBuilder
-from app.modules.agent.checkpoints import TurnSaver, thread_config
-from app.modules.agent.lifecycle import OpenSpans
-from app.modules.agent.live import LiveStore, LiveView
-from app.modules.agent.tools import (
-    FileSink,
-    ToolGuard,
-    current_file_sink,
-    current_tool_guard,
-)
+from app.modules.ai.memory.checkpoints import TurnSaver, thread_config
+from app.modules.ai.runtime.bundle import AguiMessage, BundleBuilder
+from app.modules.ai.runtime.lifecycle import OpenSpans
+from app.modules.ai.runtime.live import LiveStore, LiveView
+from app.modules.ai.runtime.stream import RunStream
+from app.modules.ai.tools.context import FileSink, ToolGuard, TurnContext
 
 logger = logging.getLogger(__name__)
 
@@ -71,44 +67,11 @@ type Finalizer = Callable[
     [TurnStatus, list[AguiMessage], Pause | None], Awaitable[list[BaseEvent]]
 ]
 type InputPreparer = Callable[[RunAgentInput], Awaitable[RunAgentInput]]
-#: (tools, saver, trace ids) -> the turn's agent.
+#: (tools, saver, turn context, trace ids) -> the turn's agent.
 type AgentFactory = Callable[
-    [frozenset[str], BaseCheckpointSaver, dict[str, str]], LangGraphAgent
+    [frozenset[str], BaseCheckpointSaver, TurnContext, dict[str, str]],
+    LangGraphAgent,
 ]
-
-
-class RunStream:
-    """Ordered events of one turn, readable by any number of subscribers."""
-
-    def __init__(self) -> None:
-        self._events: list[BaseEvent] = []
-        self._closed = False
-        self._changed = asyncio.Condition()
-
-    async def publish(self, event: BaseEvent) -> None:
-        async with self._changed:
-            self._events.append(event)
-            self._changed.notify_all()
-
-    async def close(self) -> None:
-        async with self._changed:
-            self._closed = True
-            self._changed.notify_all()
-
-    async def subscribe(self) -> AsyncIterator[BaseEvent]:
-        position = 0
-        while True:
-            async with self._changed:
-                await self._changed.wait_for(
-                    lambda: position < len(self._events) or self._closed
-                )
-                batch = self._events[position:]
-                position = len(self._events)
-                closed = self._closed
-            for event in batch:
-                yield event
-            if closed and position == len(self._events):
-                return
 
 
 class _Channel:
@@ -328,9 +291,6 @@ class Runner:
                 logger.warning("Could not reset live keys of %s", assistant_id)
         heartbeat = asyncio.create_task(self._own(assistant_id))
         saver = TurnSaver()
-        # Tasks the graph spawns copy this context, so tool calls see the guard.
-        current_tool_guard.set(tool_guard)
-        current_file_sink.set(file_sink)
         finished: BaseEvent | None = None
         pause: Pause | None = None
         started = False
@@ -341,6 +301,7 @@ class Runner:
             agent = self._agent_factory(
                 tools,
                 saver,
+                TurnContext(tool_guard=tool_guard, file_sink=file_sink),
                 {
                     **log_fields,
                     "assistant_id": str(assistant_id),
@@ -467,7 +428,7 @@ class Runner:
         if status == "failed":
             await channel.publish(
                 RunErrorEvent(
-                    message="The agent could not finish.", code="agent_run_failed"
+                    message="The ai could not finish.", code="agent_run_failed"
                 )
             )
         else:

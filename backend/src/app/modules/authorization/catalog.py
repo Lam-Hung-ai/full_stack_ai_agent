@@ -24,7 +24,7 @@ PERMISSIONS: tuple[Permission, ...] = (
     Permission(
         "conversation", "share", "Chia sẻ snapshot của conversation do mình sở hữu"
     ),
-    # One entry per tool in modules/agent/tools.py (action = tool name).
+    # One entry per tool in modules/ai/tools/__init__.py (action = tool name).
     Permission("tool", "get_current_time", "Tool xem ngày giờ hiện tại"),
     Permission("tool", "create_file", "Tool tạo tệp tải về (CSV, Markdown, TXT, XLSX)"),
 )

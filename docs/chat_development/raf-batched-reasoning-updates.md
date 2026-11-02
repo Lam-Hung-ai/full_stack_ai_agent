@@ -7,7 +7,7 @@ Tham khảo từ: deepseek-harness (note `2026-08-03-opt-in-reasoning-chunk-brow
 `useAgentChat` gọi `setMessages` ngay lập tức mỗi khi `onMessagesChanged` bắn — tức là **mỗi event AG-UI = một lần React render**, bất kể trình duyệt có kịp vẽ ra màn hình hay không.
 
 ```ts
-// src/hooks/use-agent-chat.ts (trước khi sửa)
+// src/hooks/use-ai-chat.ts (trước khi sửa)
 onMessagesChanged: ({ messages: updated }) => setMessages([...updated]),
 ```
 
@@ -31,7 +31,7 @@ Với câu hỏi khó nhất test được, một lần chạy sinh ra **3175 ev
 Gom nhiều lần gọi liên tiếp lại, chỉ thực sự `setState` **đúng 1 lần mỗi khung hình trình duyệt**, bằng `requestAnimationFrame`. Dữ liệu không bao giờ mất — luôn giữ bản mới nhất trong `ref`, chỉ số lần *render* bị giảm.
 
 ```ts
-// src/hooks/use-agent-chat.ts (sau khi sửa)
+// src/hooks/use-ai-chat.ts (sau khi sửa)
 const pendingMessagesRef = useRef<AGUIMessage[] | null>(null);
 const frameRef = useRef<number | null>(null);
 

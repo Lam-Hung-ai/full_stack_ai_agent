@@ -13,7 +13,7 @@ async def test_each_turn_logs_one_line_without_content(
     headers = await login(user)
     conversation_id = await new_conversation(client, user, headers)
 
-    with caplog.at_level(logging.INFO, logger="app.modules.agent.runner"):
+    with caplog.at_level(logging.INFO, logger="app.modules.ai.runtime.runner"):
         await send(client, conversation_id, headers, body("Câu hỏi riêng tư"))
     (record,) = [r for r in caplog.records if r.getMessage() == "Assistant turn ended"]
     fields = record.fields
@@ -66,7 +66,7 @@ async def test_rate_limit_counts_in_redis(client, make_redis, monkeypatch):
 
 def test_tracing_is_off_without_keys_and_on_with_them(monkeypatch):
     from app.config.settings import get_settings
-    from app.modules.agent import tracing
+    from app.modules.ai.observability import tracing
 
     tracing._client.cache_clear()
     assert tracing.tracing_config({"conversation_id": "c"}) is None

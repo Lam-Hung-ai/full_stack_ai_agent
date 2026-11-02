@@ -30,7 +30,7 @@ def _pg_ctl(root: Path, *args: str) -> None:
 
 @contextmanager
 def temporary_postgres(
-    prefix: str = "agent-chat-tests-",
+    prefix: str = "ai-chat-tests-",
 ) -> Iterator[tuple[str, psycopg.Connection]]:
     """Start a private cluster on a free localhost port; yield its libpq URL."""
     root = Path(tempfile.mkdtemp(prefix=prefix))

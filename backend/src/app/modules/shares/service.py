@@ -231,7 +231,7 @@ def remap_bundle(
 ) -> list[dict[str, Any]]:
     """A row's AG-UI bundle for a new row id: the user message takes the new
     id (as stored questions do) and file parts point at `files` (old → new);
-    in an answer, tool results naming a file the agent made point there too."""
+    in an answer, tool results naming a file the ai made point there too."""
     if row["role"] != "user":
         return [_remap_tool_result(message, files) for message in row["content"]]
     (question,) = row["content"]

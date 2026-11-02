@@ -85,7 +85,7 @@ Giá trị cột *Xác minh*:
 - **Trạng thái:** Đã sửa (S3).
 
 ### L-08: Stop làm UI báo mất kết nối
-- **Vị trí:** `backend/src/app/modules/agent/runner.py::_finish`.
+- **Vị trí:** `../../../backend/src/app/modules/ai`.
 - **Thực tế:** console `AGUIError: Cannot send 'RUN_FINISHED' while steps are still active: model`; hook coi là lỗi mạng.
 - **Cách sửa:** `modules/agent/lifecycle.py` theo dõi span đang mở (step, text, reasoning, tool call) và phát event END cho chúng, trong cùng ra trước, rồi mới phát trạng thái cuối và `RUN_FINISHED` có `outcome: {type: "cancelled"}`.
 - **Test chặn tái phát:** `tests/unit/test_lifecycle.py`, `tests/api/conversations/test_stop.py::test_stop_keeps_the_partial_answer`.

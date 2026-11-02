@@ -9,7 +9,7 @@ from app.common.dependencies.rate_limit import rate_limit, user_rate_limit
 from app.common.email import MailerDep, deliver
 from app.common.schemas.pagination import PageParams, page_params
 from app.database.session import SessionDep
-from app.modules.agent.dependencies import RunnerDep
+from app.modules.ai.dependencies import RunnerDep
 from app.modules.auth.schemas import TokenInput
 from app.modules.members.schemas import (
     InvitationCreate,

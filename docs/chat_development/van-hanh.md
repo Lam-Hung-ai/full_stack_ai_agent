@@ -72,6 +72,7 @@ uv run uvicorn app.main:app --proxy-headers --forwarded-allow-ips=10.0.0.5
 - Mỗi lượt gửi cho model tối đa 20 MB tệp đính kèm, ưu tiên câu hỏi mới nhất; tệp cũ hơn chỉ được nêu tên.
 
 - Mỗi chat mới gọi model thêm một lần để đặt tên (tắt reasoning, tối đa 40 token); log `Conversation title suggested` ghi số token.
+- Model dự phòng: `OPENROUTER_FALLBACK_MODELS` (danh sách JSON model OpenRouter, ví dụ `["openai/gpt-5-mini"]`). Khi lời gọi `OPENROUTER_MODEL` lỗi (provider lỗi, 429, mất kết nối), agent thử lần lượt các model này (`ModelFallbackMiddleware` của LangChain); tất cả lỗi thì lượt `failed`. Lỗi giữa chừng khi đã stream vài chữ: người xem thấy tạm phần chữ dở nối với câu trả lời dự phòng cho tới `MESSAGES_SNAPSHOT` cuối lượt; nội dung lưu chỉ có câu trả lời dự phòng. Không áp dụng cho lời gọi đặt tên chat.
 
 ## 5. Log và trace
 
