@@ -155,3 +155,5 @@ Loại: `BẮT ĐẦU`, `KẾT THÚC`, `LỖI`, `SỬA`, `THAY ĐỔI`, `QUYẾT
 | 02/11/2026 | S12 | QUYẾT ĐỊNH | QD-35 | Chi tiết quản trị LLM: module `llm`, mục đích chat/title, fallback biến môi trường, cache theo chuỗi model | CH-S12-BE-01, BE-02 |
 | 02/11/2026 | S12 | THAY ĐỔI | TD-022 | Bảng LLM, API quản trị, `LLM_ENCRYPTION_KEY`, trang `/admin/llm` | CH-S12-DB-01 → DOC-02 |
 | 02/11/2026 | S12 | KẾT THÚC | — | Xong 7/7 task; backend 161 test, frontend 74 test xanh; kịch bản 1–3 đạt | — |
+| 02/11/2026 | S11 | PHÁT HÀNH | — | Commit Sprint 11 trên `chat` | `93ef2b2` |
+| 02/11/2026 | S12 | PHÁT HÀNH | — | Commit Sprint 12 trên `chat` | `7e934e1` |
