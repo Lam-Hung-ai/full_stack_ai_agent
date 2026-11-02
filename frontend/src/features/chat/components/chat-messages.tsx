@@ -47,7 +47,7 @@ import { type FileLinkSource, MessageFiles } from "./message-files";
 import { ReasoningSummary } from "./reasoning-summary";
 
 /** Turn footers: small, quiet icons. */
-const FOOTER_CLASS = "gap-0.5 text-muted-foreground [&_button]:size-7 [&_svg]:size-3.5";
+const FOOTER_CLASS = "gap-0 text-muted-foreground [&_button]:size-6 [&_svg]:size-3";
 
 /** What the reader may do; a shared snapshot only switches versions. */
 export type RowActions = {
@@ -225,43 +225,47 @@ function AnswerRow({
     answerable && !row.live && row.status === "requires_action" ? actions?.onAnswer : undefined;
 
   return (
-    <>
-      {items.length === 0 && waiting && (
-        <Message from="assistant">
-          <MessageContent>
-            <Loader />
-          </MessageContent>
-        </Message>
-      )}
-      {items.map((item, index) => {
-        if (item.kind === "turn") {
-          return (
-            <TurnView
-              fileSource={fileSource}
-              isStreaming={isStreaming && index === items.length - 1}
-              key={item.turn.message.id}
-              messages={row.content}
-              rowStatus={row.live ? "running" : row.status}
-              turn={item.turn}
-            />
-          );
-        }
-        const interaction = interactionOf(item.message);
-        if (!interaction) return null;
-        return (
-          <Message from="assistant" key={item.message.id}>
-            <InteractionCard
-              draft={actions?.drafts?.[interaction.interrupt_id]}
-              interaction={interaction}
-              onAnswer={
-                onAnswer
-                  ? (answer) => onAnswer(row.id, interaction.interrupt_id, answer)
-                  : undefined
-              }
-            />
+    // One block, so the footer sits right under the answer instead of a
+    // whole conversation gap below it.
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-8">
+        {items.length === 0 && waiting && (
+          <Message from="assistant">
+            <MessageContent>
+              <Loader />
+            </MessageContent>
           </Message>
-        );
-      })}
+        )}
+        {items.map((item, index) => {
+          if (item.kind === "turn") {
+            return (
+              <TurnView
+                fileSource={fileSource}
+                isStreaming={isStreaming && index === items.length - 1}
+                key={item.turn.message.id}
+                messages={row.content}
+                rowStatus={row.live ? "running" : row.status}
+                turn={item.turn}
+              />
+            );
+          }
+          const interaction = interactionOf(item.message);
+          if (!interaction) return null;
+          return (
+            <Message from="assistant" key={item.message.id}>
+              <InteractionCard
+                draft={actions?.drafts?.[interaction.interrupt_id]}
+                interaction={interaction}
+                onAnswer={
+                  onAnswer
+                    ? (answer) => onAnswer(row.id, interaction.interrupt_id, answer)
+                    : undefined
+                }
+              />
+            </Message>
+          );
+        })}
+      </div>
       {(row.status === "cancelled" || row.status === "failed" || finished) && (
         <MessageActions className={FOOTER_CLASS}>
           {finished && copyText && <CopyAction text={copyText} />}
@@ -292,7 +296,7 @@ function AnswerRow({
           )}
         </MessageActions>
       )}
-    </>
+    </div>
   );
 }
 
@@ -380,7 +384,7 @@ function TurnView({
 function TurnTime({ createdAt }: { createdAt?: string }) {
   return (
     <time
-      className="px-1 text-muted-foreground text-xs"
+      className="px-1 text-[11px] text-muted-foreground"
       dateTime={createdAt}
       title={turnTimeTitle(createdAt)}
     >
