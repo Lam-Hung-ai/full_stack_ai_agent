@@ -31,7 +31,8 @@ export function InteractionCard({
       ) : (
         <p className="flex items-start gap-2 font-medium">
           <MessageCircleQuestionIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-          {interaction.question}
+          {/* The agent speaking: the answers' serif. */}
+          <span className="font-normal font-serif text-base">{interaction.question}</span>
         </p>
       )}
       {waiting && onAnswer ? (

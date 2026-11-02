@@ -351,7 +351,9 @@ function TurnView({
           </Reasoning>
         )}
         {message.content ? (
-          <MessageResponse className="leading-7">{message.content}</MessageResponse>
+          <MessageResponse className="font-serif text-[1.0625rem] leading-7">
+            {message.content}
+          </MessageResponse>
         ) : toolCalls.length === 0 && !reasoning && isStreaming ? (
           <Loader />
         ) : null}
