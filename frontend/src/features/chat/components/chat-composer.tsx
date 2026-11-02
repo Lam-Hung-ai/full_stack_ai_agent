@@ -115,9 +115,9 @@ export function ChatComposer({
           )}
           <PromptInputBody>
             <PromptInputTextarea
-              // 16px like the sent question (and no zoom-on-focus on iPhones);
-              // md: overrides the textarea primitive's md:text-sm.
-              className="min-h-10 py-2.5 text-base md:text-base"
+              // 14px like the sent question; 16px on phones, where smaller
+              // text makes iPhones zoom in on focus.
+              className="min-h-10 py-2.5 text-base md:text-sm"
               onPaste={(event) => takeFiles(event.clipboardData) && event.preventDefault()}
               placeholder={placeholder}
             />

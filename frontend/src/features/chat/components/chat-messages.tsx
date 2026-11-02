@@ -47,15 +47,15 @@ import { type FileLinkSource, MessageFiles } from "./message-files";
 import { ReasoningSummary } from "./reasoning-summary";
 
 /**
- * Answer prose: 18px serif with relaxed leading; paragraphs, lists and
+ * Answer prose: 16px serif with relaxed leading; paragraphs, lists and
  * headings capped at 35em (about 70 characters a line), while tables and
  * code (wrapped in divs) keep the column width. Headings sit tighter.
  */
 const ANSWER_CLASS = cn(
-  "font-serif text-lg leading-relaxed",
+  "font-serif text-base leading-relaxed",
   "*:max-w-[35em] [&>div]:max-w-none",
   "[&_:is(h1,h2,h3)]:font-semibold [&_:is(h1,h2,h3)]:leading-tight",
-  "[&_h1]:text-2xl [&_h2]:text-xl [&_h3]:text-lg",
+  "[&_h1]:text-xl [&_h2]:text-lg [&_h3]:text-base",
   // Tables are data to scan: the interface sans with aligned digits.
   "[&_table]:font-sans [&_table]:text-sm [&_table]:tabular-nums",
   // Inline code scales with the text around it (mono looks large per px).
@@ -169,7 +169,7 @@ function QuestionRow({
     <Message from="user">
       {fileSource && <MessageFiles files={files} source={fileSource} />}
       {text && (
-        <MessageContent className="text-base group-[.is-user]:rounded-2xl">
+        <MessageContent className="text-sm group-[.is-user]:rounded-2xl">
           <MessageResponse>{text}</MessageResponse>
         </MessageContent>
       )}
@@ -354,7 +354,7 @@ function TurnView({
 
   return (
     <Message from="assistant">
-      <MessageContent className="w-full text-base">
+      <MessageContent className="w-full text-sm">
         {reasoning && (
           <Reasoning defaultOpen={isReasoningStreaming} isStreaming={isReasoningStreaming}>
             <ReasoningTrigger>
