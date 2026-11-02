@@ -29,7 +29,9 @@ Lộ trình đưa chat từ scaffold hiện tại (`POST /agent`, `HttpAgent`, `
 | S8 | 22/02 – 05/03 | Share và copy | Snapshot toàn cây, link public (cá nhân) hoặc nội bộ tổ chức, copy chat và byte object mới qua copy job. Frontend màn xem share, nút "Hỏi tiếp" | O03, O04 | 8 nc |
 | S9 | 08/03 – 19/03 | Vận hành và hoàn thiện | Langfuse token/chi phí; log JSON; giới hạn concurrency và backpressure; load test API/stream/runner/PG/Redis; rà soát toàn bộ, chấm lại use case | — | 6 nc |
 | S10 | 22/03 – 02/04/2027 | Mở rộng chat | Model đặt tên chat (giữ tên đổi tay); tìm chat theo tên và nội dung không phân biệt dấu; tool tạo tệp CSV/MD/TXT/XLSX gắn vào câu trả lời, đi theo share và copy; export chat của mình thành zip. Frontend ô tìm kiếm, thẻ tệp, nút export | C01, C09, D06, O08 (export) | 11 nc |
-| | | | | **Tổng** | **≈ 83 nc** |
+| S11 | 05/04 – 07/04/2027 | Đổi tên message thành turn | Bảng `messages` thành `turns` (và bảng, cột, hàm liên quan); code, API (`/turns…`, `turn_id`), frontend và tài liệu dùng cùng tên; hành vi và dữ liệu giữ nguyên (QD-33) | — | 2,5 nc |
+| S12 | 08/04 – 16/04/2027 | Quản lý LLM model | Kết nối, model, gán model theo mục đích (chính và dự phòng) lưu trong database, key mã hoá; agent dựng model bằng `init_chat_model` từ cấu hình này; superuser quản lý ở trang `/admin/llm` (QD-34) | — | 5 nc |
+| | | | | **Tổng** | **≈ 90,5 nc** |
 
 ```mermaid
 flowchart LR
@@ -47,6 +49,8 @@ flowchart LR
     S5 --> S9
     S8 --> S9
     S9 --> S10["S10: mở rộng chat"]
+    S10 --> S11["S11: đổi tên turn"]
+    S11 --> S12["S12: quản lý LLM"]
 ```
 
 **Ràng buộc cứng**
@@ -177,3 +181,4 @@ Bản đề xuất đầu có các bất cập sau; đã sửa ở mục 1 (TD-0
 | 29/10/2026 | Rà soát phân bổ: thêm S6 tổ chức và quyền, S2 thành lát dọc, quyền tool vào S3, vận hành vào S9; thêm §2 auth tham khảo hr-ai; xếp lịch dự kiến (TD-003) | — |
 | 29/10/2026 | Thêm §2.2 file S3 tham khảo hr-ai; S7 còn 5 nc (TD-005) | — |
 | 30/10/2026 | Thêm S10 mở rộng chat từ các use case Một phần sau khi chấm lại ở S9; T03, xoá tài khoản, D01, T01 để sau (TD-017, QD-31) | — |
+| 02/11/2026 | Thêm S11 đổi tên message thành turn (TD-020, QD-33) và S12 quản lý LLM model (QD-34) | — |
