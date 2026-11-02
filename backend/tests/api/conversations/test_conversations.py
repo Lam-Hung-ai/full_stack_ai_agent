@@ -48,9 +48,9 @@ async def test_empty_history(client, make_user, login):
         await client.post(path(user.personal_workspace_id), json={}, headers=headers)
     ).json()
     history = await client.get(
-        f"/api/v1/conversations/{created['id']}/messages", headers=headers
+        f"/api/v1/conversations/{created['id']}/turns", headers=headers
     )
-    assert history.json() == {"current_message_id": None, "data": []}
+    assert history.json() == {"current_turn_id": None, "data": []}
 
 
 async def test_organization_needs_conversation_create(
@@ -92,7 +92,7 @@ async def test_conversations_are_private_to_the_owner(
     conversation = f"/api/v1/conversations/{created['id']}"
     for method, url in [
         ("GET", conversation),
-        ("GET", f"{conversation}/messages"),
+        ("GET", f"{conversation}/turns"),
         ("DELETE", conversation),
     ]:
         response = await client.request(method, url, headers=headers)

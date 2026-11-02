@@ -1,11 +1,11 @@
 from uuid_utils.compat import uuid7
 
-from app.modules.conversations.tree import MessageTree
+from app.modules.conversations.tree import TurnTree
 
 
 def test_siblings_and_latest_leaf():
     q1, a1, q2, a2, q1b, a1b, a1c = (uuid7() for _ in range(7))
-    tree = MessageTree(
+    tree = TurnTree(
         [
             (q1, None),
             (a1, q1),

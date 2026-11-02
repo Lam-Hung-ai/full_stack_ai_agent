@@ -203,7 +203,7 @@ async def test_removed_member_loses_chats_and_running_turns_stop(
     statuses = [e["value"]["status"] for e in events if e["type"] == "CUSTOM"]
     assert statuses[-1] == "cancelled"
     old_chat = await client.get(
-        f"/api/v1/conversations/{conversation_id}/messages", headers=headers
+        f"/api/v1/conversations/{conversation_id}/turns", headers=headers
     )
     assert old_chat.status_code == 404
     workspaces = (await client.get("/api/v1/workspaces", headers=headers)).json()

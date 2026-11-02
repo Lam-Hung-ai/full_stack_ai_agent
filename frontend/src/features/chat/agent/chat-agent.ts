@@ -14,24 +14,24 @@ import { apiUrl, authorizedFetch } from "@/lib/api";
  *
  * Requests use the application's own DTOs; responses are AG-UI SSE parsed and
  * applied by the SDK pipeline, so messages, state and subscribers work as with
- * a plain HttpAgent. History stays on the server: nothing but the new message
+ * a plain HttpAgent. History stays on the server: nothing but the new turn
  * is sent.
  */
 
 /** Name of the CUSTOM event linking the stream to SQL rows. */
-export const ASSISTANT_EVENT = "chat.assistant";
+export const TURN_EVENT = "chat.turn";
 
-export type AssistantEventValue = {
+export type TurnEventValue = {
   conversationId: string;
-  userMessageId: string;
-  assistantMessageId: string;
+  userTurnId: string;
+  assistantTurnId: string;
   status: "running" | "requires_action" | "completed" | "failed" | "cancelled";
 };
 
-export type ChatMessageInput = { id: string; text: string; fileIds: string[] };
-export type SendMessageInput = { parentMessageId: string | null; message: ChatMessageInput };
-export type EditMessageInput = { userMessageId: string; message: ChatMessageInput };
-export type ResumeInput = { assistantMessageId: string; resume: ResumeEntry[] };
+export type TurnInput = { id: string; text: string; fileIds: string[] };
+export type SendTurnInput = { parentTurnId: string | null; turn: TurnInput };
+export type EditTurnInput = { userTurnId: string; turn: TurnInput };
+export type ResumeInput = { assistantTurnId: string; resume: ResumeEntry[] };
 
 type Operation = { path: string; body?: unknown };
 // The operation travels inside the run's own input, so a second call can
@@ -57,26 +57,26 @@ export class ChatAgent extends HttpAgent {
     this.conversationId = conversationId;
   }
 
-  sendMessage({ parentMessageId, message }: SendMessageInput): Promise<RunAgentResult> {
-    this.addMessage({ id: message.id, role: "user", content: message.text });
+  sendTurn({ parentTurnId, turn }: SendTurnInput): Promise<RunAgentResult> {
+    this.addMessage({ id: turn.id, role: "user", content: turn.text });
     return this.runOperation({
-      path: "/messages",
-      body: { parent_message_id: parentMessageId, message: toDto(message) },
+      path: "/turns",
+      body: { parent_turn_id: parentTurnId, turn: toDto(turn) },
     });
   }
 
   /** Ask a new version of a question; the old version keeps its branch. */
-  editMessage({ userMessageId, message }: EditMessageInput): Promise<RunAgentResult> {
-    this.addMessage({ id: message.id, role: "user", content: message.text });
+  editTurn({ userTurnId, turn }: EditTurnInput): Promise<RunAgentResult> {
+    this.addMessage({ id: turn.id, role: "user", content: turn.text });
     return this.runOperation({
-      path: `/messages/${userMessageId}/edit`,
-      body: { message: toDto(message) },
+      path: `/turns/${userTurnId}/edit`,
+      body: { turn: toDto(turn) },
     });
   }
 
   /** Answer what a paused assistant waits on; the same turn continues. */
-  resume({ assistantMessageId, resume }: ResumeInput): Promise<RunAgentResult> {
-    return this.runOperation({ path: `/messages/${assistantMessageId}/resume`, body: { resume } }, resume);
+  resume({ assistantTurnId, resume }: ResumeInput): Promise<RunAgentResult> {
+    return this.runOperation({ path: `/turns/${assistantTurnId}/resume`, body: { resume } }, resume);
   }
 
   /**
@@ -100,9 +100,9 @@ export class ChatAgent extends HttpAgent {
     return transformHttpEventStream(runHttpRequest(request), this.debugLogger);
   }
 
-  /** Answer the question of `assistantMessageId` again, beside that answer. */
-  regenerate({ assistantMessageId }: { assistantMessageId: string }): Promise<RunAgentResult> {
-    return this.runOperation({ path: `/messages/${assistantMessageId}/regenerate` });
+  /** Answer the question of `assistantTurnId` again, beside that answer. */
+  regenerate({ assistantTurnId }: { assistantTurnId: string }): Promise<RunAgentResult> {
+    return this.runOperation({ path: `/turns/${assistantTurnId}/regenerate` });
   }
 
   run(input: RunAgentInput): ReturnType<HttpAgent["run"]> {
@@ -132,6 +132,6 @@ export class ChatAgent extends HttpAgent {
   }
 }
 
-function toDto(message: ChatMessageInput) {
-  return { id: message.id, text: message.text, file_ids: message.fileIds };
+function toDto(turn: TurnInput) {
+  return { id: turn.id, text: turn.text, file_ids: turn.fileIds };
 }

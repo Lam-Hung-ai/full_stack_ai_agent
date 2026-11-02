@@ -87,14 +87,14 @@ async def _user(
     parent = None
     for turn in range(turns):
         payload = {
-            "parent_message_id": parent,
-            "message": {"id": str(uuid7()), "text": f"Câu hỏi số {turn}"},
+            "parent_turn_id": parent,
+            "turn": {"id": str(uuid7()), "text": f"Câu hỏi số {turn}"},
         }
         started = time.monotonic()
         try:
             first, events = await _stream(
                 client,
-                f"/api/v1/conversations/{conversation}/messages",
+                f"/api/v1/conversations/{conversation}/turns",
                 headers,
                 payload,
             )
@@ -108,14 +108,14 @@ async def _user(
         if not status or status[-1]["status"] != "completed":
             results.errors["turn not completed"] += 1
             continue
-        parent = status[-1]["assistantMessageId"]
+        parent = status[-1]["assistantTurnId"]
     started = time.monotonic()
     try:
         await _stream(client, f"/api/v1/conversations/{conversation}/connect", headers)
         results.time("connect", time.monotonic() - started)
         started = time.monotonic()
         response = await client.get(
-            f"/api/v1/conversations/{conversation}/messages", headers=headers
+            f"/api/v1/conversations/{conversation}/turns", headers=headers
         )
         response.raise_for_status()
         results.time("history", time.monotonic() - started)

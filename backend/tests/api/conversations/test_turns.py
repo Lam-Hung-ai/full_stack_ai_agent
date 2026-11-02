@@ -1,4 +1,4 @@
-"""Sending a message: one turn per request, run apart from HTTP, saved at the end."""
+"""Sending a question: one turn per request, run apart from HTTP, saved at the end."""
 
 import asyncio
 import json
@@ -14,10 +14,10 @@ async def test_turn_streams_and_is_saved(client, make_user, login, scripted_mode
     user = make_user("an@example.com")
     headers = await login(user)
     conversation_id = await new_conversation(client, user, headers)
-    message_id = uuid7()
+    turn_id = uuid7()
 
     status, events = await send(
-        client, conversation_id, headers, body("  Chào ai  ", message_id=message_id)
+        client, conversation_id, headers, body("  Chào ai  ", turn_id=turn_id)
     )
     assert status == 200
     types = [event["type"] for event in events]
@@ -25,20 +25,20 @@ async def test_turn_streams_and_is_saved(client, make_user, login, scripted_mode
     assert events[0]["threadId"] == conversation_id
     custom = [event["value"] for event in events if event["type"] == "CUSTOM"]
     assert [value["status"] for value in custom] == ["running", "completed"]
-    assert custom[0]["userMessageId"] == str(message_id)
+    assert custom[0]["userTurnId"] == str(turn_id)
     text = "".join(e["delta"] for e in events if e["type"] == "TEXT_MESSAGE_CONTENT")
     assert text == "Xin chào bạn"
 
     saved = await history(client, conversation_id, headers)
     user_row, assistant_row = saved["data"]
-    assert saved["current_message_id"] == assistant_row["id"]
-    assert assistant_row["id"] == custom[0]["assistantMessageId"]
+    assert saved["current_turn_id"] == assistant_row["id"]
+    assert assistant_row["id"] == custom[0]["assistantTurnId"]
     assert user_row["content"] == [
-        {"id": str(message_id), "role": "user", "content": "Chào ai"}
+        {"id": str(turn_id), "role": "user", "content": "Chào ai"}
     ]
     assert user_row["status"] == "completed"
     assert assistant_row["status"] == "completed"
-    assert assistant_row["parent_message_id"] == str(message_id)
+    assert assistant_row["parent_turn_id"] == str(turn_id)
     assert [m["role"] for m in assistant_row["content"]] == ["assistant"]
     assert assistant_row["content"][0]["content"] == "Xin chào bạn"
 
@@ -57,7 +57,7 @@ async def test_next_turn_gets_the_branch_as_context(
     headers = await login(user)
     conversation_id = await new_conversation(client, user, headers)
     await send(client, conversation_id, headers, body("Câu một"))
-    parent = (await history(client, conversation_id, headers))["current_message_id"]
+    parent = (await history(client, conversation_id, headers))["current_turn_id"]
 
     status, _ = await send(client, conversation_id, headers, body("Câu hai", parent))
     assert status == 200
@@ -84,11 +84,11 @@ async def test_parent_rules(client, db, make_user, login, scripted_model):
     status, error = await send(
         client, conversation_id, headers, body("x", rows[1]["id"], uuid4())
     )
-    assert status == 422  # a UUIDv4 message id
+    assert status == 422  # a UUIDv4 turn id
     status, error = await send(
         client, conversation_id, headers, body("x", rows[1]["id"], rows[0]["id"])
     )
-    assert (status, error["error"]["code"]) == (409, "message_id_conflict")
+    assert (status, error["error"]["code"]) == (409, "turn_id_conflict")
 
 
 async def test_one_active_assistant_per_conversation(
@@ -99,11 +99,11 @@ async def test_one_active_assistant_per_conversation(
     headers = await login(user)
     conversation_id = await new_conversation(client, user, headers)
     await send(client, conversation_id, headers, body("Câu một"))
-    parent = (await history(client, conversation_id, headers))["current_message_id"]
+    parent = (await history(client, conversation_id, headers))["current_turn_id"]
     # A second turn still running in another tab.
     db(
-        "INSERT INTO chat_app.messages "
-        "(conversation_id, parent_message_id, role, status) "
+        "INSERT INTO chat_app.turns "
+        "(conversation_id, parent_turn_id, role, status) "
         "VALUES (%s, %s, 'assistant', 'running')",
         (conversation_id, parent),
     )
@@ -144,7 +144,7 @@ async def test_leaving_the_stream_does_not_stop_the_turn(
 
     async with client.stream(
         "POST",
-        f"/api/v1/conversations/{conversation_id}/messages",
+        f"/api/v1/conversations/{conversation_id}/turns",
         json=body("Hỏi"),
         headers=headers,
     ) as response:
@@ -168,9 +168,9 @@ async def test_input_validation(client, make_user, login, scripted_model):
     conversation_id = await new_conversation(client, user, headers)
 
     status, error = await send(client, conversation_id, headers, body("   "))
-    assert (status, error["error"]["code"]) == (422, "empty_message")
+    assert (status, error["error"]["code"]) == (422, "empty_turn")
     payload = body("x")
-    payload["message"]["file_ids"] = [str(uuid4())]
+    payload["turn"]["file_ids"] = [str(uuid4())]
     status, error = await send(client, conversation_id, headers, payload)
     # An id that is not an upload of this user and workspace.
     assert (status, error["error"]["code"]) == (422, "invalid_file")

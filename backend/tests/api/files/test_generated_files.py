@@ -53,10 +53,10 @@ async def test_spreadsheet_is_stored_attached_and_downloadable(
     (row,) = db("SELECT * FROM chat_app.stored_files WHERE id = %s", (made["file_id"],))
     assert row["uploaded_by"] == user.id and row["size_bytes"] == made["size_bytes"]
     links = db(
-        "SELECT message_id FROM chat_app.message_files WHERE stored_file_id = %s",
+        "SELECT turn_id FROM chat_app.turn_files WHERE stored_file_id = %s",
         (made["file_id"],),
     )
-    assert [str(link["message_id"]) for link in links] == [assistant["id"]]
+    assert [str(link["turn_id"]) for link in links] == [assistant["id"]]
 
     sheet = load_workbook(io.BytesIO(stored_body(storage, row["object_key"]))).active
     assert sheet is not None

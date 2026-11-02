@@ -32,10 +32,10 @@ import { ReasoningSummary } from "./reasoning-summary";
 
 /** What the reader may do; a shared snapshot only switches versions. */
 export type RowActions = {
-  onSwitch: (messageId: string) => void;
-  onEdit?: (userMessageId: string, text: string) => void;
-  onRegenerate?: (assistantMessageId: string) => void;
-  onAnswer?: (assistantMessageId: string, interruptId: string, answer: InteractionAnswer) => void;
+  onSwitch: (turnId: string) => void;
+  onEdit?: (userTurnId: string, text: string) => void;
+  onRegenerate?: (assistantTurnId: string) => void;
+  onAnswer?: (assistantTurnId: string, interruptId: string, answer: InteractionAnswer) => void;
   /** Answers kept until every question of a pause has one, by interrupt id. */
   drafts?: Record<string, InteractionAnswer>;
 };

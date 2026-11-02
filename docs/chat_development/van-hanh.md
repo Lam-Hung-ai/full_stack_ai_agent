@@ -28,12 +28,16 @@ Chạy hằng ngày (cron hoặc job lịch của nền tảng), mỗi lúc ch�
 cd backend && uv run storage cleanup
 ```
 
-Lệnh xoá tệp đã tải lên nhưng không gắn vào câu hỏi nào sau 1 ngày (dòng `stored_files` trước, object sau), chuyển job copy bỏ dở quá 1 ngày sang `cancelled` và xoá byte của mọi bản copy đã huỷ; dòng của bản copy giữ lại vì message không bao giờ bị xoá (QD-30, RR-17, RR-18).
+Lệnh xoá tệp đã tải lên nhưng không gắn vào câu hỏi nào sau 1 ngày (dòng `stored_files` trước, object sau), chuyển job copy bỏ dở quá 1 ngày sang `cancelled` và xoá byte của mọi bản copy đã huỷ; dòng của bản copy giữ lại vì turn không bao giờ bị xoá (QD-30, RR-17, RR-18).
 
 Từ S10:
 - Migration tìm kiếm tạo extension `pg_trgm` và `unaccent` (gói contrib của PostgreSQL): user chạy `dbmate` phải có quyền `CREATE EXTENSION`, hoặc DBA tạo trước.
 - `uv sync` cài thêm `openpyxl` (tool tạo XLSX).
 - Sau `iam sync-permissions`, vai trò owner có quyền `tool.create_file`; vai trò khác gán ở màn Vai trò.
+
+Từ S11 (QD-33):
+- Migration đổi tên `messages` thành `turns` (và bảng, cột, hàm liên quan) tại chỗ, không chép dữ liệu. Chạy khi không có lượt `running`.
+- API đổi đường dẫn (`/conversations/{id}/turns…`) và tên trường (`turn_id`, `parent_turn_id`, `current_turn_id`, event `chat.turn`): triển khai backend và frontend **cùng lúc**, không có route cũ song song.
 
 ## 3. Proxy trước backend (RR-13)
 

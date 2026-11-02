@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { clearAccessToken, setAccessToken } from "@/lib/auth/session";
-import { ASSISTANT_EVENT, ChatAgent } from "./chat-agent";
+import { TURN_EVENT, ChatAgent } from "./chat-agent";
 
 function sse(events: object[]): Response {
   const body = events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("");
@@ -11,16 +11,16 @@ const turn = (assistantId: string) => [
   { type: "RUN_STARTED", threadId: "c1", runId: "server-run" },
   {
     type: "CUSTOM",
-    name: ASSISTANT_EVENT,
-    value: { conversationId: "c1", userMessageId: "u1", assistantMessageId: assistantId, status: "running" },
+    name: TURN_EVENT,
+    value: { conversationId: "c1", userTurnId: "u1", assistantTurnId: assistantId, status: "running" },
   },
   { type: "TEXT_MESSAGE_START", messageId: "m1", role: "assistant" },
   { type: "TEXT_MESSAGE_CONTENT", messageId: "m1", delta: "Chào" },
   { type: "TEXT_MESSAGE_END", messageId: "m1" },
   {
     type: "CUSTOM",
-    name: ASSISTANT_EVENT,
-    value: { conversationId: "c1", userMessageId: "u1", assistantMessageId: assistantId, status: "completed" },
+    name: TURN_EVENT,
+    value: { conversationId: "c1", userTurnId: "u1", assistantTurnId: assistantId, status: "completed" },
   },
   { type: "RUN_FINISHED", threadId: "c1", runId: "server-run" },
 ];
@@ -31,7 +31,7 @@ afterEach(() => {
 });
 
 describe("ChatAgent", () => {
-  it("sends only the new message as the application DTO", async () => {
+  it("sends only the new turn as the application DTO", async () => {
     setAccessToken("t1");
     const fetchMock = vi.fn(async () => sse(turn("a1")));
     vi.stubGlobal("fetch", fetchMock);
@@ -40,16 +40,16 @@ describe("ChatAgent", () => {
       initialMessages: [{ id: "old", role: "user", content: "trước" }],
     });
 
-    await agent.sendMessage({
-      parentMessageId: "a0",
-      message: { id: "u1", text: "Xin chào", fileIds: [] },
+    await agent.sendTurn({
+      parentTurnId: "a0",
+      turn: { id: "u1", text: "Xin chào", fileIds: [] },
     });
 
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe("/api/v1/conversations/c1/messages");
+    expect(url).toBe("/api/v1/conversations/c1/turns");
     expect(JSON.parse(String(init.body))).toEqual({
-      parent_message_id: "a0",
-      message: { id: "u1", text: "Xin chào", file_ids: [] },
+      parent_turn_id: "a0",
+      turn: { id: "u1", text: "Xin chào", file_ids: [] },
     });
     expect(new Headers(init.headers).get("Authorization")).toBe("Bearer t1");
     expect(agent.messages.map((m) => [m.id, m.role, m.content])).toEqual([
@@ -65,13 +65,13 @@ describe("ChatAgent", () => {
     const statuses: string[] = [];
     agent.subscribe({
       onCustomEvent: ({ event }) => {
-        if (event.name === ASSISTANT_EVENT) {
-          const value = event.value as { assistantMessageId: string; status: string };
-          statuses.push(`${value.assistantMessageId}:${value.status}`);
+        if (event.name === TURN_EVENT) {
+          const value = event.value as { assistantTurnId: string; status: string };
+          statuses.push(`${value.assistantTurnId}:${value.status}`);
         }
       },
     });
-    await agent.sendMessage({ parentMessageId: null, message: { id: "u1", text: "x", fileIds: [] } });
+    await agent.sendTurn({ parentTurnId: null, turn: { id: "u1", text: "x", fileIds: [] } });
     expect(statuses).toEqual(["a9:running", "a9:completed"]);
   });
 
@@ -85,7 +85,7 @@ describe("ChatAgent", () => {
     const agent = new ChatAgent({ conversationId: "c1" });
     agent.subscribe({ onRunFailed: () => undefined });
     await expect(
-      agent.sendMessage({ parentMessageId: null, message: { id: "u1", text: "x", fileIds: [] } }),
+      agent.sendTurn({ parentTurnId: null, turn: { id: "u1", text: "x", fileIds: [] } }),
     ).rejects.toMatchObject({ status: 409, payload: { error: { code: "assistant_active" } } });
   });
 
@@ -94,22 +94,22 @@ describe("ChatAgent", () => {
     vi.stubGlobal("fetch", fetchMock);
     const agent = new ChatAgent({ conversationId: "c1" });
 
-    await agent.editMessage({
-      userMessageId: "u0",
-      message: { id: "u1", text: "Đã sửa", fileIds: [] },
+    await agent.editTurn({
+      userTurnId: "u0",
+      turn: { id: "u1", text: "Đã sửa", fileIds: [] },
     });
-    await agent.regenerate({ assistantMessageId: "a1" });
+    await agent.regenerate({ assistantTurnId: "a1" });
 
     const [editUrl, editInit] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(editUrl).toBe("/api/v1/conversations/c1/messages/u0/edit");
+    expect(editUrl).toBe("/api/v1/conversations/c1/turns/u0/edit");
     expect(JSON.parse(String(editInit.body))).toEqual({
-      message: { id: "u1", text: "Đã sửa", file_ids: [] },
+      turn: { id: "u1", text: "Đã sửa", file_ids: [] },
     });
     const [regenerateUrl, regenerateInit] = fetchMock.mock.calls[1] as unknown as [
       string,
       RequestInit,
     ];
-    expect(regenerateUrl).toBe("/api/v1/conversations/c1/messages/a1/regenerate");
+    expect(regenerateUrl).toBe("/api/v1/conversations/c1/turns/a1/regenerate");
     expect(regenerateInit.body).toBeUndefined();
   });
 
@@ -119,7 +119,7 @@ describe("ChatAgent", () => {
     agent.pendingInterrupts = [{ id: "i1", reason: "input_required" }];
 
     await expect(
-      agent.sendMessage({ parentMessageId: "a0", message: { id: "u2", text: "khác", fileIds: [] } }),
+      agent.sendTurn({ parentTurnId: "a0", turn: { id: "u2", text: "khác", fileIds: [] } }),
     ).resolves.toBeDefined();
   });
 
@@ -129,12 +129,12 @@ describe("ChatAgent", () => {
     const agent = new ChatAgent({ conversationId: "c1" });
 
     await agent.resume({
-      assistantMessageId: "a1",
+      assistantTurnId: "a1",
       resume: [{ interruptId: "i1", status: "resolved", payload: { answer: "CSV" } }],
     });
 
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe("/api/v1/conversations/c1/messages/a1/resume");
+    expect(url).toBe("/api/v1/conversations/c1/turns/a1/resume");
     expect(JSON.parse(String(init.body))).toEqual({
       resume: [{ interruptId: "i1", status: "resolved", payload: { answer: "CSV" } }],
     });

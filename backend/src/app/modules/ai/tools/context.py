@@ -7,7 +7,9 @@ middleware through `request.runtime`, so nothing is passed through globals.
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Annotated, Any
+
+from pydantic.json_schema import SkipJsonSchema
 
 type ToolGuard = Callable[[str], Awaitable[bool]]
 #: Stores a file for the turn's assistant: (name, format, content, rows) ->
@@ -19,7 +21,9 @@ type FileSink = Callable[
 
 @dataclass(frozen=True)
 class TurnContext:
+    # Callables have no JSON schema; LangGraph and the AG-UI adapter introspect
+    # the context schema, so the fields are left out of it.
     #: Whether the member may still use a tool, checked before every call.
-    tool_guard: ToolGuard
+    tool_guard: Annotated[ToolGuard, SkipJsonSchema()]
     #: Absent when object storage is not configured.
-    file_sink: FileSink | None = None
+    file_sink: Annotated[FileSink | None, SkipJsonSchema()] = None

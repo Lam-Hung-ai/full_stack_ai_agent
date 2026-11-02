@@ -15,17 +15,17 @@ async def new_conversation(client, user, headers):
     return response.json()["id"]
 
 
-def body(text, parent=None, message_id=None):
+def body(text, parent=None, turn_id=None):
     return {
-        "parent_message_id": parent,
-        "message": {"id": str(message_id or uuid7()), "text": text},
+        "parent_turn_id": parent,
+        "turn": {"id": str(turn_id or uuid7()), "text": text},
     }
 
 
 async def send(client, conversation_id, headers, payload) -> tuple[int, Any]:
     """POST a new question and read the whole SSE stream; return (status, events)."""
     return await stream_turn(
-        client, f"/api/v1/conversations/{conversation_id}/messages", headers, payload
+        client, f"/api/v1/conversations/{conversation_id}/turns", headers, payload
     )
 
 
@@ -47,10 +47,10 @@ async def stream_turn(client, url, headers, payload=None) -> tuple[int, Any]:
     return 200, events
 
 
-async def history(client, conversation_id, headers, from_message_id=None):
-    params = {"from_message_id": from_message_id} if from_message_id else None
+async def history(client, conversation_id, headers, from_turn_id=None):
+    params = {"from_turn_id": from_turn_id} if from_turn_id else None
     response = await client.get(
-        f"/api/v1/conversations/{conversation_id}/messages",
+        f"/api/v1/conversations/{conversation_id}/turns",
         params=params,
         headers=headers,
     )

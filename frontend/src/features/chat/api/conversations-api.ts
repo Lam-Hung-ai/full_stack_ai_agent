@@ -71,20 +71,20 @@ export function deleteConversation(conversationId: string) {
   return apiClient<void>(`/api/v1/conversations/${conversationId}`, { method: "DELETE" });
 }
 
-/** The saved branch, or with `fromMessageId` the branch through that message. */
+/** The saved branch, or with `fromTurnId` the branch through that message. */
 export function getHistory(
   conversationId: string,
-  { fromMessageId, signal }: { fromMessageId?: string | null; signal?: AbortSignal } = {},
+  { fromTurnId, signal }: { fromTurnId?: string | null; signal?: AbortSignal } = {},
 ) {
-  return apiClient<History>(`/api/v1/conversations/${conversationId}/messages`, {
-    query: { from_message_id: fromMessageId },
+  return apiClient<History>(`/api/v1/conversations/${conversationId}/turns`, {
+    query: { from_turn_id: fromTurnId },
     signal,
   });
 }
 
-export function stopAssistant(conversationId: string, assistantMessageId: string) {
+export function stopAssistant(conversationId: string, assistantTurnId: string) {
   return apiClient<StopResult>(
-    `/api/v1/conversations/${conversationId}/messages/${assistantMessageId}/stop`,
+    `/api/v1/conversations/${conversationId}/turns/${assistantTurnId}/stop`,
     { method: "POST" },
   );
 }

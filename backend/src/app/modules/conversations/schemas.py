@@ -13,12 +13,12 @@ from pydantic import (
 
 from app.common.schemas.common import Input
 from app.common.schemas.pagination import Pagination
-from app.modules.files.policy import MAX_FILES_PER_MESSAGE
+from app.modules.files.policy import MAX_ATTACHMENTS_PER_TURN
 
 Title = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
 ]
-MessageStatus = Literal[
+TurnState = Literal[
     "pending", "running", "requires_action", "completed", "failed", "cancelled"
 ]
 ACTIVE_STATUSES: frozenset[str] = frozenset({"pending", "running", "requires_action"})
@@ -60,14 +60,14 @@ class ConversationUpdate(Input):
 
 class ActiveAssistant(BaseModel):
     id: UUID
-    status: MessageStatus
+    status: TurnState
 
 
 class ConversationResponse(BaseModel):
     id: UUID
     workspace_id: UUID
     title: str
-    current_message_id: UUID | None
+    current_turn_id: UUID | None
     pinned_at: datetime | None
     archived_at: datetime | None
     folder_id: UUID | None
@@ -95,9 +95,9 @@ class ConversationSearchItem(BaseModel):
     title: str
     archived_at: datetime | None
     updated_at: datetime
-    #: The newest matching message (open the chat through it), or null when
+    #: The newest matching turn (open the chat through it), or null when
     #: only the title matches.
-    message_id: UUID | None
+    turn_id: UUID | None
     snippet: str | None
 
 
@@ -106,15 +106,15 @@ class ConversationSearchResponse(BaseModel):
     pagination: Pagination
 
 
-class MessageResponse(BaseModel):
-    """One SQL row: a user message or a whole assistant turn. `content` is the
-    AG-UI Message[] bundle the UI renders; a turn may hold several protocol
-    messages (text, tool calls and results, reasoning)."""
+class TurnResponse(BaseModel):
+    """One turn: a user question or a whole assistant answer. `content` is the
+    AG-UI Message[] bundle the UI renders; an assistant turn may hold several
+    protocol messages (text, tool calls and results, reasoning)."""
 
     id: UUID
-    parent_message_id: UUID | None
+    parent_turn_id: UUID | None
     role: Literal["user", "assistant"]
-    status: MessageStatus
+    status: TurnState
     content: list[dict[str, Any]]
     created_at: datetime
     #: Every version at this position (same parent), oldest first, this one
@@ -124,29 +124,31 @@ class MessageResponse(BaseModel):
 
 class HistoryResponse(BaseModel):
     #: Leaf of the returned branch.
-    current_message_id: UUID | None
+    current_turn_id: UUID | None
     #: The branch, root first.
-    data: list[MessageResponse]
+    data: list[TurnResponse]
 
 
-class ChatMessageInput(Input):
+class TurnInput(Input):
     id: UUIDv7
     text: str = Field(max_length=32_000)
-    file_ids: list[UUID] = Field(default_factory=list, max_length=MAX_FILES_PER_MESSAGE)
+    file_ids: list[UUID] = Field(
+        default_factory=list, max_length=MAX_ATTACHMENTS_PER_TURN
+    )
 
 
-class SendMessage(Input):
+class SendTurn(Input):
     #: Null only for the first turn; otherwise the assistant row being answered.
-    parent_message_id: UUID | None
-    message: ChatMessageInput
+    parent_turn_id: UUID | None
+    turn: TurnInput
 
 
-class EditMessage(Input):
+class EditTurn(Input):
     #: The new version, with its full list of files (API §4).
-    message: ChatMessageInput
+    turn: TurnInput
 
 
-class ResumeMessage(Input):
+class ResumeTurn(Input):
     """Answers to every interrupt the assistant waits on (API §5), in the
     SDK's own `ResumeEntry` shape (`interruptId`, `status`, `payload`):
     `{"answer": "..."}` for a question, `{"approved": true}` for a tool."""
@@ -159,4 +161,4 @@ class StopResponse(BaseModel):
     did not stop within the wait still shows `running`."""
 
     id: UUID
-    status: MessageStatus
+    status: TurnState

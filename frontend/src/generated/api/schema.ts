@@ -243,110 +243,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/conversations/{conversation_id}/messages": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get History */
-        get: operations["get_history_api_v1_conversations__conversation_id__messages_get"];
-        put?: never;
-        /**
-         * Send Message
-         * @description Start an assistant turn and stream it as AG-UI events.
-         *
-         *     Errors before the turn starts are JSON (401/403/404/409/422). Leaving the
-         *     stream only detaches this subscriber; the turn continues and is saved.
-         */
-        post: operations["send_message_api_v1_conversations__conversation_id__messages_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/conversations/{conversation_id}/messages/{message_id}/edit": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Edit Message
-         * @description Answer a new version of a user question; the old branch stays.
-         */
-        post: operations["edit_message_api_v1_conversations__conversation_id__messages__message_id__edit_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/conversations/{conversation_id}/messages/{message_id}/regenerate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Regenerate Message
-         * @description Answer the same question again beside the given assistant message.
-         */
-        post: operations["regenerate_message_api_v1_conversations__conversation_id__messages__message_id__regenerate_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/conversations/{conversation_id}/messages/{message_id}/resume": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Resume Message
-         * @description Answer what a paused assistant waits on and continue the same turn.
-         */
-        post: operations["resume_message_api_v1_conversations__conversation_id__messages__message_id__resume_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/conversations/{conversation_id}/messages/{message_id}/stop": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Stop Message
-         * @description Stop an assistant turn, keeping what it produced so far.
-         */
-        post: operations["stop_message_api_v1_conversations__conversation_id__messages__message_id__stop_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/conversations/{conversation_id}/share": {
         parameters: {
             query?: never;
@@ -370,6 +266,110 @@ export interface paths {
          * @description The link stops working for good; sharing again makes a new link.
          */
         delete: operations["revoke_share_api_v1_conversations__conversation_id__share_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{conversation_id}/turns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get History */
+        get: operations["get_history_api_v1_conversations__conversation_id__turns_get"];
+        put?: never;
+        /**
+         * Send Turn
+         * @description Start an assistant turn and stream it as AG-UI events.
+         *
+         *     Errors before the turn starts are JSON (401/403/404/409/422). Leaving the
+         *     stream only detaches this subscriber; the turn continues and is saved.
+         */
+        post: operations["send_turn_api_v1_conversations__conversation_id__turns_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/edit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Edit Turn
+         * @description Answer a new version of a user question; the old branch stays.
+         */
+        post: operations["edit_turn_api_v1_conversations__conversation_id__turns__turn_id__edit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Regenerate Turn
+         * @description Answer the same question again beside the given assistant turn.
+         */
+        post: operations["regenerate_turn_api_v1_conversations__conversation_id__turns__turn_id__regenerate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume Turn
+         * @description Answer what a paused assistant waits on and continue the same turn.
+         */
+        post: operations["resume_turn_api_v1_conversations__conversation_id__turns__turn_id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop Turn
+         * @description Stop an assistant turn, keeping what it produced so far.
+         */
+        post: operations["stop_turn_api_v1_conversations__conversation_id__turns__turn_id__stop_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -770,10 +770,30 @@ export interface paths {
         };
         /**
          * Search Conversations
-         * @description Own chats matching `q` by title or message text, ignoring accents and
-         *     case; each with the newest matching message and a snippet.
+         * @description Own chats matching `q` by title or turn text, ignoring accents and
+         *     case; each with the newest matching turn and a snippet.
          */
         get: operations["search_conversations_api_v1_workspaces__workspace_id__conversations_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Conversations
+         * @description The caller's own chats of the workspace as a zip (JSON + Markdown).
+         */
+        get: operations["export_conversations_api_v1_workspaces__workspace_id__export_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -875,18 +895,6 @@ export interface components {
              */
             status: "pending" | "running" | "requires_action" | "completed" | "failed" | "cancelled";
         };
-        /** ChatMessageInput */
-        ChatMessageInput: {
-            /** File Ids */
-            file_ids?: string[];
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Text */
-            text: string;
-        };
         /** ConversationCreate */
         ConversationCreate: {
             /** Title */
@@ -929,8 +937,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
-            /** Current Message Id */
-            current_message_id: string | null;
+            /** Current Turn Id */
+            current_turn_id: string | null;
             /** Folder Id */
             folder_id: string | null;
             /**
@@ -962,12 +970,12 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /** Message Id */
-            message_id: string | null;
             /** Snippet */
             snippet: string | null;
             /** Title */
             title: string;
+            /** Turn Id */
+            turn_id: string | null;
             /**
              * Updated At
              * Format: date-time
@@ -1026,9 +1034,9 @@ export interface components {
             /** Url */
             url: string;
         };
-        /** EditMessage */
-        EditMessage: {
-            message: components["schemas"]["ChatMessageInput"];
+        /** EditTurn */
+        EditTurn: {
+            turn: components["schemas"]["TurnInput"];
         };
         /** EmailInput */
         EmailInput: {
@@ -1103,10 +1111,10 @@ export interface components {
         };
         /** HistoryResponse */
         HistoryResponse: {
-            /** Current Message Id */
-            current_message_id: string | null;
+            /** Current Turn Id */
+            current_turn_id: string | null;
             /** Data */
-            data: components["schemas"]["MessageResponse"][];
+            data: components["schemas"]["TurnResponse"][];
         };
         /**
          * InvitationCreate
@@ -1258,42 +1266,6 @@ export interface components {
             /** Role Ids */
             role_ids: string[];
         };
-        /**
-         * MessageResponse
-         * @description One SQL row: a user message or a whole assistant turn. `content` is the
-         *     AG-UI Message[] bundle the UI renders; a turn may hold several protocol
-         *     messages (text, tool calls and results, reasoning).
-         */
-        MessageResponse: {
-            /** Content */
-            content: {
-                [key: string]: unknown;
-            }[];
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Parent Message Id */
-            parent_message_id: string | null;
-            /**
-             * Role
-             * @enum {string}
-             */
-            role: "user" | "assistant";
-            /** Sibling Ids */
-            sibling_ids: string[];
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "pending" | "running" | "requires_action" | "completed" | "failed" | "cancelled";
-        };
         /** OrganizationCreate */
         OrganizationCreate: {
             /** Name */
@@ -1416,12 +1388,12 @@ export interface components {
             [key: string]: unknown;
         };
         /**
-         * ResumeMessage
+         * ResumeTurn
          * @description Answers to every interrupt the assistant waits on (API §5), in the
          *     SDK's own `ResumeEntry` shape (`interruptId`, `status`, `payload`):
          *     `{"answer": "..."}` for a question, `{"approved": true}` for a tool.
          */
-        ResumeMessage: {
+        ResumeTurn: {
             /** Resume */
             resume: components["schemas"]["ResumeEntry"][];
         };
@@ -1474,11 +1446,11 @@ export interface components {
             /** Permissions */
             permissions?: string[] | null;
         };
-        /** SendMessage */
-        SendMessage: {
-            message: components["schemas"]["ChatMessageInput"];
-            /** Parent Message Id */
-            parent_message_id: string | null;
+        /** SendTurn */
+        SendTurn: {
+            /** Parent Turn Id */
+            parent_turn_id: string | null;
+            turn: components["schemas"]["TurnInput"];
         };
         /**
          * SessionResponse
@@ -1531,12 +1503,10 @@ export interface components {
             /** Can Copy */
             can_copy: boolean;
             /**
-             * Current Message Id
+             * Current Turn Id
              * Format: uuid
              */
-            current_message_id: string;
-            /** Messages */
-            messages: components["schemas"]["SharedMessage"][];
+            current_turn_id: string;
             /**
              * Mode
              * @enum {string}
@@ -1549,11 +1519,13 @@ export interface components {
             published_at: string;
             /** Title */
             title: string;
+            /** Turns */
+            turns: components["schemas"]["SharedTurn"][];
             /** Version */
             version: number;
         };
-        /** SharedMessage */
-        SharedMessage: {
+        /** SharedTurn */
+        SharedTurn: {
             /** Content */
             content: {
                 [key: string]: unknown;
@@ -1568,8 +1540,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /** Parent Message Id */
-            parent_message_id: string | null;
+            /** Parent Turn Id */
+            parent_turn_id: string | null;
             /** Role */
             role: string;
             /** Sibling Ids */
@@ -1613,6 +1585,54 @@ export interface components {
              * @default bearer
              */
             token_type: string;
+        };
+        /** TurnInput */
+        TurnInput: {
+            /** File Ids */
+            file_ids?: string[];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * TurnResponse
+         * @description One turn: a user question or a whole assistant answer. `content` is the
+         *     AG-UI Message[] bundle the UI renders; an assistant turn may hold several
+         *     protocol messages (text, tool calls and results, reasoning).
+         */
+        TurnResponse: {
+            /** Content */
+            content: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Parent Turn Id */
+            parent_turn_id: string | null;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "user" | "assistant";
+            /** Sibling Ids */
+            sibling_ids: string[];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "running" | "requires_action" | "completed" | "failed" | "cancelled";
         };
         /**
          * UploadCreate
@@ -2129,211 +2149,6 @@ export interface operations {
             };
         };
     };
-    get_history_api_v1_conversations__conversation_id__messages_get: {
-        parameters: {
-            query?: {
-                /** @description Open the branch through this message instead */
-                from_message_id?: string | null;
-            };
-            header?: never;
-            path: {
-                conversation_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HistoryResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    send_message_api_v1_conversations__conversation_id__messages_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                conversation_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SendMessage"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/event-stream": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    edit_message_api_v1_conversations__conversation_id__messages__message_id__edit_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                conversation_id: string;
-                message_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EditMessage"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/event-stream": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    regenerate_message_api_v1_conversations__conversation_id__messages__message_id__regenerate_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                conversation_id: string;
-                message_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/event-stream": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    resume_message_api_v1_conversations__conversation_id__messages__message_id__resume_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                conversation_id: string;
-                message_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ResumeMessage"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/event-stream": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    stop_message_api_v1_conversations__conversation_id__messages__message_id__stop_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                conversation_id: string;
-                message_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StopResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_share_api_v1_conversations__conversation_id__share_get: {
         parameters: {
             query?: never;
@@ -2413,6 +2228,211 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_history_api_v1_conversations__conversation_id__turns_get: {
+        parameters: {
+            query?: {
+                /** @description Open the branch through this turn instead */
+                from_turn_id?: string | null;
+            };
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_turn_api_v1_conversations__conversation_id__turns_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendTurn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_turn_api_v1_conversations__conversation_id__turns__turn_id__edit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                turn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EditTurn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    regenerate_turn_api_v1_conversations__conversation_id__turns__turn_id__regenerate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                turn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_turn_api_v1_conversations__conversation_id__turns__turn_id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                turn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResumeTurn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_turn_api_v1_conversations__conversation_id__turns__turn_id__stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                turn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StopResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -3342,6 +3362,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConversationSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_conversations_api_v1_workspaces__workspace_id__export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/zip": unknown;
                 };
             };
             /** @description Validation Error */

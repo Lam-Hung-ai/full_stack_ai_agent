@@ -1,31 +1,31 @@
 import type { RowView } from "@/features/chat";
-import type { SharedMessage } from "../api/shares-api";
+import type { SharedTurn } from "../api/shares-api";
 
 /**
  * The branch of a snapshot that ends at `leafId`, root first. Switching to
  * another version continues down its newest children, as the chat does.
  */
-export function branchRows(messages: readonly SharedMessage[], leafId: string): RowView[] {
-  const byId = new Map(messages.map((message) => [message.id, message]));
+export function branchRows(turns: readonly SharedTurn[], leafId: string): RowView[] {
+  const byId = new Map(turns.map((turn) => [turn.id, turn]));
   const rows: RowView[] = [];
-  for (let message = byId.get(leafId); message; ) {
+  for (let turn = byId.get(leafId); turn; ) {
     rows.unshift({
-      id: message.id,
-      role: message.role as RowView["role"],
-      status: message.status as RowView["status"],
-      content: message.content as unknown as RowView["content"],
-      siblingIds: message.sibling_ids,
+      id: turn.id,
+      role: turn.role as RowView["role"],
+      status: turn.status as RowView["status"],
+      content: turn.content as unknown as RowView["content"],
+      siblingIds: turn.sibling_ids,
     });
-    message = message.parent_message_id ? byId.get(message.parent_message_id) : undefined;
+    turn = turn.parent_turn_id ? byId.get(turn.parent_turn_id) : undefined;
   }
   return rows;
 }
 
-/** Follow the newest child down from a message to the end of its branch. */
-export function latestLeaf(messages: readonly SharedMessage[], messageId: string): string {
-  let leaf = messageId;
+/** Follow the newest child down from a turn to the end of its branch. */
+export function latestLeaf(turns: readonly SharedTurn[], turnId: string): string {
+  let leaf = turnId;
   for (;;) {
-    const children = messages.filter((message) => message.parent_message_id === leaf);
+    const children = turns.filter((turn) => turn.parent_turn_id === leaf);
     if (children.length === 0) return leaf;
     leaf = children[children.length - 1].id;
   }

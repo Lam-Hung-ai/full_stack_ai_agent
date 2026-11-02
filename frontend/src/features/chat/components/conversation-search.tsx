@@ -10,7 +10,7 @@ import { useConversationSearch } from "../hooks/use-conversations";
 import type { ConversationSearchItem } from "../types/chat.types";
 import { highlight } from "../utils/search";
 
-/** Chats matching `term`; each opens on the branch of its matching message. */
+/** Chats matching `term`; each opens on the branch of its matching turn. */
 export function ConversationSearchResults({
   workspaceId,
   term,
@@ -59,9 +59,9 @@ export function ConversationSearchResults({
 
 function SearchResult({ item, term }: { item: ConversationSearchItem; term: string }) {
   const pathname = usePathname();
-  const message = useSearchParams().get("m");
-  const href = item.message_id ? `/c/${item.id}?m=${item.message_id}` : `/c/${item.id}`;
-  const active = pathname === `/c/${item.id}` && message === (item.message_id ?? null);
+  const openTurn = useSearchParams().get("t");
+  const href = item.turn_id ? `/c/${item.id}?t=${item.turn_id}` : `/c/${item.id}`;
+  const active = pathname === `/c/${item.id}` && openTurn === (item.turn_id ?? null);
   return (
     <li>
       <Link

@@ -5,19 +5,19 @@ from uuid_utils.compat import uuid7
 from tests.support.chat import body, history, new_conversation, send, stream_turn
 
 
-async def edit(client, conversation_id, message_id, headers, text):
+async def edit(client, conversation_id, turn_id, headers, text):
     return await stream_turn(
         client,
-        f"/api/v1/conversations/{conversation_id}/messages/{message_id}/edit",
+        f"/api/v1/conversations/{conversation_id}/turns/{turn_id}/edit",
         headers,
-        {"message": {"id": str(uuid7()), "text": text}},
+        {"turn": {"id": str(uuid7()), "text": text}},
     )
 
 
-async def regenerate(client, conversation_id, message_id, headers):
+async def regenerate(client, conversation_id, turn_id, headers):
     return await stream_turn(
         client,
-        f"/api/v1/conversations/{conversation_id}/messages/{message_id}/regenerate",
+        f"/api/v1/conversations/{conversation_id}/turns/{turn_id}/regenerate",
         headers,
     )
 
@@ -32,7 +32,7 @@ async def test_edit_creates_a_sibling_and_keeps_the_old_branch(
     await send(client, conversation_id, headers, body("Câu một"))
     first = (await history(client, conversation_id, headers))["data"]
     await send(client, conversation_id, headers, body("Câu hai", first[1]["id"]))
-    old_leaf = (await history(client, conversation_id, headers))["current_message_id"]
+    old_leaf = (await history(client, conversation_id, headers))["current_turn_id"]
 
     status, events = await edit(
         client, conversation_id, first[0]["id"], headers, "Câu một đã sửa"
@@ -45,14 +45,14 @@ async def test_edit_creates_a_sibling_and_keeps_the_old_branch(
 
     saved = await history(client, conversation_id, headers)
     new_question, new_answer = saved["data"]
-    assert new_question["parent_message_id"] is None
+    assert new_question["parent_turn_id"] is None
     assert new_question["sibling_ids"] == [first[0]["id"], new_question["id"]]
     assert new_answer["content"][0]["content"] == "Một mới"
     assert new_answer["sibling_ids"] == [new_answer["id"]]
 
     # Opening the old version comes back down to where it last continued.
     old = await history(client, conversation_id, headers, first[0]["id"])
-    assert old["current_message_id"] == old_leaf
+    assert old["current_turn_id"] == old_leaf
     assert [row["role"] for row in old["data"]] == ["user", "assistant"] * 2
     assert old["data"][0]["sibling_ids"] == new_question["sibling_ids"]
 
@@ -70,7 +70,7 @@ async def test_regenerate_answers_the_same_question_again(
     status, events = await regenerate(client, conversation_id, answer["id"], headers)
     assert status == 200
     custom = [e["value"] for e in events if e["type"] == "CUSTOM"]
-    assert custom[0]["userMessageId"] == question["id"]
+    assert custom[0]["userTurnId"] == question["id"]
     assert [m.content for m in model.prompts[-1]][-1:] == ["Câu hỏi"]
     assert "Lần một" not in [m.content for m in model.prompts[-1]]
 
@@ -116,17 +116,17 @@ async def test_edit_and_regenerate_targets(client, make_user, login, scripted_mo
     question, answer = (await history(client, conversation_id, headers))["data"]
 
     status, error = await edit(client, conversation_id, answer["id"], headers, "x")
-    assert (status, error["error"]["code"]) == (404, "message_not_found")
+    assert (status, error["error"]["code"]) == (404, "turn_not_found")
     status, error = await regenerate(client, conversation_id, question["id"], headers)
-    assert (status, error["error"]["code"]) == (404, "message_not_found")
+    assert (status, error["error"]["code"]) == (404, "turn_not_found")
     status, error = await edit(client, conversation_id, question["id"], headers, "  ")
-    assert (status, error["error"]["code"]) == (422, "empty_message")
+    assert (status, error["error"]["code"]) == (422, "empty_turn")
     response = await client.get(
-        f"/api/v1/conversations/{conversation_id}/messages",
-        params={"from_message_id": str(uuid7())},
+        f"/api/v1/conversations/{conversation_id}/turns",
+        params={"from_turn_id": str(uuid7())},
         headers=headers,
     )
-    assert response.json()["error"]["code"] == "message_not_found"
+    assert response.json()["error"]["code"] == "turn_not_found"
 
 
 async def test_cannot_branch_someone_elses_conversation(

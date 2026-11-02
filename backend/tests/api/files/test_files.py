@@ -127,7 +127,7 @@ async def test_question_with_files_reaches_the_model(
     conversation_id = await new_conversation(client, user, headers)
 
     payload = body("Xem giúp")
-    payload["message"]["file_ids"] = [image["id"], note["id"]]
+    payload["turn"]["file_ids"] = [image["id"], note["id"]]
     status, _ = await send(client, conversation_id, headers, payload)
     assert status == 200
 
@@ -137,7 +137,7 @@ async def test_question_with_files_reaches_the_model(
     assert parts[1]["id"] == image["id"]
     assert parts[1]["source"]["value"] == f"stored-file:{image['id']}"
     links = db(
-        "SELECT stored_file_id FROM chat_app.message_files WHERE message_id = %s",
+        "SELECT stored_file_id FROM chat_app.turn_files WHERE turn_id = %s",
         (question["id"],),
     )
     assert {str(row["stored_file_id"]) for row in links} == {image["id"], note["id"]}
@@ -186,7 +186,7 @@ async def test_only_own_files_of_this_workspace_attach(
     )
     for file_id in (personal["id"], others["id"]):
         payload = body("Xem")
-        payload["message"]["file_ids"] = [file_id]
+        payload["turn"]["file_ids"] = [file_id]
         status, error = await send(client, chat.json()["id"], headers, payload)
         assert status == 422
         assert error["error"]["code"] == "invalid_file"
@@ -208,7 +208,7 @@ async def test_download_needs_the_chat_and_the_link(
     ).json()
     conversation_id = await new_conversation(client, user, headers)
     payload = body("Ảnh")
-    payload["message"]["file_ids"] = [attached["id"]]
+    payload["turn"]["file_ids"] = [attached["id"]]
     await send(client, conversation_id, headers, payload)
     url = f"/api/v1/conversations/{conversation_id}/files"
 
@@ -240,7 +240,7 @@ async def test_regenerating_gives_the_model_the_files_again(
     ).json()
     conversation_id = await new_conversation(client, user, headers)
     payload = body("Ảnh gì?")
-    payload["message"]["file_ids"] = [image["id"]]
+    payload["turn"]["file_ids"] = [image["id"]]
     await send(client, conversation_id, headers, payload)
     answer = (await history(client, conversation_id, headers))["data"][-1]["id"]
 
@@ -250,12 +250,12 @@ async def test_regenerating_gives_the_model_the_files_again(
     assert any(block.get("type") == "image_url" for block in prompt)
 
 
-async def send_regenerate(client, conversation_id, message_id, headers):
+async def send_regenerate(client, conversation_id, turn_id, headers):
     from tests.support.chat import stream_turn
 
     return await stream_turn(
         client,
-        f"/api/v1/conversations/{conversation_id}/messages/{message_id}/regenerate",
+        f"/api/v1/conversations/{conversation_id}/turns/{turn_id}/regenerate",
         headers,
     )
 
@@ -279,23 +279,23 @@ async def test_an_edited_question_names_its_files_again(
     ).json()
     conversation_id = await new_conversation(client, user, headers)
     payload = body("Ảnh gì?")
-    payload["message"]["file_ids"] = [image["id"]]
+    payload["turn"]["file_ids"] = [image["id"]]
     await send(client, conversation_id, headers, payload)
     question = (await history(client, conversation_id, headers))["data"][0]["id"]
 
     from tests.support.chat import stream_turn
 
     edited = body("Ảnh này màu gì?")
-    edited["message"]["file_ids"] = [image["id"]]
+    edited["turn"]["file_ids"] = [image["id"]]
     status, _ = await stream_turn(
         client,
-        f"/api/v1/conversations/{conversation_id}/messages/{question}/edit",
+        f"/api/v1/conversations/{conversation_id}/turns/{question}/edit",
         headers,
-        {"message": edited["message"]},
+        {"turn": edited["turn"]},
     )
     assert status == 200
     rows = db(
-        "SELECT count(*) AS n FROM chat_app.message_files WHERE stored_file_id = %s",
+        "SELECT count(*) AS n FROM chat_app.turn_files WHERE stored_file_id = %s",
         (image["id"],),
     )
     # The same upload, linked to both versions of the question.
@@ -359,7 +359,7 @@ async def test_unattached_files_are_cleaned_up(
     await upload(client, storage, headers, workspace, "b.png", "image/png", PNG)
     conversation_id = await new_conversation(client, user, headers)
     payload = body("Xem")
-    payload["message"]["file_ids"] = [kept["id"]]
+    payload["turn"]["file_ids"] = [kept["id"]]
     status, _ = await send(client, conversation_id, headers, payload)
     assert status == 200
 
@@ -391,11 +391,11 @@ async def test_old_files_beyond_the_turn_budget_are_named_not_sent(
     ).json()
     conversation_id = await new_conversation(client, user, headers)
     payload = body("Ảnh một")
-    payload["message"]["file_ids"] = [first["id"]]
+    payload["turn"]["file_ids"] = [first["id"]]
     await send(client, conversation_id, headers, payload)
     answer = (await history(client, conversation_id, headers))["data"][-1]["id"]
     payload = body("Ảnh hai", answer)
-    payload["message"]["file_ids"] = [second["id"]]
+    payload["turn"]["file_ids"] = [second["id"]]
     await send(client, conversation_id, headers, payload)
 
     prompt = model.prompts[1]

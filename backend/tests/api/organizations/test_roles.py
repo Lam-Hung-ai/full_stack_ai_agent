@@ -107,7 +107,7 @@ async def test_custom_role_grants_a_tool_until_taken_back(
     )
     model.bound_tools.clear()
     parent = next(
-        e["value"]["assistantMessageId"] for e in events if e["type"] == "CUSTOM"
+        e["value"]["assistantTurnId"] for e in events if e["type"] == "CUSTOM"
     )
     await send(client, conversation_id, headers, body("Còn giờ?", parent=parent))
     assert model.bound_tools

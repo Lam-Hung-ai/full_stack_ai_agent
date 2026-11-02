@@ -31,12 +31,11 @@ from app.modules.conversations.export import archive_name, export_zip
 from app.modules.conversations.repository import (
     DEFAULT_TITLE,
     ConversationRepository,
-    MessageRepository,
+    TurnRepository,
 )
 from app.modules.conversations.schemas import (
     ACTIVE_STATUSES,
     ActiveAssistant,
-    ChatMessageInput,
     ConversationCreate,
     ConversationListItem,
     ConversationListResponse,
@@ -44,14 +43,15 @@ from app.modules.conversations.schemas import (
     ConversationSearchItem,
     ConversationSearchResponse,
     ConversationUpdate,
-    EditMessage,
+    EditTurn,
     HistoryResponse,
-    MessageResponse,
-    ResumeMessage,
-    SendMessage,
+    ResumeTurn,
+    SendTurn,
     StopResponse,
+    TurnInput,
+    TurnResponse,
 )
-from app.modules.conversations.tree import MessageTree
+from app.modules.conversations.tree import TurnTree
 from app.modules.files.generated import save_generated
 from app.modules.files.repository import FileRepository
 from app.modules.files.service import FileService, file_part, resolve_files
@@ -75,7 +75,7 @@ class ConversationService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._conversations = ConversationRepository(session)
-        self._messages = MessageRepository(session)
+        self._turns = TurnRepository(session)
 
     async def create(
         self, *, user: Principal, workspace: WorkspaceContext, data: ConversationCreate
@@ -122,7 +122,7 @@ class ConversationService:
         params: PageParams,
     ) -> ConversationSearchResponse:
         """The user's own chats in the workspace matching `query` by title or
-        message text, accents and case ignored; newest first (C09)."""
+        turn text, accents and case ignored; newest first (C09)."""
         query = " ".join(query.split())
         if len(query) < search.MIN_QUERY:
             fail(422, "query_too_short", details={"min": search.MIN_QUERY})
@@ -140,9 +140,9 @@ class ConversationService:
                     title=row["title"],
                     archived_at=row["archived_at"],
                     updated_at=row["updated_at"],
-                    message_id=row["message_id"],
-                    snippet=search.snippet(row["message_text"], query)
-                    if row["message_id"]
+                    turn_id=row["turn_id"],
+                    snippet=search.snippet(row["turn_text"], query)
+                    if row["turn_id"]
                     else None,
                 )
                 for row in rows
@@ -229,31 +229,31 @@ class ConversationService:
         *,
         user: Principal,
         conversation_id: UUID,
-        from_message_id: UUID | None = None,
+        from_turn_id: UUID | None = None,
     ) -> HistoryResponse:
-        """The saved current branch, or with `from_message_id` the branch
-        through that message down its newest children. Reading never moves
+        """The saved current branch, or with `from_turn_id` the branch
+        through that turn down its newest children. Reading never moves
         the saved pointer: which branch a tab shows is the client's (API §2)."""
         row = await self.require_owned(user=user, conversation_id=conversation_id)
-        tree = MessageTree(await self._messages.links(conversation_id=conversation_id))
-        if from_message_id is None:
-            leaf = row["current_message_id"]
-        elif from_message_id in tree:
-            leaf = tree.latest_leaf(from_message_id)
+        tree = TurnTree(await self._turns.links(conversation_id=conversation_id))
+        if from_turn_id is None:
+            leaf = row["current_turn_id"]
+        elif from_turn_id in tree:
+            leaf = tree.latest_leaf(from_turn_id)
         else:
-            fail(404, "message_not_found")
+            fail(404, "turn_not_found")
         path = (
-            await self._messages.branch(conversation_id=conversation_id, leaf_id=leaf)
+            await self._turns.branch(conversation_id=conversation_id, leaf_id=leaf)
             if leaf
             else []
         )
         return HistoryResponse(
-            current_message_id=leaf,
+            current_turn_id=leaf,
             data=[
-                MessageResponse.model_validate(
-                    {**dict(message), "sibling_ids": tree.siblings(message["id"])}
+                TurnResponse.model_validate(
+                    {**dict(turn), "sibling_ids": tree.siblings(turn["id"])}
                 )
-                for message in path
+                for turn in path
             ],
         )
 
@@ -279,7 +279,7 @@ class ConversationService:
         return row, workspace
 
     async def _response(self, row: RowMapping) -> ConversationResponse:
-        active = await self._messages.active_assistant(conversation_id=row["id"])
+        active = await self._turns.active_assistant(conversation_id=row["id"])
         return ConversationResponse.model_validate(
             {
                 **dict(row),
@@ -292,8 +292,8 @@ class ConversationService:
 
 @dataclass(frozen=True)
 class StartedTurn:
-    user_message_id: UUID
-    assistant_message_id: UUID
+    user_turn_id: UUID
+    assistant_turn_id: UUID
     stream: RunStream
 
 
@@ -319,25 +319,25 @@ class TurnService:
         #: Needed by turns that may carry files (send, edit, regenerate).
         self._storage = storage
         self._conversations = ConversationRepository(session)
-        self._messages = MessageRepository(session)
+        self._turns = TurnRepository(session)
 
     async def send(
-        self, *, user: Principal, conversation_id: UUID, data: SendMessage
+        self, *, user: Principal, conversation_id: UUID, data: SendTurn
     ) -> StartedTurn:
         conversation, workspace = await self._open(user, conversation_id)
-        text = _question_text(data.message)
-        await self._check_parent(conversation_id, data.parent_message_id)
+        text = _question_text(data.turn)
+        await self._check_parent(conversation_id, data.parent_turn_id)
         title = (
             _fallback_title(text or "Tệp đính kèm")
-            if conversation["title"] == DEFAULT_TITLE and data.parent_message_id is None
+            if conversation["title"] == DEFAULT_TITLE and data.parent_turn_id is None
             else None
         )
         started = await self._ask(
             user,
             workspace,
             conversation_id,
-            parent_id=data.parent_message_id,
-            message=data.message,
+            parent_id=data.parent_turn_id,
+            turn=data.turn,
             text=text,
             title=title,
         )
@@ -355,40 +355,40 @@ class TurnService:
         *,
         user: Principal,
         conversation_id: UUID,
-        message_id: UUID,
-        data: EditMessage,
+        turn_id: UUID,
+        data: EditTurn,
     ) -> StartedTurn:
-        """A new user message beside the edited one (same parent), then a new
+        """A new user turn beside the edited one (same parent), then a new
         answer; the old version and everything under it stay (API §4)."""
         _, workspace = await self._open(user, conversation_id)
-        text = _question_text(data.message)
-        original = await self._target(conversation_id, message_id, "user")
+        text = _question_text(data.turn)
+        original = await self._target(conversation_id, turn_id, "user")
         return await self._ask(
             user,
             workspace,
             conversation_id,
-            parent_id=original["parent_message_id"],
-            message=data.message,
+            parent_id=original["parent_turn_id"],
+            turn=data.turn,
             text=text,
         )
 
     async def regenerate(
-        self, *, user: Principal, conversation_id: UUID, message_id: UUID
+        self, *, user: Principal, conversation_id: UUID, turn_id: UUID
     ) -> StartedTurn:
         """A new answer beside the old one, from the question's branch; the old
         answer's checkpoint is not continued (API §4)."""
         _, workspace = await self._open(user, conversation_id)
-        original = await self._target(conversation_id, message_id, "assistant")
+        original = await self._target(conversation_id, turn_id, "assistant")
         await self._ensure_idle(conversation_id)
-        question_id = original["parent_message_id"]
-        history = await self._messages.branch(
+        question_id = original["parent_turn_id"]
+        history = await self._turns.branch(
             conversation_id=conversation_id, leaf_id=question_id
         )
         return await self._launch(
             user,
             workspace,
             conversation_id,
-            user_message_id=question_id,
+            user_turn_id=question_id,
             messages=branch_messages(history),
         )
 
@@ -397,15 +397,15 @@ class TurnService:
         *,
         user: Principal,
         conversation_id: UUID,
-        message_id: UUID,
-        data: ResumeMessage,
+        turn_id: UUID,
+        data: ResumeTurn,
     ) -> StartedTurn:
         """Answer what the assistant waits on and continue it (API §5). Every
         check happens before the claim, so a refused answer leaves the turn
         waiting; the claim, the answers and the activity commit together."""
         _, workspace = await self._open(user, conversation_id)
         self._ensure_room()
-        target = await self._target(conversation_id, message_id, "assistant")
+        target = await self._target(conversation_id, turn_id, "assistant")
         pending = target["metadata"].get("pending_action")
         if target["status"] != "requires_action" or not pending:
             fail(409, "not_waiting")
@@ -436,8 +436,8 @@ class TurnService:
             values=values,
             actor_id=user.id,
         )
-        claimed = await self._messages.set_status(
-            message_id=message_id,
+        claimed = await self._turns.set_status(
+            turn_id=turn_id,
             status="running",
             content=content,
             metadata=metadata,
@@ -445,8 +445,8 @@ class TurnService:
         )
         if not claimed:
             fail(409, "not_waiting")
-        question_id = target["parent_message_id"]
-        history = await self._messages.branch(
+        question_id = target["parent_turn_id"]
+        history = await self._turns.branch(
             conversation_id=conversation_id, leaf_id=question_id
         )
         tools = await authorization.allowed_actions(workspace, TOOL_RESOURCE)
@@ -460,8 +460,8 @@ class TurnService:
             user,
             workspace,
             conversation_id,
-            assistant_id=message_id,
-            user_message_id=question_id,
+            assistant_id=turn_id,
+            user_turn_id=question_id,
             tools=tools,
             messages=[],
             resume=interactions.resume_entries(values),
@@ -472,16 +472,16 @@ class TurnService:
         )
 
     async def stop(
-        self, *, user: Principal, conversation_id: UUID, message_id: UUID
+        self, *, user: Principal, conversation_id: UUID, turn_id: UUID
     ) -> StopResponse:
         """Stop this assistant only (API §7). A finished one is left as is; one
         waiting for the user is cancelled with its question (phase 4 §7)."""
         await ConversationService(self._session).require_owned(
             user=user, conversation_id=conversation_id
         )
-        target = await self._target(conversation_id, message_id, "assistant")
+        target = await self._target(conversation_id, turn_id, "assistant")
         target = await self._stop_target(conversation_id, target)
-        return StopResponse(id=message_id, status=target["status"])
+        return StopResponse(id=turn_id, status=target["status"])
 
     async def delete(self, *, user: Principal, conversation_id: UUID) -> None:
         """Delete a chat; a turn still running or waiting in it is stopped
@@ -494,7 +494,7 @@ class TurnService:
         await self._stop_active(conversation_id)
 
     async def _stop_active(self, conversation_id: UUID) -> None:
-        active = await self._messages.active_assistant(conversation_id=conversation_id)
+        active = await self._turns.active_assistant(conversation_id=conversation_id)
         if active is not None:
             target = await self._target(conversation_id, active["id"], "assistant")
             await self._stop_target(conversation_id, target)
@@ -503,13 +503,13 @@ class TurnService:
         self, conversation_id: UUID, target: RowMapping
     ) -> RowMapping:
         """Stop an assistant row; returns it as saved afterwards."""
-        message_id = target["id"]
+        turn_id = target["id"]
         # Twice at most: a resume may claim the turn between the read and the
         # cancel, and then a process runs it after all.
         for _ in range(2):
             if target["status"] not in ACTIVE_STATUSES:
                 break
-            where = await self._runner.stop(message_id, timeout=STOP_WAIT_SECONDS)
+            where = await self._runner.stop(turn_id, timeout=STOP_WAIT_SECONDS)
             if where == "orphan":
                 # No process runs it: it waits for the user, or a restart
                 # orphaned it (RR-01, RR-10). Cancel it in place.
@@ -518,8 +518,8 @@ class TurnService:
                 else:
                     await self._session.rollback()
             elif where == "remote":
-                await self._await_end(conversation_id, message_id)
-            target = await self._target(conversation_id, message_id, "assistant")
+                await self._await_end(conversation_id, turn_id)
+            target = await self._target(conversation_id, turn_id, "assistant")
             if where != "orphan":
                 break
         return target
@@ -528,7 +528,7 @@ class TurnService:
         """The user left the workspace's organization (O07): end their
         unfinished turns there. Their requests are refused already; this stops
         model and tool work that nobody may read any more."""
-        for target in await self._messages.active_of_owner(
+        for target in await self._turns.active_of_owner(
             workspace_id=workspace_id, owner_user_id=user_id
         ):
             where = await self._runner.stop(target["id"], timeout=STOP_WAIT_SECONDS)
@@ -542,12 +542,12 @@ class TurnService:
             # Nothing was committed: the client may retry the same request.
             fail(503, "server_busy", headers={"Retry-After": str(RETRY_AFTER_SECONDS)})
 
-    async def _await_end(self, conversation_id: UUID, message_id: UUID) -> None:
+    async def _await_end(self, conversation_id: UUID, turn_id: UUID) -> None:
         """Watch the row while another process saves the stopped turn."""
         deadline = asyncio.get_running_loop().time() + STOP_WAIT_SECONDS
         while asyncio.get_running_loop().time() < deadline:
-            message = await self._target(conversation_id, message_id, "assistant")
-            if message["status"] not in ACTIVE_STATUSES:
+            turn = await self._target(conversation_id, turn_id, "assistant")
+            if turn["status"] not in ACTIVE_STATUSES:
                 return
             await asyncio.sleep(0.1)
 
@@ -566,8 +566,8 @@ class TurnService:
                 content = interactions.resolve_activities(
                     target["content"], pending, status="cancelled"
                 )
-        return await self._messages.set_status(
-            message_id=target["id"],
+        return await self._turns.set_status(
+            turn_id=target["id"],
             status="cancelled",
             content=content,
             metadata=metadata,
@@ -583,17 +583,15 @@ class TurnService:
         )
 
     async def _target(
-        self, conversation_id: UUID, message_id: UUID, role: str
+        self, conversation_id: UUID, turn_id: UUID, role: str
     ) -> RowMapping:
-        message = await self._messages.get(
-            conversation_id=conversation_id, message_id=message_id
-        )
-        if message is None or message["role"] != role:
-            fail(404, "message_not_found")
-        return message
+        turn = await self._turns.get(conversation_id=conversation_id, turn_id=turn_id)
+        if turn is None or turn["role"] != role:
+            fail(404, "turn_not_found")
+        return turn
 
     async def _ensure_idle(self, conversation_id: UUID) -> None:
-        if await self._messages.active_assistant(conversation_id=conversation_id):
+        if await self._turns.active_assistant(conversation_id=conversation_id):
             fail(409, "assistant_active")
 
     async def _ask(
@@ -603,51 +601,49 @@ class TurnService:
         conversation_id: UUID,
         *,
         parent_id: UUID | None,
-        message: ChatMessageInput,
+        turn: TurnInput,
         text: str,
         title: str | None = None,
     ) -> StartedTurn:
         """Insert the user's question under `parent_id` and answer it."""
-        if await self._messages.exists(message_id=message.id):
-            fail(409, "message_id_conflict")
+        if await self._turns.exists(turn_id=turn.id):
+            fail(409, "turn_id_conflict")
         await self._ensure_idle(conversation_id)
         history = (
-            await self._messages.branch(
-                conversation_id=conversation_id, leaf_id=parent_id
-            )
+            await self._turns.branch(conversation_id=conversation_id, leaf_id=parent_id)
             if parent_id
             else []
         )
         files = (
             await FileService(self._session).attachable(
-                user=user, workspace=workspace, ids=message.file_ids
+                user=user, workspace=workspace, ids=turn.file_ids
             )
-            if message.file_ids
+            if turn.file_ids
             else []
         )
         question: list[AguiMessage] = [
-            {"id": str(message.id), "role": "user", "content": _content(text, files)}
+            {"id": str(turn.id), "role": "user", "content": _content(text, files)}
         ]
         # With files the row is staged pending: links are refused on terminal
-        # messages, and a deferred trigger insists it is completed by commit.
-        await self._messages.insert(
-            message_id=message.id,
+        # turns, and a deferred trigger insists it is completed by commit.
+        await self._turns.insert(
+            turn_id=turn.id,
             conversation_id=conversation_id,
-            parent_message_id=parent_id,
+            parent_turn_id=parent_id,
             role="user",
             status="pending" if files else "completed",
             content=question,
         )
         if files:
             await FileRepository(self._session).link(
-                message_id=message.id, file_ids=[row["id"] for row in files]
+                turn_id=turn.id, file_ids=[row["id"] for row in files]
             )
-            await self._messages.set_status(message_id=message.id, status="completed")
+            await self._turns.set_status(turn_id=turn.id, status="completed")
         return await self._launch(
             user,
             workspace,
             conversation_id,
-            user_message_id=message.id,
+            user_turn_id=turn.id,
             messages=branch_messages(history) + question,
             title=title,
         )
@@ -658,16 +654,16 @@ class TurnService:
         workspace: WorkspaceContext,
         conversation_id: UUID,
         *,
-        user_message_id: UUID,
+        user_turn_id: UUID,
         messages: list[AguiMessage],
         title: str | None = None,
     ) -> StartedTurn:
         """Insert the pending answer, make it the saved branch, commit, run."""
         self._ensure_room()
         try:
-            assistant = await self._messages.insert(
+            assistant = await self._turns.insert(
                 conversation_id=conversation_id,
-                parent_message_id=user_message_id,
+                parent_turn_id=user_turn_id,
                 role="assistant",
                 status="pending",
                 content=[],
@@ -677,7 +673,7 @@ class TurnService:
             # the partial unique index allows one active assistant per chat.
             await self._session.rollback()
             fail(409, "assistant_active")
-        updates: dict[str, Any] = {"current_message_id": assistant["id"]}
+        updates: dict[str, Any] = {"current_turn_id": assistant["id"]}
         if title:
             updates["title"] = title
         await self._conversations.update(conversation_id=conversation_id, **updates)
@@ -690,7 +686,7 @@ class TurnService:
             workspace,
             conversation_id,
             assistant_id=assistant["id"],
-            user_message_id=user_message_id,
+            user_turn_id=user_turn_id,
             tools=tools,
             messages=messages,
         )
@@ -702,7 +698,7 @@ class TurnService:
         conversation_id: UUID,
         *,
         assistant_id: UUID,
-        user_message_id: UUID,
+        user_turn_id: UUID,
         tools: frozenset[str],
         messages: list[AguiMessage],
         resume: list[ResumeEntry] | None = None,
@@ -742,8 +738,8 @@ class TurnService:
             run_input=run_input,
             announce={
                 "conversationId": str(conversation_id),
-                "userMessageId": str(user_message_id),
-                "assistantMessageId": str(assistant_id),
+                "userTurnId": str(user_turn_id),
+                "assistantTurnId": str(assistant_id),
             },
             tools=tools.intersection(TOOLS),
             tool_guard=partial(self._tool_allowed, user.id, workspace.id),
@@ -759,7 +755,7 @@ class TurnService:
             prepare=self._with_files if resume_from is None else None,
             log_fields={"workspace_id": str(workspace.id), "user_id": str(user.id)},
         )
-        return StartedTurn(user_message_id, assistant_id, stream)
+        return StartedTurn(user_turn_id, assistant_id, stream)
 
     async def _with_files(self, run_input: RunAgentInput) -> RunAgentInput:
         """Give the model the bytes of attached files (inside the turn)."""
@@ -783,11 +779,11 @@ class TurnService:
     ) -> None:
         if parent_id is None:
             # A null parent starts the tree; later roots come from edits.
-            if await self._messages.has_any(conversation_id=conversation_id):
+            if await self._turns.has_any(conversation_id=conversation_id):
                 fail(409, "parent_required")
             return
-        parent = await self._messages.get(
-            conversation_id=conversation_id, message_id=parent_id
+        parent = await self._turns.get(
+            conversation_id=conversation_id, turn_id=parent_id
         )
         if (
             parent is None
@@ -840,8 +836,8 @@ class TurnService:
     async def _record(self, assistant_id: UUID, status: str) -> None:
         """Runs in the turn's task, after the request ended: its own session."""
         async with self._session_factory() as session:
-            await MessageRepository(session).set_status(
-                message_id=assistant_id, status=status
+            await TurnRepository(session).set_status(
+                turn_id=assistant_id, status=status
             )
             await session.commit()
 
@@ -876,8 +872,8 @@ class TurnService:
                 content = [*content, *activities]
                 metadata["pending_action"] = pending
                 events = interactions.activity_events(activities)
-            saved = await MessageRepository(session).set_status(
-                message_id=assistant_id,
+            saved = await TurnRepository(session).set_status(
+                turn_id=assistant_id,
                 status=status,
                 content=content,
                 metadata=metadata,
@@ -891,11 +887,11 @@ class TurnService:
         return events
 
 
-def _question_text(message: ChatMessageInput) -> str:
+def _question_text(turn: TurnInput) -> str:
     """The question's text; it may be empty when files carry the question."""
-    text = message.text.strip()
-    if not text and not message.file_ids:
-        fail(422, "empty_message")
+    text = turn.text.strip()
+    if not text and not turn.file_ids:
+        fail(422, "empty_turn")
     return text
 
 

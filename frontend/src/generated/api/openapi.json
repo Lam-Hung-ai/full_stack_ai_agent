@@ -28,36 +28,6 @@
         "title": "ActiveAssistant",
         "type": "object"
       },
-      "ChatMessageInput": {
-        "additionalProperties": false,
-        "properties": {
-          "file_ids": {
-            "items": {
-              "format": "uuid",
-              "type": "string"
-            },
-            "maxItems": 10,
-            "title": "File Ids",
-            "type": "array"
-          },
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "text": {
-            "maxLength": 32000,
-            "title": "Text",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "text"
-        ],
-        "title": "ChatMessageInput",
-        "type": "object"
-      },
       "ConversationCreate": {
         "additionalProperties": false,
         "properties": {
@@ -191,7 +161,7 @@
             "title": "Created At",
             "type": "string"
           },
-          "current_message_id": {
+          "current_turn_id": {
             "anyOf": [
               {
                 "format": "uuid",
@@ -201,7 +171,7 @@
                 "type": "null"
               }
             ],
-            "title": "Current Message Id"
+            "title": "Current Turn Id"
           },
           "folder_id": {
             "anyOf": [
@@ -251,7 +221,7 @@
           "id",
           "workspace_id",
           "title",
-          "current_message_id",
+          "current_turn_id",
           "pinned_at",
           "archived_at",
           "folder_id",
@@ -280,18 +250,6 @@
             "title": "Id",
             "type": "string"
           },
-          "message_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Message Id"
-          },
           "snippet": {
             "anyOf": [
               {
@@ -307,6 +265,18 @@
             "title": "Title",
             "type": "string"
           },
+          "turn_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Turn Id"
+          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -318,7 +288,7 @@
           "title",
           "archived_at",
           "updated_at",
-          "message_id",
+          "turn_id",
           "snippet"
         ],
         "title": "ConversationSearchItem",
@@ -455,17 +425,17 @@
         "title": "DownloadResponse",
         "type": "object"
       },
-      "EditMessage": {
+      "EditTurn": {
         "additionalProperties": false,
         "properties": {
-          "message": {
-            "$ref": "#/components/schemas/ChatMessageInput"
+          "turn": {
+            "$ref": "#/components/schemas/TurnInput"
           }
         },
         "required": [
-          "message"
+          "turn"
         ],
-        "title": "EditMessage",
+        "title": "EditTurn",
         "type": "object"
       },
       "EmailInput": {
@@ -628,7 +598,7 @@
       },
       "HistoryResponse": {
         "properties": {
-          "current_message_id": {
+          "current_turn_id": {
             "anyOf": [
               {
                 "format": "uuid",
@@ -638,18 +608,18 @@
                 "type": "null"
               }
             ],
-            "title": "Current Message Id"
+            "title": "Current Turn Id"
           },
           "data": {
             "items": {
-              "$ref": "#/components/schemas/MessageResponse"
+              "$ref": "#/components/schemas/TurnResponse"
             },
             "title": "Data",
             "type": "array"
           }
         },
         "required": [
-          "current_message_id",
+          "current_turn_id",
           "data"
         ],
         "title": "HistoryResponse",
@@ -963,80 +933,6 @@
         "title": "MemberUpdate",
         "type": "object"
       },
-      "MessageResponse": {
-        "description": "One SQL row: a user message or a whole assistant turn. `content` is the\nAG-UI Message[] bundle the UI renders; a turn may hold several protocol\nmessages (text, tool calls and results, reasoning).",
-        "properties": {
-          "content": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Content",
-            "type": "array"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "parent_message_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Parent Message Id"
-          },
-          "role": {
-            "enum": [
-              "user",
-              "assistant"
-            ],
-            "title": "Role",
-            "type": "string"
-          },
-          "sibling_ids": {
-            "items": {
-              "format": "uuid",
-              "type": "string"
-            },
-            "title": "Sibling Ids",
-            "type": "array"
-          },
-          "status": {
-            "enum": [
-              "pending",
-              "running",
-              "requires_action",
-              "completed",
-              "failed",
-              "cancelled"
-            ],
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "parent_message_id",
-          "role",
-          "status",
-          "content",
-          "created_at",
-          "sibling_ids"
-        ],
-        "title": "MessageResponse",
-        "type": "object"
-      },
       "OrganizationCreate": {
         "additionalProperties": false,
         "properties": {
@@ -1331,7 +1227,7 @@
         "title": "ResumeEntry",
         "type": "object"
       },
-      "ResumeMessage": {
+      "ResumeTurn": {
         "additionalProperties": false,
         "description": "Answers to every interrupt the assistant waits on (API §5), in the\nSDK's own `ResumeEntry` shape (`interruptId`, `status`, `payload`):\n`{\"answer\": \"...\"}` for a question, `{\"approved\": true}` for a tool.",
         "properties": {
@@ -1348,7 +1244,7 @@
         "required": [
           "resume"
         ],
-        "title": "ResumeMessage",
+        "title": "ResumeTurn",
         "type": "object"
       },
       "RoleCreate": {
@@ -1513,13 +1409,10 @@
         "title": "RoleUpdate",
         "type": "object"
       },
-      "SendMessage": {
+      "SendTurn": {
         "additionalProperties": false,
         "properties": {
-          "message": {
-            "$ref": "#/components/schemas/ChatMessageInput"
-          },
-          "parent_message_id": {
+          "parent_turn_id": {
             "anyOf": [
               {
                 "format": "uuid",
@@ -1529,14 +1422,17 @@
                 "type": "null"
               }
             ],
-            "title": "Parent Message Id"
+            "title": "Parent Turn Id"
+          },
+          "turn": {
+            "$ref": "#/components/schemas/TurnInput"
           }
         },
         "required": [
-          "parent_message_id",
-          "message"
+          "parent_turn_id",
+          "turn"
         ],
-        "title": "SendMessage",
+        "title": "SendTurn",
         "type": "object"
       },
       "SessionResponse": {
@@ -1622,17 +1518,10 @@
             "title": "Can Copy",
             "type": "boolean"
           },
-          "current_message_id": {
+          "current_turn_id": {
             "format": "uuid",
-            "title": "Current Message Id",
+            "title": "Current Turn Id",
             "type": "string"
-          },
-          "messages": {
-            "items": {
-              "$ref": "#/components/schemas/SharedMessage"
-            },
-            "title": "Messages",
-            "type": "array"
           },
           "mode": {
             "enum": [
@@ -1651,6 +1540,13 @@
             "title": "Title",
             "type": "string"
           },
+          "turns": {
+            "items": {
+              "$ref": "#/components/schemas/SharedTurn"
+            },
+            "title": "Turns",
+            "type": "array"
+          },
           "version": {
             "title": "Version",
             "type": "integer"
@@ -1661,14 +1557,14 @@
           "mode",
           "version",
           "published_at",
-          "current_message_id",
-          "messages",
+          "current_turn_id",
+          "turns",
           "can_copy"
         ],
         "title": "SharedConversation",
         "type": "object"
       },
-      "SharedMessage": {
+      "SharedTurn": {
         "properties": {
           "content": {
             "items": {
@@ -1688,7 +1584,7 @@
             "title": "Id",
             "type": "string"
           },
-          "parent_message_id": {
+          "parent_turn_id": {
             "anyOf": [
               {
                 "format": "uuid",
@@ -1698,7 +1594,7 @@
                 "type": "null"
               }
             ],
-            "title": "Parent Message Id"
+            "title": "Parent Turn Id"
           },
           "role": {
             "title": "Role",
@@ -1719,14 +1615,14 @@
         },
         "required": [
           "id",
-          "parent_message_id",
+          "parent_turn_id",
           "role",
           "status",
           "content",
           "created_at",
           "sibling_ids"
         ],
-        "title": "SharedMessage",
+        "title": "SharedTurn",
         "type": "object"
       },
       "StopResponse": {
@@ -1795,6 +1691,110 @@
           "expires_in"
         ],
         "title": "TokenResponse",
+        "type": "object"
+      },
+      "TurnInput": {
+        "additionalProperties": false,
+        "properties": {
+          "file_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "File Ids",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 32000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ],
+        "title": "TurnInput",
+        "type": "object"
+      },
+      "TurnResponse": {
+        "description": "One turn: a user question or a whole assistant answer. `content` is the\nAG-UI Message[] bundle the UI renders; an assistant turn may hold several\nprotocol messages (text, tool calls and results, reasoning).",
+        "properties": {
+          "content": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Content",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "parent_turn_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Turn Id"
+          },
+          "role": {
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "sibling_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Sibling Ids",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "running",
+              "requires_action",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "parent_turn_id",
+          "role",
+          "status",
+          "content",
+          "created_at",
+          "sibling_ids"
+        ],
+        "title": "TurnResponse",
         "type": "object"
       },
       "UploadCreate": {
@@ -2573,370 +2573,6 @@
         ]
       }
     },
-    "/api/v1/conversations/{conversation_id}/messages": {
-      "get": {
-        "operationId": "get_history_api_v1_conversations__conversation_id__messages_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "conversation_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Conversation Id",
-              "type": "string"
-            }
-          },
-          {
-            "description": "Open the branch through this message instead",
-            "in": "query",
-            "name": "from_message_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "format": "uuid",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Open the branch through this message instead",
-              "title": "From Message Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HistoryResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Get History",
-        "tags": [
-          "Conversations"
-        ]
-      },
-      "post": {
-        "description": "Start an assistant turn and stream it as AG-UI events.\n\nErrors before the turn starts are JSON (401/403/404/409/422). Leaving the\nstream only detaches this subscriber; the turn continues and is saved.",
-        "operationId": "send_message_api_v1_conversations__conversation_id__messages_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "conversation_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Conversation Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SendMessage"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "text/event-stream": {}
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Send Message",
-        "tags": [
-          "Conversations"
-        ]
-      }
-    },
-    "/api/v1/conversations/{conversation_id}/messages/{message_id}/edit": {
-      "post": {
-        "description": "Answer a new version of a user question; the old branch stays.",
-        "operationId": "edit_message_api_v1_conversations__conversation_id__messages__message_id__edit_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "conversation_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Conversation Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "message_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Message Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/EditMessage"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "text/event-stream": {}
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Edit Message",
-        "tags": [
-          "Conversations"
-        ]
-      }
-    },
-    "/api/v1/conversations/{conversation_id}/messages/{message_id}/regenerate": {
-      "post": {
-        "description": "Answer the same question again beside the given assistant message.",
-        "operationId": "regenerate_message_api_v1_conversations__conversation_id__messages__message_id__regenerate_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "conversation_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Conversation Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "message_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Message Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "text/event-stream": {}
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Regenerate Message",
-        "tags": [
-          "Conversations"
-        ]
-      }
-    },
-    "/api/v1/conversations/{conversation_id}/messages/{message_id}/resume": {
-      "post": {
-        "description": "Answer what a paused assistant waits on and continue the same turn.",
-        "operationId": "resume_message_api_v1_conversations__conversation_id__messages__message_id__resume_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "conversation_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Conversation Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "message_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Message Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ResumeMessage"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "text/event-stream": {}
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Resume Message",
-        "tags": [
-          "Conversations"
-        ]
-      }
-    },
-    "/api/v1/conversations/{conversation_id}/messages/{message_id}/stop": {
-      "post": {
-        "description": "Stop an assistant turn, keeping what it produced so far.",
-        "operationId": "stop_message_api_v1_conversations__conversation_id__messages__message_id__stop_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "conversation_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Conversation Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "message_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Message Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StopResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Stop Message",
-        "tags": [
-          "Conversations"
-        ]
-      }
-    },
     "/api/v1/conversations/{conversation_id}/share": {
       "delete": {
         "description": "The link stops working for good; sharing again makes a new link.",
@@ -3070,6 +2706,370 @@
         "summary": "Publish Share",
         "tags": [
           "Shares"
+        ]
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/turns": {
+      "get": {
+        "operationId": "get_history_api_v1_conversations__conversation_id__turns_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Open the branch through this turn instead",
+            "in": "query",
+            "name": "from_turn_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Open the branch through this turn instead",
+              "title": "From Turn Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get History",
+        "tags": [
+          "Conversations"
+        ]
+      },
+      "post": {
+        "description": "Start an assistant turn and stream it as AG-UI events.\n\nErrors before the turn starts are JSON (401/403/404/409/422). Leaving the\nstream only detaches this subscriber; the turn continues and is saved.",
+        "operationId": "send_turn_api_v1_conversations__conversation_id__turns_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendTurn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Send Turn",
+        "tags": [
+          "Conversations"
+        ]
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/edit": {
+      "post": {
+        "description": "Answer a new version of a user question; the old branch stays.",
+        "operationId": "edit_turn_api_v1_conversations__conversation_id__turns__turn_id__edit_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "turn_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Turn Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditTurn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Edit Turn",
+        "tags": [
+          "Conversations"
+        ]
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/regenerate": {
+      "post": {
+        "description": "Answer the same question again beside the given assistant turn.",
+        "operationId": "regenerate_turn_api_v1_conversations__conversation_id__turns__turn_id__regenerate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "turn_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Turn Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Regenerate Turn",
+        "tags": [
+          "Conversations"
+        ]
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/resume": {
+      "post": {
+        "description": "Answer what a paused assistant waits on and continue the same turn.",
+        "operationId": "resume_turn_api_v1_conversations__conversation_id__turns__turn_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "turn_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Turn Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeTurn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Resume Turn",
+        "tags": [
+          "Conversations"
+        ]
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/stop": {
+      "post": {
+        "description": "Stop an assistant turn, keeping what it produced so far.",
+        "operationId": "stop_turn_api_v1_conversations__conversation_id__turns__turn_id__stop_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "turn_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Turn Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StopResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Stop Turn",
+        "tags": [
+          "Conversations"
         ]
       }
     },
@@ -4554,7 +4554,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/conversations/search": {
       "get": {
-        "description": "Own chats matching `q` by title or message text, ignoring accents and\ncase; each with the newest matching message and a snippet.",
+        "description": "Own chats matching `q` by title or turn text, ignoring accents and\ncase; each with the newest matching turn and a snippet.",
         "operationId": "search_conversations_api_v1_workspaces__workspace_id__conversations_search_get",
         "parameters": [
           {
@@ -4630,6 +4630,51 @@
           }
         ],
         "summary": "Search Conversations",
+        "tags": [
+          "Conversations"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/export": {
+      "get": {
+        "description": "The caller's own chats of the workspace as a zip (JSON + Markdown).",
+        "operationId": "export_conversations_api_v1_workspaces__workspace_id__export_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/zip": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Export Conversations",
         "tags": [
           "Conversations"
         ]

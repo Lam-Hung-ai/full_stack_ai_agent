@@ -1,12 +1,12 @@
 import type { Message } from "@ag-ui/client";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@/lib/api";
-import type { LiveTurn, MessageRow, RowView } from "../types/chat.types";
+import type { LiveTurn, TurnRow, RowView } from "../types/chat.types";
 import { chatErrorMessage, isActive, shownRows, toChatError, toRowView } from "./history";
 
-const row = (overrides: Partial<MessageRow>): MessageRow => ({
+const row = (overrides: Partial<TurnRow>): TurnRow => ({
   id: "r",
-  parent_message_id: null,
+  parent_turn_id: null,
   role: "assistant",
   status: "completed",
   content: [],

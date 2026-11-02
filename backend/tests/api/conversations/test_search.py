@@ -1,4 +1,4 @@
-"""Searching one's own chats by title or message text (C09, QD-31)."""
+"""Searching one's own chats by title or turn text (C09, QD-31)."""
 
 from tests.support.chat import body, history, new_conversation, send
 
@@ -28,9 +28,9 @@ async def test_matches_titles_and_text_without_accents(
     assert response.status_code == 200, response.text
     found = {row["id"]: row for row in response.json()["data"]}
     assert set(found) == {autumn, pho}
-    # The answer matched: the snippet comes from it, with its message id.
+    # The answer matched: the snippet comes from it, with its turn id.
     answer = (await history(client, autumn, headers))["data"][-1]
-    assert found[autumn]["message_id"] == answer["id"]
+    assert found[autumn]["turn_id"] == answer["id"]
     assert "Hà Nội" in found[autumn]["snippet"]
 
     by_title = await client.get(search_url(workspace, "kể về"), headers=headers)

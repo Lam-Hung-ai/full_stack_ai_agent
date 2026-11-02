@@ -1,8 +1,8 @@
 import type { Message } from "@ag-ui/client";
 import { ApiError } from "@/lib/api";
-import type { LiveTurn, MessageRow, RowView } from "../types/chat.types";
+import type { LiveTurn, TurnRow, RowView } from "../types/chat.types";
 
-export function toRowView(row: MessageRow): RowView {
+export function toRowView(row: TurnRow): RowView {
   return {
     id: row.id,
     role: row.role,
@@ -12,11 +12,11 @@ export function toRowView(row: MessageRow): RowView {
   };
 }
 
-export function isActive(row: Pick<MessageRow, "status"> | undefined): boolean {
+export function isActive(row: Pick<TurnRow, "status"> | undefined): boolean {
   return row?.status === "pending" || row?.status === "running";
 }
 
-export function isTerminal(row: Pick<MessageRow, "status">): boolean {
+export function isTerminal(row: Pick<TurnRow, "status">): boolean {
   return row.status === "completed" || row.status === "failed" || row.status === "cancelled";
 }
 
@@ -94,7 +94,9 @@ const MESSAGES: Record<string, string> = {
   too_many_files: "Mỗi câu hỏi đính kèm tối đa 10 tệp.",
   invalid_parent: "Cuộc trò chuyện đã thay đổi. Hãy tải lại trang.",
   parent_required: "Cuộc trò chuyện đã thay đổi. Hãy tải lại trang.",
-  message_not_found: "Tin nhắn không còn trong cuộc trò chuyện. Hãy tải lại trang.",
+  turn_not_found: "Lượt hỏi đáp không còn trong cuộc trò chuyện. Hãy tải lại trang.",
+  turn_id_conflict: "Câu hỏi này đã được gửi. Hãy tải lại trang.",
+  empty_turn: "Câu hỏi không được để trống.",
   conversation_not_found: "Không tìm thấy cuộc trò chuyện.",
   not_waiting: "Câu hỏi này đã được trả lời hoặc đã dừng. Hãy tải lại trang.",
   stale_interrupt: "Câu hỏi đã thay đổi. Hãy tải lại trang.",

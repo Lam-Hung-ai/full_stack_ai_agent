@@ -22,9 +22,9 @@ export const chatKeys = {
   folders: (workspaceId: string) => ["workspaces", workspaceId, "folders"] as const,
   conversation: (conversationId: string) => ["conversations", conversationId, "detail"] as const,
   histories: (conversationId: string) => ["conversations", conversationId, "messages"] as const,
-  /** `fromMessageId` null is the saved branch. */
-  history: (conversationId: string, fromMessageId: string | null) =>
-    [...chatKeys.histories(conversationId), fromMessageId] as const,
+  /** `fromTurnId` null is the saved branch. */
+  history: (conversationId: string, fromTurnId: string | null) =>
+    [...chatKeys.histories(conversationId), fromTurnId] as const,
 };
 
 /** One chat's metadata (its workspace, for attaching files). */

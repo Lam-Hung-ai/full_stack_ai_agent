@@ -2,7 +2,7 @@
 
 The `create_file` tool hands over a name, a format and either text or rows.
 This module renders the bytes, stores them under the workspace's key and
-attaches the file to the assistant message of the running turn, so it is
+attaches the file to the assistant turn that is running, so it is
 downloaded, shared and copied like an uploaded file. Spreadsheet cells are
 written as data, never as formulas (CSV/formula injection).
 """
@@ -23,7 +23,7 @@ from uuid_utils.compat import uuid7
 from app.common.storage.client import ObjectStorage
 from app.common.storage.exceptions import ObjectStorageError
 from app.config.settings import get_settings
-from app.database.generated_tables import t_message_files as message_files
+from app.database.generated_tables import t_turn_files as turn_files
 from app.database.session import SessionFactory
 from app.modules.files.policy import file_key
 from app.modules.files.repository import FileRepository
@@ -176,8 +176,8 @@ async def save_generated(
         made = (
             await session.execute(
                 select(func.count())
-                .select_from(message_files)
-                .where(message_files.c.message_id == assistant_id)
+                .select_from(turn_files)
+                .where(turn_files.c.turn_id == assistant_id)
             )
         ).scalar_one()
     if made >= MAX_FILES_PER_TURN:
@@ -203,7 +203,7 @@ async def save_generated(
                 checksum_sha256=hashlib.sha256(data).hexdigest(),
                 uploaded_by=owner_id,
             )
-            await files.link(message_id=assistant_id, file_ids=[file_id])
+            await files.link(turn_id=assistant_id, file_ids=[file_id])
             await session.commit()
     except Exception:
         try:

@@ -1,6 +1,6 @@
 CREATE SCHEMA chat_app;
 
-COMMENT ON SCHEMA chat_app IS 'Phase 2 finalized: flat folders/pin, terminal message lifecycle, message_files -> stored_files(metadata). Service-only; no runtime RLS. See phase-2-decisions.md.';
+COMMENT ON SCHEMA chat_app IS 'Phase 2 finalized: flat folders/pin, terminal turn lifecycle, turn_files -> stored_files(metadata). Service-only; no runtime RLS. See phase-2-decisions.md.';
 
 CREATE SCHEMA langgraph_checkpoints;
 
@@ -25,7 +25,7 @@ BEGIN
         RAISE EXCEPTION 'First-party chat object must be attributed to conversation owner; copies use new objects';
     END IF;
     IF EXISTS (
-        SELECT 1 FROM chat_app.message_files mf JOIN chat_app.messages m ON m.id = mf.message_id
+        SELECT 1 FROM chat_app.turn_files mf JOIN chat_app.turns m ON m.id = mf.turn_id
         JOIN chat_app.conversations c ON c.id = m.conversation_id
         WHERE mf.stored_file_id = p_file AND (c.workspace_id, c.owner_user_id) <> (p_workspace, p_owner)
     ) OR EXISTS (
@@ -48,7 +48,7 @@ CREATE FUNCTION chat_app.assert_conversation_idle(p_conversation uuid) RETURNS v
     AS $$
 BEGIN
     PERFORM pg_advisory_xact_lock(hashtextextended(p_conversation::text,42));
-    IF EXISTS (SELECT 1 FROM chat_app.messages WHERE conversation_id=p_conversation
+    IF EXISTS (SELECT 1 FROM chat_app.turns WHERE conversation_id=p_conversation
         AND status IN ('pending','running','requires_action')) THEN
         RAISE EXCEPTION 'Cannot build/publish snapshot while a response is unfinished';
     END IF;
@@ -74,7 +74,7 @@ CREATE FUNCTION chat_app.can_read_conversation_file(p_user uuid, p_conversation 
     LANGUAGE sql STABLE
     AS $$
     SELECT chat_app.can_read_conversation(p_user, p_conversation) AND EXISTS (
-        SELECT 1 FROM chat_app.message_files mf JOIN chat_app.messages m ON m.id = mf.message_id
+        SELECT 1 FROM chat_app.turn_files mf JOIN chat_app.turns m ON m.id = mf.turn_id
         JOIN chat_app.stored_files f ON f.id = mf.stored_file_id AND f.deleted_at IS NULL
         WHERE m.conversation_id = p_conversation AND mf.stored_file_id = p_file
     );
@@ -106,7 +106,7 @@ CREATE FUNCTION chat_app.can_read_share_file(p_user uuid, p_share uuid, p_file u
     AS $$
     SELECT chat_app.can_read_share(p_user, p_share) AND EXISTS (
         SELECT 1 FROM chat_app.conversation_shares s
-        JOIN chat_app.share_snapshot_message_files mf ON mf.snapshot_id = s.current_snapshot_id
+        JOIN chat_app.share_snapshot_turn_files mf ON mf.snapshot_id = s.current_snapshot_id
         JOIN chat_app.stored_files f ON f.id = mf.stored_file_id AND f.deleted_at IS NULL
         WHERE s.id = p_share AND mf.stored_file_id = p_file
     );
@@ -121,45 +121,14 @@ BEGIN
     IF state='completed' AND EXISTS (
         SELECT 1 FROM chat_app.share_snapshot_files sf WHERE sf.snapshot_id=NEW.snapshot_id AND NOT EXISTS (
             SELECT 1 FROM chat_app.conversation_copy_files cf
-            JOIN chat_app.message_files mf ON mf.stored_file_id=cf.target_stored_file_id
-            JOIN chat_app.messages m ON m.id=mf.message_id AND m.conversation_id=target
+            JOIN chat_app.turn_files mf ON mf.stored_file_id=cf.target_stored_file_id
+            JOIN chat_app.turns m ON m.id=mf.turn_id AND m.conversation_id=target
             WHERE cf.job_id=NEW.id AND cf.source_stored_file_id=sf.stored_file_id AND cf.status='copied')
     ) THEN RAISE EXCEPTION 'Every snapshot file must be copied and attached to destination'; END IF;
-    IF state='completed' AND EXISTS (SELECT 1 FROM chat_app.messages WHERE conversation_id=target
+    IF state='completed' AND EXISTS (SELECT 1 FROM chat_app.turns WHERE conversation_id=target
         AND status IN ('pending','running','requires_action')) THEN
-        RAISE EXCEPTION 'Copy destination must contain only terminal messages';
+        RAISE EXCEPTION 'Copy destination must contain only terminal turns';
     END IF;
-    RETURN NULL;
-END;
-$$;
-
-CREATE FUNCTION chat_app.check_message_tree() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE bad boolean;
-BEGIN
-    IF TG_TABLE_NAME = 'messages' THEN
-        WITH RECURSIVE ancestry AS (
-            SELECT m.id, m.parent_message_id, ARRAY[m.id] AS path, false AS cyclic
-            FROM chat_app.messages m WHERE m.conversation_id = NEW.conversation_id AND m.id = NEW.id
-            UNION ALL
-            SELECT p.id, p.parent_message_id, a.path || p.id, p.id = ANY(a.path)
-            FROM ancestry a JOIN chat_app.messages p
-              ON p.id = a.parent_message_id AND p.conversation_id = NEW.conversation_id
-            WHERE NOT a.cyclic
-        ) SELECT EXISTS (SELECT 1 FROM ancestry WHERE cyclic) INTO bad;
-    ELSE
-        WITH RECURSIVE ancestry AS (
-            SELECT m.id, m.parent_message_id, ARRAY[m.id] AS path, false AS cyclic
-            FROM chat_app.share_snapshot_messages m WHERE m.snapshot_id = NEW.snapshot_id AND m.id = NEW.id
-            UNION ALL
-            SELECT p.id, p.parent_message_id, a.path || p.id, p.id = ANY(a.path)
-            FROM ancestry a JOIN chat_app.share_snapshot_messages p
-              ON p.id = a.parent_message_id AND p.snapshot_id = NEW.snapshot_id
-            WHERE NOT a.cyclic
-        ) SELECT EXISTS (SELECT 1 FROM ancestry WHERE cyclic) INTO bad;
-    END IF;
-    IF bad THEN RAISE EXCEPTION 'Message parent cycle detected'; END IF;
     RETURN NULL;
 END;
 $$;
@@ -192,22 +161,53 @@ BEGIN
 END;
 $$;
 
-CREATE FUNCTION chat_app.check_user_message_final() RETURNS trigger
+CREATE FUNCTION chat_app.check_turn_tree() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE bad boolean;
+BEGIN
+    IF TG_TABLE_NAME = 'turns' THEN
+        WITH RECURSIVE ancestry AS (
+            SELECT m.id, m.parent_turn_id, ARRAY[m.id] AS path, false AS cyclic
+            FROM chat_app.turns m WHERE m.conversation_id = NEW.conversation_id AND m.id = NEW.id
+            UNION ALL
+            SELECT p.id, p.parent_turn_id, a.path || p.id, p.id = ANY(a.path)
+            FROM ancestry a JOIN chat_app.turns p
+              ON p.id = a.parent_turn_id AND p.conversation_id = NEW.conversation_id
+            WHERE NOT a.cyclic
+        ) SELECT EXISTS (SELECT 1 FROM ancestry WHERE cyclic) INTO bad;
+    ELSE
+        WITH RECURSIVE ancestry AS (
+            SELECT m.id, m.parent_turn_id, ARRAY[m.id] AS path, false AS cyclic
+            FROM chat_app.share_snapshot_turns m WHERE m.snapshot_id = NEW.snapshot_id AND m.id = NEW.id
+            UNION ALL
+            SELECT p.id, p.parent_turn_id, a.path || p.id, p.id = ANY(a.path)
+            FROM ancestry a JOIN chat_app.share_snapshot_turns p
+              ON p.id = a.parent_turn_id AND p.snapshot_id = NEW.snapshot_id
+            WHERE NOT a.cyclic
+        ) SELECT EXISTS (SELECT 1 FROM ancestry WHERE cyclic) INTO bad;
+    END IF;
+    IF bad THEN RAISE EXCEPTION 'Message parent cycle detected'; END IF;
+    RETURN NULL;
+END;
+$$;
+
+CREATE FUNCTION chat_app.check_user_turn_final() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
-    IF EXISTS (SELECT 1 FROM chat_app.messages WHERE id = NEW.id AND role = 'user' AND status <> 'completed') THEN
-        RAISE EXCEPTION 'User message must be completed in the same transaction as creation and file links';
+    IF EXISTS (SELECT 1 FROM chat_app.turns WHERE id = NEW.id AND role = 'user' AND status <> 'completed') THEN
+        RAISE EXCEPTION 'User turn must be completed in the same transaction as creation and file links';
     END IF;
     RETURN NULL;
 END;
 $$;
 
-CREATE FUNCTION chat_app.forbid_message_delete() RETURNS trigger
+CREATE FUNCTION chat_app.forbid_turn_delete() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
-    RAISE EXCEPTION 'Individual message deletion/truncation is disabled; conversation uses soft delete';
+    RAISE EXCEPTION 'Individual turn deletion/truncation is disabled; conversation uses soft delete';
 END;
 $$;
 
@@ -291,48 +291,9 @@ BEGIN
           AND ((s.mode = 'public' AND w.kind = 'personal' AND w.personal_user_id = NEW.requested_by)
             OR (s.mode = 'organization' AND w.kind = 'organization' AND w.organization_id = s.organization_id))
     ) THEN RAISE EXCEPTION 'Copy not allowed across workspace domains or share unavailable'; END IF;
-    IF TG_OP = 'INSERT' AND (EXISTS (SELECT 1 FROM chat_app.messages WHERE conversation_id = NEW.target_conversation_id)
+    IF TG_OP = 'INSERT' AND (EXISTS (SELECT 1 FROM chat_app.turns WHERE conversation_id = NEW.target_conversation_id)
         OR EXISTS (SELECT 1 FROM chat_app.conversation_shares WHERE source_conversation_id = NEW.target_conversation_id)) THEN
         RAISE EXCEPTION 'Copy destination must start empty and unshared; create job before payload in same transaction';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-
-CREATE FUNCTION chat_app.guard_message_file() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE mid uuid; cid uuid; wid uuid; uid uuid; state text;
-BEGIN
-    IF TG_OP = 'UPDATE' THEN RAISE EXCEPTION 'Replace links with delete/insert while message is nonterminal'; END IF;
-    mid := CASE WHEN TG_OP = 'DELETE' THEN OLD.message_id ELSE NEW.message_id END;
-    SELECT conversation_id INTO cid FROM chat_app.messages WHERE id = mid;
-    IF NOT FOUND THEN RAISE EXCEPTION 'Message not found'; END IF;
-    PERFORM pg_advisory_xact_lock(hashtextextended(cid::text, 42));
-    SELECT m.status, c.workspace_id, c.owner_user_id INTO state, wid, uid
-        FROM chat_app.messages m JOIN chat_app.conversations c ON c.id = m.conversation_id
-        WHERE m.id = mid FOR UPDATE OF m;
-    IF state IN ('completed','failed','cancelled') THEN
-        RAISE EXCEPTION 'Terminal message file links are immutable; attach before finalization';
-    END IF;
-    IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
-    PERFORM chat_app.assert_chat_file_scope(NEW.stored_file_id, wid, uid);
-    RETURN NEW;
-END;
-$$;
-
-CREATE FUNCTION chat_app.guard_message_lifecycle() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-    PERFORM pg_advisory_xact_lock(hashtextextended(NEW.conversation_id::text, 42));
-    IF TG_OP = 'UPDATE' THEN
-        IF OLD.status IN ('completed','failed','cancelled') THEN
-            RAISE EXCEPTION 'Terminal message is immutable; edit/regenerate creates a new branch';
-        END IF;
-        IF OLD.status = 'running' AND NEW.status = 'pending' THEN
-            RAISE EXCEPTION 'Running message cannot return to pending';
-        END IF;
     END IF;
     RETURN NEW;
 END;
@@ -383,7 +344,7 @@ BEGIN
         JOIN chat_app.conversations c ON c.id = s.source_conversation_id WHERE ss.id = NEW.snapshot_id;
     IF NOT FOUND OR wid <> NEW.workspace_id THEN RAISE EXCEPTION 'Snapshot file scope mismatch'; END IF;
     PERFORM chat_app.assert_chat_file_scope(NEW.stored_file_id, wid, uid);
-    IF NOT EXISTS (SELECT 1 FROM chat_app.message_files mf JOIN chat_app.messages m ON m.id = mf.message_id
+    IF NOT EXISTS (SELECT 1 FROM chat_app.turn_files mf JOIN chat_app.turns m ON m.id = mf.turn_id
         WHERE mf.stored_file_id = NEW.stored_file_id AND m.conversation_id = cid) THEN
         RAISE EXCEPTION 'Snapshot file must belong to source conversation';
     END IF;
@@ -406,9 +367,9 @@ BEGIN
         RAISE EXCEPTION 'Snapshot identity is immutable';
     END IF;
     IF NEW.sealed_at IS NOT NULL AND (
-        NEW.current_message_id IS NULL OR NOT EXISTS (
-            SELECT 1 FROM chat_app.share_snapshot_messages WHERE snapshot_id = NEW.id)
-    ) THEN RAISE EXCEPTION 'A sealed snapshot needs messages and an active message'; END IF;
+        NEW.current_turn_id IS NULL OR NOT EXISTS (
+            SELECT 1 FROM chat_app.share_snapshot_turns WHERE snapshot_id = NEW.id)
+    ) THEN RAISE EXCEPTION 'A sealed snapshot needs turns and an active turn'; END IF;
     RETURN NEW;
 END;
 $$;
@@ -437,16 +398,55 @@ BEGIN
         RAISE EXCEPTION 'Verified checksum is immutable';
     END IF;
     IF TG_OP = 'DELETE' OR (NEW.deleted_at IS NOT NULL AND OLD.deleted_at IS NULL) THEN
-        IF EXISTS (SELECT 1 FROM chat_app.message_files WHERE stored_file_id = OLD.id)
+        IF EXISTS (SELECT 1 FROM chat_app.turn_files WHERE stored_file_id = OLD.id)
            OR EXISTS (SELECT 1 FROM chat_app.share_snapshot_files WHERE stored_file_id = OLD.id)
            OR EXISTS (SELECT 1 FROM chat_app.conversation_copy_files
                WHERE source_stored_file_id = OLD.id OR target_stored_file_id = OLD.id) THEN
-            RAISE EXCEPTION 'Stored object still referenced by message/snapshot/copy';
+            RAISE EXCEPTION 'Stored object still referenced by turn/snapshot/copy';
         END IF;
     END IF;
     -- Metadata can evolve for processing; it must never carry access grants.
     -- Snapshot metadata is frozen separately below.
     IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE FUNCTION chat_app.guard_turn_file() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE mid uuid; cid uuid; wid uuid; uid uuid; state text;
+BEGIN
+    IF TG_OP = 'UPDATE' THEN RAISE EXCEPTION 'Replace links with delete/insert while turn is nonterminal'; END IF;
+    mid := CASE WHEN TG_OP = 'DELETE' THEN OLD.turn_id ELSE NEW.turn_id END;
+    SELECT conversation_id INTO cid FROM chat_app.turns WHERE id = mid;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Message not found'; END IF;
+    PERFORM pg_advisory_xact_lock(hashtextextended(cid::text, 42));
+    SELECT m.status, c.workspace_id, c.owner_user_id INTO state, wid, uid
+        FROM chat_app.turns m JOIN chat_app.conversations c ON c.id = m.conversation_id
+        WHERE m.id = mid FOR UPDATE OF m;
+    IF state IN ('completed','failed','cancelled') THEN
+        RAISE EXCEPTION 'Terminal turn file links are immutable; attach before finalization';
+    END IF;
+    IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+    PERFORM chat_app.assert_chat_file_scope(NEW.stored_file_id, wid, uid);
+    RETURN NEW;
+END;
+$$;
+
+CREATE FUNCTION chat_app.guard_turn_lifecycle() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    PERFORM pg_advisory_xact_lock(hashtextextended(NEW.conversation_id::text, 42));
+    IF TG_OP = 'UPDATE' THEN
+        IF OLD.status IN ('completed','failed','cancelled') THEN
+            RAISE EXCEPTION 'Terminal turn is immutable; edit/regenerate creates a new branch';
+        END IF;
+        IF OLD.status = 'running' AND NEW.status = 'pending' THEN
+            RAISE EXCEPTION 'Running turn cannot return to pending';
+        END IF;
+    END IF;
     RETURN NEW;
 END;
 $$;
@@ -459,19 +459,6 @@ BEGIN
        (OLD.kind, OLD.personal_user_id, OLD.organization_id) THEN
         RAISE EXCEPTION 'Workspace identity is immutable';
     END IF;
-    RETURN NEW;
-END;
-$$;
-
-CREATE FUNCTION chat_app.lock_message_tree() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-    IF TG_OP = 'UPDATE' AND (NEW.id, NEW.conversation_id, NEW.parent_message_id, NEW.role, NEW.created_at)
-        IS DISTINCT FROM (OLD.id, OLD.conversation_id, OLD.parent_message_id, OLD.role, OLD.created_at) THEN
-        RAISE EXCEPTION 'Message identity, parent, role and creation time are immutable; create a new branch';
-    END IF;
-    PERFORM pg_advisory_xact_lock(hashtextextended(NEW.conversation_id::text, 42));
     RETURN NEW;
 END;
 $$;
@@ -496,30 +483,18 @@ BEGIN
 END;
 $$;
 
-CREATE FUNCTION chat_app.message_text(p_content jsonb) RETURNS text
-    LANGUAGE sql IMMUTABLE PARALLEL SAFE
+CREATE FUNCTION chat_app.lock_turn_tree() RETURNS trigger
+    LANGUAGE plpgsql
     AS $$
-    SELECT coalesce(string_agg(part, ' '), '')
-    FROM (
-        SELECT m.value ->> 'content' AS part
-        FROM jsonb_array_elements(
-            CASE WHEN jsonb_typeof(p_content) = 'array' THEN p_content ELSE '[]'::jsonb END
-        ) AS m
-        WHERE m.value ->> 'role' IN ('user', 'assistant')
-          AND jsonb_typeof(m.value -> 'content') = 'string'
-        UNION ALL
-        SELECT p.value ->> 'text'
-        FROM jsonb_array_elements(
-            CASE WHEN jsonb_typeof(p_content) = 'array' THEN p_content ELSE '[]'::jsonb END
-        ) AS m
-        CROSS JOIN LATERAL jsonb_array_elements(
-            CASE WHEN jsonb_typeof(m.value -> 'content') = 'array' THEN m.value -> 'content' ELSE '[]'::jsonb END
-        ) AS p
-        WHERE m.value ->> 'role' = 'user' AND p.value ->> 'type' = 'text'
-    ) AS parts;
+BEGIN
+    IF TG_OP = 'UPDATE' AND (NEW.id, NEW.conversation_id, NEW.parent_turn_id, NEW.role, NEW.created_at)
+        IS DISTINCT FROM (OLD.id, OLD.conversation_id, OLD.parent_turn_id, OLD.role, OLD.created_at) THEN
+        RAISE EXCEPTION 'Message identity, parent, role and creation time are immutable; create a new branch';
+    END IF;
+    PERFORM pg_advisory_xact_lock(hashtextextended(NEW.conversation_id::text, 42));
+    RETURN NEW;
+END;
 $$;
-
-COMMENT ON FUNCTION chat_app.message_text(p_content jsonb) IS 'Searchable text of a message AG-UI bundle (C09): user/assistant text only, never reasoning or tool payloads.';
 
 CREATE FUNCTION chat_app.provision_organization() RETURNS trigger
     LANGUAGE plpgsql
@@ -586,6 +561,31 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+
+CREATE FUNCTION chat_app.turn_text(p_content jsonb) RETURNS text
+    LANGUAGE sql IMMUTABLE PARALLEL SAFE
+    AS $$
+    SELECT coalesce(string_agg(part, ' '), '')
+    FROM (
+        SELECT m.value ->> 'content' AS part
+        FROM jsonb_array_elements(
+            CASE WHEN jsonb_typeof(p_content) = 'array' THEN p_content ELSE '[]'::jsonb END
+        ) AS m
+        WHERE m.value ->> 'role' IN ('user', 'assistant')
+          AND jsonb_typeof(m.value -> 'content') = 'string'
+        UNION ALL
+        SELECT p.value ->> 'text'
+        FROM jsonb_array_elements(
+            CASE WHEN jsonb_typeof(p_content) = 'array' THEN p_content ELSE '[]'::jsonb END
+        ) AS m
+        CROSS JOIN LATERAL jsonb_array_elements(
+            CASE WHEN jsonb_typeof(m.value -> 'content') = 'array' THEN m.value -> 'content' ELSE '[]'::jsonb END
+        ) AS p
+        WHERE m.value ->> 'role' = 'user' AND p.value ->> 'type' = 'text'
+    ) AS parts;
+$$;
+
+COMMENT ON FUNCTION chat_app.turn_text(p_content jsonb) IS 'Searchable text of a turn AG-UI bundle (C09): user/assistant text only, never reasoning or tool payloads.';
 
 CREATE FUNCTION chat_app.valid_agui_bundle(p_role text, payload jsonb) RETURNS boolean
     LANGUAGE plpgsql IMMUTABLE
@@ -681,7 +681,7 @@ CREATE TABLE chat_app.conversations (
     workspace_id uuid NOT NULL,
     owner_user_id uuid NOT NULL,
     title text DEFAULT 'Cuộc trò chuyện mới'::text NOT NULL,
-    current_message_id uuid,
+    current_turn_id uuid,
     deleted_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -691,7 +691,7 @@ CREATE TABLE chat_app.conversations (
     CONSTRAINT conversations_title_check CHECK ((btrim(title) <> ''::text))
 );
 
-COMMENT ON TABLE chat_app.conversations IS 'One owner per conversation; pin/archive/folder stored here. current_message_id is saved branch tip, not a live execution ID.';
+COMMENT ON TABLE chat_app.conversations IS 'One owner per conversation; pin/archive/folder stored here. current_turn_id is saved branch tip, not a live execution ID.';
 
 CREATE TABLE chat_app.member_role_assignments (
     id uuid DEFAULT uuidv7() NOT NULL,
@@ -702,41 +702,6 @@ CREATE TABLE chat_app.member_role_assignments (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
-
-CREATE TABLE chat_app.message_files (
-    message_id uuid NOT NULL,
-    stored_file_id uuid NOT NULL
-);
-
-COMMENT ON TABLE chat_app.message_files IS 'Authoritative many-to-many links. Resolve conversation/owner/workspace through messages. No extra files/chat_files table, kind or file status.';
-
-CREATE TABLE chat_app.messages (
-    id uuid DEFAULT uuidv7() NOT NULL,
-    conversation_id uuid NOT NULL,
-    parent_message_id uuid,
-    role text NOT NULL,
-    content jsonb DEFAULT '[]'::jsonb NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    attachments jsonb DEFAULT '[]'::jsonb NOT NULL,
-    status text DEFAULT 'pending'::text NOT NULL,
-    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
-    CONSTRAINT messages_attachments_check CHECK ((jsonb_typeof(attachments) = 'array'::text)),
-    CONSTRAINT messages_check CHECK (((parent_message_id IS NULL) OR (parent_message_id <> id))),
-    CONSTRAINT messages_content_check CHECK (chat_app.valid_agui_bundle(role, content)),
-    CONSTRAINT messages_metadata_object_check CHECK ((jsonb_typeof(metadata) = 'object'::text)),
-    CONSTRAINT messages_role_check CHECK ((role = ANY (ARRAY['user'::text, 'assistant'::text]))),
-    CONSTRAINT messages_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'running'::text, 'requires_action'::text, 'completed'::text, 'failed'::text, 'cancelled'::text]))),
-    CONSTRAINT messages_user_status_check CHECK (((role <> 'user'::text) OR (status = ANY (ARRAY['pending'::text, 'completed'::text]))))
-);
-
-COMMENT ON COLUMN chat_app.messages.content IS 'Ordered AG-UI Message[] for one logical user/assistant UI row; includes toolCalls and tool results, not raw SSE token events. Backend performs SDK validation and ID/call consistency checks.';
-
-COMMENT ON COLUMN chat_app.messages.attachments IS 'App-owned JSON metadata for citations, sources and artifacts. Full tool output MAY duplicate content by explicit product decision; model context uses content once.';
-
-COMMENT ON COLUMN chat_app.messages.status IS 'pending/running/requires_action are nonterminal. Pause persists partial content and checkpoint atomically; completed/failed/cancelled are immutable.';
-
-COMMENT ON COLUMN chat_app.messages.metadata IS 'Backend-owned action/checkpoint state and resolved interactions. No client-controlled checkpoint pointers or credentials. Terminal messages remain immutable.';
 
 CREATE TABLE chat_app.organization_invitations (
     id uuid DEFAULT uuidv7() NOT NULL,
@@ -841,30 +806,30 @@ CREATE TABLE chat_app.share_snapshot_files (
 
 COMMENT ON TABLE chat_app.share_snapshot_files IS 'Immutable snapshot file manifest; stored_file_id -> stored_files, metadata is backend-allowlisted snapshot, never live raw metadata.';
 
-CREATE TABLE chat_app.share_snapshot_message_files (
+CREATE TABLE chat_app.share_snapshot_turn_files (
     snapshot_id uuid NOT NULL,
-    message_id uuid NOT NULL,
-    stored_file_id uuid CONSTRAINT share_snapshot_message_files_file_id_not_null NOT NULL
+    turn_id uuid NOT NULL,
+    stored_file_id uuid CONSTRAINT share_snapshot_turn_files_file_id_not_null NOT NULL
 );
 
-CREATE TABLE chat_app.share_snapshot_messages (
+CREATE TABLE chat_app.share_snapshot_turns (
     snapshot_id uuid NOT NULL,
     id uuid DEFAULT uuidv7() NOT NULL,
-    parent_message_id uuid,
+    parent_turn_id uuid,
     role text NOT NULL,
     content jsonb NOT NULL,
     original_created_at timestamp with time zone NOT NULL,
     attachments jsonb DEFAULT '[]'::jsonb NOT NULL,
     status text DEFAULT 'completed'::text NOT NULL,
-    CONSTRAINT share_snapshot_messages_attachments_check CHECK ((jsonb_typeof(attachments) = 'array'::text)),
-    CONSTRAINT share_snapshot_messages_check CHECK (((parent_message_id IS NULL) OR (parent_message_id <> id))),
-    CONSTRAINT share_snapshot_messages_content_check CHECK (chat_app.valid_agui_bundle(role, content)),
-    CONSTRAINT share_snapshot_messages_role_check CHECK ((role = ANY (ARRAY['user'::text, 'assistant'::text]))),
-    CONSTRAINT snapshot_message_status_check CHECK ((status = ANY (ARRAY['completed'::text, 'failed'::text, 'cancelled'::text]))),
+    CONSTRAINT share_snapshot_turns_attachments_check CHECK ((jsonb_typeof(attachments) = 'array'::text)),
+    CONSTRAINT share_snapshot_turns_check CHECK (((parent_turn_id IS NULL) OR (parent_turn_id <> id))),
+    CONSTRAINT share_snapshot_turns_content_check CHECK (chat_app.valid_agui_bundle(role, content)),
+    CONSTRAINT share_snapshot_turns_role_check CHECK ((role = ANY (ARRAY['user'::text, 'assistant'::text]))),
+    CONSTRAINT snapshot_turn_status_check CHECK ((status = ANY (ARRAY['completed'::text, 'failed'::text, 'cancelled'::text]))),
     CONSTRAINT snapshot_user_status_check CHECK (((role <> 'user'::text) OR (status = 'completed'::text)))
 );
 
-COMMENT ON COLUMN chat_app.share_snapshot_messages.attachments IS 'Snapshot must preserve both attachments and content and remap embedded file/message/tool IDs when copied.';
+COMMENT ON COLUMN chat_app.share_snapshot_turns.attachments IS 'Snapshot must preserve both attachments and content and remap embedded file/turn/tool IDs when copied.';
 
 CREATE TABLE chat_app.share_snapshots (
     id uuid DEFAULT uuidv7() NOT NULL,
@@ -872,7 +837,7 @@ CREATE TABLE chat_app.share_snapshots (
     workspace_id uuid NOT NULL,
     version bigint NOT NULL,
     title text NOT NULL,
-    current_message_id uuid,
+    current_turn_id uuid,
     sealed_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT share_snapshots_title_check CHECK ((btrim(title) <> ''::text)),
@@ -907,6 +872,41 @@ CREATE TABLE chat_app.stored_files (
 COMMENT ON TABLE chat_app.stored_files IS 'S3-compatible object metadata, not ACL. Backend/storage must validate actual object/checksum and enforce no overwrite. Bucket checks are basic application checks, not full vendor validation.';
 
 COMMENT ON COLUMN chat_app.stored_files.metadata IS 'Optional extensible object: image/extraction/preview/RAG descriptors. Not ACL; no secrets, presigned URLs, vectors or chunk corpus. No speculative GIN index.';
+
+CREATE TABLE chat_app.turn_files (
+    turn_id uuid NOT NULL,
+    stored_file_id uuid NOT NULL
+);
+
+COMMENT ON TABLE chat_app.turn_files IS 'Authoritative many-to-many links. Resolve conversation/owner/workspace through turns. No extra files/chat_files table, kind or file status.';
+
+CREATE TABLE chat_app.turns (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    conversation_id uuid NOT NULL,
+    parent_turn_id uuid,
+    role text NOT NULL,
+    content jsonb DEFAULT '[]'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    attachments jsonb DEFAULT '[]'::jsonb NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
+    CONSTRAINT turns_attachments_check CHECK ((jsonb_typeof(attachments) = 'array'::text)),
+    CONSTRAINT turns_check CHECK (((parent_turn_id IS NULL) OR (parent_turn_id <> id))),
+    CONSTRAINT turns_content_check CHECK (chat_app.valid_agui_bundle(role, content)),
+    CONSTRAINT turns_metadata_object_check CHECK ((jsonb_typeof(metadata) = 'object'::text)),
+    CONSTRAINT turns_role_check CHECK ((role = ANY (ARRAY['user'::text, 'assistant'::text]))),
+    CONSTRAINT turns_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'running'::text, 'requires_action'::text, 'completed'::text, 'failed'::text, 'cancelled'::text]))),
+    CONSTRAINT turns_user_status_check CHECK (((role <> 'user'::text) OR (status = ANY (ARRAY['pending'::text, 'completed'::text]))))
+);
+
+COMMENT ON COLUMN chat_app.turns.content IS 'Ordered AG-UI Message[] for one logical user/assistant UI row; includes toolCalls and tool results, not raw SSE token events. Backend performs SDK validation and ID/call consistency checks.';
+
+COMMENT ON COLUMN chat_app.turns.attachments IS 'App-owned JSON metadata for citations, sources and artifacts. Full tool output MAY duplicate content by explicit product decision; model context uses content once.';
+
+COMMENT ON COLUMN chat_app.turns.status IS 'pending/running/requires_action are nonterminal. Pause persists partial content and checkpoint atomically; completed/failed/cancelled are immutable.';
+
+COMMENT ON COLUMN chat_app.turns.metadata IS 'Backend-owned action/checkpoint state and resolved interactions. No client-controlled checkpoint pointers or credentials. Terminal turns remain immutable.';
 
 CREATE TABLE chat_app.user_accounts (
     id uuid DEFAULT uuidv7() NOT NULL,
@@ -1020,15 +1020,6 @@ ALTER TABLE ONLY chat_app.member_role_assignments
 ALTER TABLE ONLY chat_app.member_role_assignments
     ADD CONSTRAINT member_role_assignments_pkey PRIMARY KEY (id);
 
-ALTER TABLE ONLY chat_app.message_files
-    ADD CONSTRAINT message_files_pkey PRIMARY KEY (message_id, stored_file_id);
-
-ALTER TABLE ONLY chat_app.messages
-    ADD CONSTRAINT messages_conversation_id_id_key UNIQUE (conversation_id, id);
-
-ALTER TABLE ONLY chat_app.messages
-    ADD CONSTRAINT messages_pkey PRIMARY KEY (id);
-
 ALTER TABLE ONLY chat_app.organization_invitations
     ADD CONSTRAINT organization_invitations_pkey PRIMARY KEY (id);
 
@@ -1071,11 +1062,11 @@ ALTER TABLE ONLY chat_app.role_permissions
 ALTER TABLE ONLY chat_app.share_snapshot_files
     ADD CONSTRAINT share_snapshot_files_pkey PRIMARY KEY (snapshot_id, stored_file_id);
 
-ALTER TABLE ONLY chat_app.share_snapshot_message_files
-    ADD CONSTRAINT share_snapshot_message_files_pkey PRIMARY KEY (snapshot_id, message_id, stored_file_id);
+ALTER TABLE ONLY chat_app.share_snapshot_turn_files
+    ADD CONSTRAINT share_snapshot_turn_files_pkey PRIMARY KEY (snapshot_id, turn_id, stored_file_id);
 
-ALTER TABLE ONLY chat_app.share_snapshot_messages
-    ADD CONSTRAINT share_snapshot_messages_pkey PRIMARY KEY (snapshot_id, id);
+ALTER TABLE ONLY chat_app.share_snapshot_turns
+    ADD CONSTRAINT share_snapshot_turns_pkey PRIMARY KEY (snapshot_id, id);
 
 ALTER TABLE ONLY chat_app.share_snapshots
     ADD CONSTRAINT share_snapshots_id_workspace_id_key UNIQUE (id, workspace_id);
@@ -1091,6 +1082,15 @@ ALTER TABLE ONLY chat_app.share_snapshots
 
 ALTER TABLE ONLY chat_app.stored_files
     ADD CONSTRAINT stored_files_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY chat_app.turn_files
+    ADD CONSTRAINT turn_files_pkey PRIMARY KEY (turn_id, stored_file_id);
+
+ALTER TABLE ONLY chat_app.turns
+    ADD CONSTRAINT turns_conversation_id_id_key UNIQUE (conversation_id, id);
+
+ALTER TABLE ONLY chat_app.turns
+    ADD CONSTRAINT turns_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY chat_app.stored_files
     ADD CONSTRAINT uq_stored_files_bucket_object_key UNIQUE (bucket, object_key);
@@ -1163,16 +1163,6 @@ CREATE INDEX member_role_assignments_member_idx ON chat_app.member_role_assignme
 
 CREATE INDEX member_role_assignments_role_idx ON chat_app.member_role_assignments USING btree (role_id, organization_id);
 
-CREATE INDEX message_files_stored_file_idx ON chat_app.message_files USING btree (stored_file_id);
-
-CREATE INDEX messages_history_idx ON chat_app.messages USING btree (conversation_id, created_at, id);
-
-CREATE UNIQUE INDEX messages_one_active_assistant_idx ON chat_app.messages USING btree (conversation_id) WHERE ((role = 'assistant'::text) AND (status = ANY (ARRAY['pending'::text, 'running'::text, 'requires_action'::text])));
-
-CREATE INDEX messages_parent_idx ON chat_app.messages USING btree (conversation_id, parent_message_id);
-
-CREATE INDEX messages_search_idx ON chat_app.messages USING gin (chat_app.search_key(chat_app.message_text(content)) gin_trgm_ops);
-
 CREATE INDEX organization_invitations_acceptor_idx ON chat_app.organization_invitations USING btree (accepted_by);
 
 CREATE INDEX organization_invitations_expiry_idx ON chat_app.organization_invitations USING btree (expires_at) WHERE (status = 'pending'::text);
@@ -1199,11 +1189,21 @@ CREATE INDEX role_permissions_permission_idx ON chat_app.role_permissions USING 
 
 CREATE INDEX share_snapshot_files_file_idx ON chat_app.share_snapshot_files USING btree (stored_file_id, workspace_id);
 
-CREATE INDEX share_snapshot_message_files_file_idx ON chat_app.share_snapshot_message_files USING btree (snapshot_id, stored_file_id);
+CREATE INDEX share_snapshot_turn_files_file_idx ON chat_app.share_snapshot_turn_files USING btree (snapshot_id, stored_file_id);
 
-CREATE INDEX share_snapshot_messages_history_idx ON chat_app.share_snapshot_messages USING btree (snapshot_id, original_created_at, id);
+CREATE INDEX share_snapshot_turns_history_idx ON chat_app.share_snapshot_turns USING btree (snapshot_id, original_created_at, id);
 
-CREATE INDEX share_snapshot_messages_parent_idx ON chat_app.share_snapshot_messages USING btree (snapshot_id, parent_message_id);
+CREATE INDEX share_snapshot_turns_parent_idx ON chat_app.share_snapshot_turns USING btree (snapshot_id, parent_turn_id);
+
+CREATE INDEX turn_files_stored_file_idx ON chat_app.turn_files USING btree (stored_file_id);
+
+CREATE INDEX turns_history_idx ON chat_app.turns USING btree (conversation_id, created_at, id);
+
+CREATE UNIQUE INDEX turns_one_active_assistant_idx ON chat_app.turns USING btree (conversation_id) WHERE ((role = 'assistant'::text) AND (status = ANY (ARRAY['pending'::text, 'running'::text, 'requires_action'::text])));
+
+CREATE INDEX turns_parent_idx ON chat_app.turns USING btree (conversation_id, parent_turn_id);
+
+CREATE INDEX turns_search_idx ON chat_app.turns USING gin (chat_app.search_key(chat_app.turn_text(content)) gin_trgm_ops);
 
 CREATE UNIQUE INDEX user_accounts_one_password_idx ON chat_app.user_accounts USING btree (user_id) WHERE (provider_id = 'credential'::text);
 
@@ -1215,9 +1215,9 @@ CREATE INDEX verifications_lookup_idx ON chat_app.verifications USING btree (ide
 
 CREATE TRIGGER guard_content BEFORE INSERT OR DELETE OR UPDATE ON chat_app.share_snapshot_files FOR EACH ROW EXECUTE FUNCTION chat_app.guard_snapshot_content();
 
-CREATE TRIGGER guard_content BEFORE INSERT OR DELETE OR UPDATE ON chat_app.share_snapshot_message_files FOR EACH ROW EXECUTE FUNCTION chat_app.guard_snapshot_content();
+CREATE TRIGGER guard_content BEFORE INSERT OR DELETE OR UPDATE ON chat_app.share_snapshot_turn_files FOR EACH ROW EXECUTE FUNCTION chat_app.guard_snapshot_content();
 
-CREATE TRIGGER guard_content BEFORE INSERT OR DELETE OR UPDATE ON chat_app.share_snapshot_messages FOR EACH ROW EXECUTE FUNCTION chat_app.guard_snapshot_content();
+CREATE TRIGGER guard_content BEFORE INSERT OR DELETE OR UPDATE ON chat_app.share_snapshot_turns FOR EACH ROW EXECUTE FUNCTION chat_app.guard_snapshot_content();
 
 CREATE TRIGGER guard_copy_publication BEFORE INSERT OR UPDATE ON chat_app.conversation_shares FOR EACH ROW EXECUTE FUNCTION chat_app.guard_copy_publication();
 
@@ -1229,9 +1229,9 @@ CREATE TRIGGER guard_identity BEFORE UPDATE ON chat_app.workspaces FOR EACH ROW 
 
 CREATE TRIGGER guard_idle BEFORE INSERT OR UPDATE ON chat_app.share_snapshots FOR EACH ROW EXECUTE FUNCTION chat_app.guard_snapshot_idle();
 
-CREATE TRIGGER guard_lifecycle BEFORE INSERT OR UPDATE ON chat_app.messages FOR EACH ROW EXECUTE FUNCTION chat_app.guard_message_lifecycle();
+CREATE TRIGGER guard_lifecycle BEFORE INSERT OR UPDATE ON chat_app.turns FOR EACH ROW EXECUTE FUNCTION chat_app.guard_turn_lifecycle();
 
-CREATE TRIGGER guard_link BEFORE INSERT OR DELETE OR UPDATE ON chat_app.message_files FOR EACH ROW EXECUTE FUNCTION chat_app.guard_message_file();
+CREATE TRIGGER guard_link BEFORE INSERT OR DELETE OR UPDATE ON chat_app.turn_files FOR EACH ROW EXECUTE FUNCTION chat_app.guard_turn_file();
 
 CREATE TRIGGER guard_mapping BEFORE INSERT OR UPDATE ON chat_app.conversation_copy_files FOR EACH ROW EXECUTE FUNCTION chat_app.guard_copy_file();
 
@@ -1251,13 +1251,13 @@ CREATE TRIGGER lock_org BEFORE INSERT OR DELETE OR UPDATE ON chat_app.organizati
 
 CREATE TRIGGER lock_org BEFORE INSERT OR DELETE OR UPDATE ON chat_app.organization_roles FOR EACH ROW EXECUTE FUNCTION chat_app.lock_organization_mutation();
 
-CREATE TRIGGER lock_tree BEFORE INSERT OR UPDATE ON chat_app.messages FOR EACH ROW EXECUTE FUNCTION chat_app.lock_message_tree();
+CREATE TRIGGER lock_tree BEFORE INSERT OR UPDATE ON chat_app.turns FOR EACH ROW EXECUTE FUNCTION chat_app.lock_turn_tree();
 
-CREATE TRIGGER no_delete BEFORE DELETE ON chat_app.messages FOR EACH ROW EXECUTE FUNCTION chat_app.forbid_message_delete();
+CREATE TRIGGER no_delete BEFORE DELETE ON chat_app.turns FOR EACH ROW EXECUTE FUNCTION chat_app.forbid_turn_delete();
 
-CREATE TRIGGER no_truncate BEFORE TRUNCATE ON chat_app.message_files FOR EACH STATEMENT EXECUTE FUNCTION chat_app.forbid_message_delete();
+CREATE TRIGGER no_truncate BEFORE TRUNCATE ON chat_app.turn_files FOR EACH STATEMENT EXECUTE FUNCTION chat_app.forbid_turn_delete();
 
-CREATE TRIGGER no_truncate BEFORE TRUNCATE ON chat_app.messages FOR EACH STATEMENT EXECUTE FUNCTION chat_app.forbid_message_delete();
+CREATE TRIGGER no_truncate BEFORE TRUNCATE ON chat_app.turns FOR EACH STATEMENT EXECUTE FUNCTION chat_app.forbid_turn_delete();
 
 CREATE TRIGGER provision_org AFTER INSERT ON chat_app.organizations FOR EACH ROW EXECUTE FUNCTION chat_app.provision_organization();
 
@@ -1287,8 +1287,6 @@ CREATE TRIGGER touch_updated_at BEFORE UPDATE ON chat_app.conversations FOR EACH
 
 CREATE TRIGGER touch_updated_at BEFORE UPDATE ON chat_app.member_role_assignments FOR EACH ROW EXECUTE FUNCTION chat_app.touch_updated_at();
 
-CREATE TRIGGER touch_updated_at BEFORE UPDATE ON chat_app.messages FOR EACH ROW EXECUTE FUNCTION chat_app.touch_updated_at();
-
 CREATE TRIGGER touch_updated_at BEFORE UPDATE ON chat_app.organization_invitations FOR EACH ROW EXECUTE FUNCTION chat_app.touch_updated_at();
 
 CREATE TRIGGER touch_updated_at BEFORE UPDATE ON chat_app.organization_members FOR EACH ROW EXECUTE FUNCTION chat_app.touch_updated_at();
@@ -1299,6 +1297,8 @@ CREATE TRIGGER touch_updated_at BEFORE UPDATE ON chat_app.organizations FOR EACH
 
 CREATE TRIGGER touch_updated_at BEFORE UPDATE ON chat_app.refresh_tokens FOR EACH ROW EXECUTE FUNCTION chat_app.touch_updated_at();
 
+CREATE TRIGGER touch_updated_at BEFORE UPDATE ON chat_app.turns FOR EACH ROW EXECUTE FUNCTION chat_app.touch_updated_at();
+
 CREATE TRIGGER touch_updated_at BEFORE UPDATE ON chat_app.user_accounts FOR EACH ROW EXECUTE FUNCTION chat_app.touch_updated_at();
 
 CREATE TRIGGER touch_updated_at BEFORE UPDATE ON chat_app.users FOR EACH ROW EXECUTE FUNCTION chat_app.touch_updated_at();
@@ -1307,15 +1307,15 @@ CREATE TRIGGER touch_updated_at BEFORE UPDATE ON chat_app.verifications FOR EACH
 
 CREATE TRIGGER touch_updated_at BEFORE UPDATE ON chat_app.workspaces FOR EACH ROW EXECUTE FUNCTION chat_app.touch_updated_at();
 
-CREATE CONSTRAINT TRIGGER user_message_final AFTER INSERT OR UPDATE ON chat_app.messages DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION chat_app.check_user_message_final();
+CREATE CONSTRAINT TRIGGER user_turn_final AFTER INSERT OR UPDATE ON chat_app.turns DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION chat_app.check_user_turn_final();
 
 CREATE CONSTRAINT TRIGGER valid_completion AFTER INSERT OR UPDATE ON chat_app.conversation_copy_jobs DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION chat_app.check_copy_completion();
 
 CREATE CONSTRAINT TRIGGER valid_publication AFTER INSERT OR UPDATE ON chat_app.conversation_shares DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION chat_app.check_snapshot_publication();
 
-CREATE CONSTRAINT TRIGGER valid_tree AFTER INSERT OR UPDATE ON chat_app.messages DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION chat_app.check_message_tree();
+CREATE CONSTRAINT TRIGGER valid_tree AFTER INSERT OR UPDATE ON chat_app.share_snapshot_turns DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION chat_app.check_turn_tree();
 
-CREATE CONSTRAINT TRIGGER valid_tree AFTER INSERT OR UPDATE ON chat_app.share_snapshot_messages DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION chat_app.check_message_tree();
+CREATE CONSTRAINT TRIGGER valid_tree AFTER INSERT OR UPDATE ON chat_app.turns DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION chat_app.check_turn_tree();
 
 ALTER TABLE ONLY chat_app.conversation_copy_files
     ADD CONSTRAINT conversation_copy_files_job_id_fkey FOREIGN KEY (job_id) REFERENCES chat_app.conversation_copy_jobs(id) ON DELETE RESTRICT;
@@ -1354,7 +1354,7 @@ ALTER TABLE ONLY chat_app.conversation_shares
     ADD CONSTRAINT conversation_shares_workspace_id_organization_id_fkey FOREIGN KEY (workspace_id, organization_id) REFERENCES chat_app.workspaces(id, organization_id) ON DELETE RESTRICT;
 
 ALTER TABLE ONLY chat_app.conversations
-    ADD CONSTRAINT conversations_current_message_fk FOREIGN KEY (id, current_message_id) REFERENCES chat_app.messages(conversation_id, id) DEFERRABLE INITIALLY DEFERRED;
+    ADD CONSTRAINT conversations_current_turn_fk FOREIGN KEY (id, current_turn_id) REFERENCES chat_app.turns(conversation_id, id) DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE ONLY chat_app.conversations
     ADD CONSTRAINT conversations_folder_scope_fk FOREIGN KEY (folder_id, workspace_id, owner_user_id) REFERENCES chat_app.conversation_folders(id, workspace_id, owner_user_id) ON DELETE SET NULL (folder_id);
@@ -1379,18 +1379,6 @@ ALTER TABLE ONLY chat_app.member_role_assignments
 
 ALTER TABLE ONLY chat_app.member_role_assignments
     ADD CONSTRAINT member_role_assignments_role_id_organization_id_fkey FOREIGN KEY (role_id, organization_id) REFERENCES chat_app.organization_roles(id, organization_id) ON DELETE RESTRICT;
-
-ALTER TABLE ONLY chat_app.message_files
-    ADD CONSTRAINT message_files_message_id_fkey FOREIGN KEY (message_id) REFERENCES chat_app.messages(id) ON DELETE RESTRICT;
-
-ALTER TABLE ONLY chat_app.message_files
-    ADD CONSTRAINT message_files_stored_file_id_fkey FOREIGN KEY (stored_file_id) REFERENCES chat_app.stored_files(id) ON DELETE RESTRICT;
-
-ALTER TABLE ONLY chat_app.messages
-    ADD CONSTRAINT messages_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES chat_app.conversations(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY chat_app.messages
-    ADD CONSTRAINT messages_conversation_id_parent_message_id_fkey FOREIGN KEY (conversation_id, parent_message_id) REFERENCES chat_app.messages(conversation_id, id) DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE ONLY chat_app.organization_invitations
     ADD CONSTRAINT organization_invitations_accepted_by_fkey FOREIGN KEY (accepted_by) REFERENCES chat_app.users(id) ON DELETE RESTRICT;
@@ -1425,20 +1413,20 @@ ALTER TABLE ONLY chat_app.role_permissions
 ALTER TABLE ONLY chat_app.share_snapshot_files
     ADD CONSTRAINT share_snapshot_files_snapshot_id_workspace_id_fkey FOREIGN KEY (snapshot_id, workspace_id) REFERENCES chat_app.share_snapshots(id, workspace_id) ON DELETE RESTRICT;
 
-ALTER TABLE ONLY chat_app.share_snapshot_message_files
-    ADD CONSTRAINT share_snapshot_message_files_snapshot_id_file_id_fkey FOREIGN KEY (snapshot_id, stored_file_id) REFERENCES chat_app.share_snapshot_files(snapshot_id, stored_file_id) ON DELETE RESTRICT;
+ALTER TABLE ONLY chat_app.share_snapshot_turn_files
+    ADD CONSTRAINT share_snapshot_turn_files_snapshot_id_file_id_fkey FOREIGN KEY (snapshot_id, stored_file_id) REFERENCES chat_app.share_snapshot_files(snapshot_id, stored_file_id) ON DELETE RESTRICT;
 
-ALTER TABLE ONLY chat_app.share_snapshot_message_files
-    ADD CONSTRAINT share_snapshot_message_files_snapshot_id_message_id_fkey FOREIGN KEY (snapshot_id, message_id) REFERENCES chat_app.share_snapshot_messages(snapshot_id, id) ON DELETE RESTRICT;
+ALTER TABLE ONLY chat_app.share_snapshot_turn_files
+    ADD CONSTRAINT share_snapshot_turn_files_snapshot_id_turn_id_fkey FOREIGN KEY (snapshot_id, turn_id) REFERENCES chat_app.share_snapshot_turns(snapshot_id, id) ON DELETE RESTRICT;
 
-ALTER TABLE ONLY chat_app.share_snapshot_messages
-    ADD CONSTRAINT share_snapshot_messages_snapshot_id_fkey FOREIGN KEY (snapshot_id) REFERENCES chat_app.share_snapshots(id) ON DELETE RESTRICT;
+ALTER TABLE ONLY chat_app.share_snapshot_turns
+    ADD CONSTRAINT share_snapshot_turns_snapshot_id_fkey FOREIGN KEY (snapshot_id) REFERENCES chat_app.share_snapshots(id) ON DELETE RESTRICT;
 
-ALTER TABLE ONLY chat_app.share_snapshot_messages
-    ADD CONSTRAINT share_snapshot_messages_snapshot_id_parent_message_id_fkey FOREIGN KEY (snapshot_id, parent_message_id) REFERENCES chat_app.share_snapshot_messages(snapshot_id, id) DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE ONLY chat_app.share_snapshot_turns
+    ADD CONSTRAINT share_snapshot_turns_snapshot_id_parent_turn_id_fkey FOREIGN KEY (snapshot_id, parent_turn_id) REFERENCES chat_app.share_snapshot_turns(snapshot_id, id) DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE ONLY chat_app.share_snapshots
-    ADD CONSTRAINT share_snapshots_current_message_fk FOREIGN KEY (id, current_message_id) REFERENCES chat_app.share_snapshot_messages(snapshot_id, id) DEFERRABLE INITIALLY DEFERRED;
+    ADD CONSTRAINT share_snapshots_current_turn_fk FOREIGN KEY (id, current_turn_id) REFERENCES chat_app.share_snapshot_turns(snapshot_id, id) DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE ONLY chat_app.share_snapshots
     ADD CONSTRAINT share_snapshots_share_id_workspace_id_fkey FOREIGN KEY (share_id, workspace_id) REFERENCES chat_app.conversation_shares(id, workspace_id) ON DELETE RESTRICT;
@@ -1448,6 +1436,18 @@ ALTER TABLE ONLY chat_app.share_snapshot_files
 
 ALTER TABLE ONLY chat_app.stored_files
     ADD CONSTRAINT stored_files_uploaded_by_fkey FOREIGN KEY (uploaded_by) REFERENCES chat_app.users(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY chat_app.turn_files
+    ADD CONSTRAINT turn_files_stored_file_id_fkey FOREIGN KEY (stored_file_id) REFERENCES chat_app.stored_files(id) ON DELETE RESTRICT;
+
+ALTER TABLE ONLY chat_app.turn_files
+    ADD CONSTRAINT turn_files_turn_id_fkey FOREIGN KEY (turn_id) REFERENCES chat_app.turns(id) ON DELETE RESTRICT;
+
+ALTER TABLE ONLY chat_app.turns
+    ADD CONSTRAINT turns_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES chat_app.conversations(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY chat_app.turns
+    ADD CONSTRAINT turns_conversation_id_parent_turn_id_fkey FOREIGN KEY (conversation_id, parent_turn_id) REFERENCES chat_app.turns(conversation_id, id) DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE ONLY chat_app.user_accounts
     ADD CONSTRAINT user_accounts_user_id_fkey FOREIGN KEY (user_id) REFERENCES chat_app.users(id) ON DELETE CASCADE;

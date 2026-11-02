@@ -21,9 +21,9 @@ from app.common.storage.client import ObjectStorage
 from app.common.storage.exceptions import ObjectStorageError
 from app.config.security import digest, now
 from app.modules.authorization.service import AuthorizationService
-from app.modules.conversations.repository import MessageRepository
+from app.modules.conversations.repository import TurnRepository
 from app.modules.conversations.service import ConversationService
-from app.modules.conversations.tree import MessageTree
+from app.modules.conversations.tree import TurnTree
 from app.modules.files.policy import STORED_FILE_SCHEME
 from app.modules.files.repository import FileRepository
 from app.modules.files.schemas import DownloadResponse
@@ -31,7 +31,7 @@ from app.modules.shares.links import link_token_hash, share_url
 from app.modules.shares.repository import ShareRepository
 from app.modules.shares.schemas import (
     SharedConversation,
-    SharedMessage,
+    SharedTurn,
     ShareResponse,
 )
 
@@ -66,9 +66,7 @@ class ShareService:
             user=user, conversation_id=conversation_id, lock=True
         )
         await AuthorizationService(self._session).require(workspace, *SHARE_PERMISSION)
-        tree = await MessageRepository(self._session).tree(
-            conversation_id=conversation_id
-        )
+        tree = await TurnRepository(self._session).tree(conversation_id=conversation_id)
         if not tree:
             fail(409, "nothing_to_share")
         if any(row["status"] not in TERMINAL for row in tree):
@@ -100,7 +98,7 @@ class ShareService:
             )
             current = await self._fill(snapshot["id"], workspace.id, conversation, tree)
             sealed_at = await self._shares.seal(
-                snapshot_id=snapshot["id"], current_message_id=current
+                snapshot_id=snapshot["id"], current_turn_id=current
             )
             await self._shares.publish(share_id=share["id"], snapshot_id=snapshot["id"])
             await self._session.commit()
@@ -124,20 +122,20 @@ class ShareService:
 
     async def view(self, *, user: Principal | None, token: str) -> SharedConversation:
         share = await self.readable(user=user, token=token)
-        rows = await self._shares.snapshot_messages(
+        rows = await self._shares.snapshot_turns(
             snapshot_id=share["current_snapshot_id"]
         )
-        tree = MessageTree((row["id"], row["parent_message_id"]) for row in rows)
+        tree = TurnTree((row["id"], row["parent_turn_id"]) for row in rows)
         return SharedConversation(
             title=share["title"],
             mode=share["mode"],
             version=share["version"],
             published_at=share["sealed_at"],
-            current_message_id=share["current_message_id"],
-            messages=[
-                SharedMessage(
+            current_turn_id=share["current_turn_id"],
+            turns=[
+                SharedTurn(
                     id=row["id"],
-                    parent_message_id=row["parent_message_id"],
+                    parent_turn_id=row["parent_turn_id"],
                     role=row["role"],
                     status=row["status"],
                     content=row["content"],
@@ -190,12 +188,12 @@ class ShareService:
         """Copy the transcript into the snapshot under new ids; returns the
         snapshot id of the branch the owner had open."""
         new_id = {row["id"]: UUID(str(uuid7())) for row in tree}
-        await self._shares.add_messages(
+        await self._shares.add_turns(
             [
                 {
                     "snapshot_id": snapshot_id,
                     "id": new_id[row["id"]],
-                    "parent_message_id": new_id.get(row["parent_message_id"]),
+                    "parent_turn_id": new_id.get(row["parent_turn_id"]),
                     "role": row["role"],
                     "status": row["status"],
                     "content": remap_bundle(row, new_id[row["id"]], {}),
@@ -213,12 +211,12 @@ class ShareService:
             workspace_id=workspace_id,
             file_ids=list(dict.fromkeys(link["id"] for link in links)),
         )
-        await self._shares.add_message_files(
+        await self._shares.add_turn_files(
             snapshot_id=snapshot_id,
-            links=[(new_id[link["message_id"]], link["id"]) for link in links],
+            links=[(new_id[link["turn_id"]], link["id"]) for link in links],
         )
-        current = conversation["current_message_id"] or MessageTree(
-            (row["id"], row["parent_message_id"]) for row in tree
+        current = conversation["current_turn_id"] or TurnTree(
+            (row["id"], row["parent_turn_id"]) for row in tree
         ).latest_leaf(tree[0]["id"])
         return new_id[current]
 
@@ -227,7 +225,7 @@ TERMINAL = frozenset({"completed", "failed", "cancelled"})
 
 
 def remap_bundle(
-    row: RowMapping | dict[str, Any], message_id: UUID, files: dict[str, str]
+    row: RowMapping | dict[str, Any], turn_id: UUID, files: dict[str, str]
 ) -> list[dict[str, Any]]:
     """A row's AG-UI bundle for a new row id: the user message takes the new
     id (as stored questions do) and file parts point at `files` (old → new);
@@ -238,7 +236,7 @@ def remap_bundle(
     content = question.get("content")
     if isinstance(content, list) and files:
         content = [_remap_part(part, files) for part in content]
-    return [{**question, "id": str(message_id), "content": content}]
+    return [{**question, "id": str(turn_id), "content": content}]
 
 
 def _remap_tool_result(

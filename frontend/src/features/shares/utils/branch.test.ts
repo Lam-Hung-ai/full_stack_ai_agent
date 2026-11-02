@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { SharedMessage } from "../api/shares-api";
+import type { SharedTurn } from "../api/shares-api";
 import { branchRows, latestLeaf } from "./branch";
 
-function message(id: string, parent: string | null, role: string, siblings: string[]): SharedMessage {
+function message(id: string, parent: string | null, role: string, siblings: string[]): SharedTurn {
   return {
     id,
-    parent_message_id: parent,
+    parent_turn_id: parent,
     role,
     status: "completed",
     content: [],

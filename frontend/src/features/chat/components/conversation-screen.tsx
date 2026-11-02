@@ -14,25 +14,25 @@ import { conversationFiles } from "./message-files";
 
 export function ConversationScreen({
   conversationId,
-  messageId = null,
+  turnId = null,
 }: {
   conversationId: string;
-  /** Open the branch through this message instead of the saved one. */
-  messageId?: string | null;
+  /** Open the branch through this turn instead of the saved one. */
+  turnId?: string | null;
 }) {
-  const chat = useConversationChat(conversationId, messageId);
+  const chat = useConversationChat(conversationId, turnId);
   const conversation = useConversation(conversationId);
   const fileSource = useMemo(() => conversationFiles(conversationId), [conversationId]);
   const take = usePendingMessageStore((state) => state.take);
-  const { isReady, sendMessage, editMessage, regenerate, answerInterrupt, switchBranch, stop } =
+  const { isReady, sendTurn, editTurn, regenerate, answerInterrupt, switchBranch, stop } =
     chat;
 
   // The question typed on the new-chat screen, sent once the chat is ready.
   useEffect(() => {
     if (!isReady) return;
     const draft = take(conversationId);
-    if (draft) void sendMessage(draft);
-  }, [conversationId, isReady, sendMessage, take]);
+    if (draft) void sendTurn(draft);
+  }, [conversationId, isReady, sendTurn, take]);
 
   if (chat.isLoading) {
     return (
@@ -60,7 +60,7 @@ export function ConversationScreen({
       <ChatMessages
         fileSource={fileSource}
         actions={{
-          onEdit: (id, text) => void editMessage(id, text),
+          onEdit: (id, text) => void editTurn(id, text),
           onRegenerate: (id) => void regenerate(id),
           onSwitch: switchBranch,
           onAnswer: answerInterrupt,
@@ -87,7 +87,7 @@ export function ConversationScreen({
       <ChatComposer
         disabled={composerLocked}
         onStop={chat.canStop ? () => void stop() : undefined}
-        onSubmit={sendMessage}
+        onSubmit={sendTurn}
         status={chat.status}
         workspaceId={conversation.data?.workspace_id}
       />

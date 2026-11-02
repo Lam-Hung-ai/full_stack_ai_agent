@@ -2,6 +2,8 @@
 
 Đây là tài liệu và SQL thiết kế, chưa áp dụng vào database ứng dụng.
 
+> **Đổi tên từ S11 (QD-33):** bảng `messages`, `message_files`, `share_snapshot_messages`, `share_snapshot_message_files` và các cột `*_message_id` nay là `turns`, `turn_files`, `share_snapshot_turns`, `share_snapshot_turn_files`, `*_turn_id` (migration `20261102100000_rename_messages_to_turns.sql`). Tài liệu dưới đây giữ tên cũ như lịch sử.
+
 [Báo cáo đối chiếu với yêu cầu và database cũ trong chat_development](review-vs-chat-development.md) — đánh giá 32 use case, phần đáp ứng và những khác biệt phạm vi; không thay đổi quyết định/schema.
 
 | Mốc | Quyết định | SQL | Kiểm tra |

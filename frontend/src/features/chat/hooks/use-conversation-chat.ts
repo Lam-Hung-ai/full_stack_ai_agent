@@ -6,7 +6,7 @@ import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-quer
 import type { ChatStatus } from "ai";
 import { v7 as uuidv7 } from "uuid";
 import type { ApiError } from "@/lib/api";
-import { ASSISTANT_EVENT, ChatAgent, type AssistantEventValue } from "../agent/chat-agent";
+import { TURN_EVENT, ChatAgent, type TurnEventValue } from "../agent/chat-agent";
 import { getHistory, stopAssistant } from "../api/conversations-api";
 import type { ChatFile } from "../api/files-api";
 import type { ComposerDraft } from "../components/chat-composer";
@@ -50,7 +50,7 @@ function questionRow(
  * branch).
  *
  * Which branch is shown is per tab (API §2): `anchor` opens the branch
- * through a message, null the saved one. A turn this tab streams is drawn
+ * through a turn, null the saved one. A turn this tab streams is drawn
  * over that branch until the saved branch holds its answer. A turn started
  * elsewhere (another tab, before a reload) is followed through `attach`;
  * when its live data is gone the history is polled until it is saved.
@@ -62,7 +62,7 @@ export function useConversationChat(conversationId: string, initialAnchor: strin
   const runningRef = useRef(false);
   const history = useQuery({
     queryKey: chatKeys.history(conversationId, anchor),
-    queryFn: ({ signal }) => getHistory(conversationId, { fromMessageId: anchor, signal }),
+    queryFn: ({ signal }) => getHistory(conversationId, { fromTurnId: anchor, signal }),
     placeholderData: keepPreviousData,
     refetchInterval: (query) =>
       isActive(query.state.data?.data.at(-1)) && !runningRef.current ? ACTIVE_POLL_MS : false,
@@ -110,11 +110,11 @@ export function useConversationChat(conversationId: string, initialAnchor: strin
       onMessagesChanged: ({ messages: updated }) => scheduleMessages([...updated]),
       onTextMessageStartEvent: () => setStatus("streaming"),
       onCustomEvent: ({ event }) => {
-        if (event.name !== ASSISTANT_EVENT) return;
-        const value = event.value as AssistantEventValue;
+        if (event.name !== TURN_EVENT) return;
+        const value = event.value as TurnEventValue;
         updateLive(
           (current) =>
-            current && { ...current, assistantId: value.assistantMessageId, status: value.status },
+            current && { ...current, assistantId: value.assistantTurnId, status: value.status },
         );
         settleAccepted(true);
       },
@@ -138,7 +138,7 @@ export function useConversationChat(conversationId: string, initialAnchor: strin
 
   const saved = useMemo(() => history.data?.data.map(toRowView) ?? [], [history.data]);
   const rows = useMemo(() => shownRows(saved, live, liveMessages), [saved, live, liveMessages]);
-  const leafId = history.data?.current_message_id ?? null;
+  const leafId = history.data?.current_turn_id ?? null;
 
   const startTurn = useCallback(
     async (
@@ -187,7 +187,7 @@ export function useConversationChat(conversationId: string, initialAnchor: strin
             await queryClient.fetchQuery({
               queryKey: chatKeys.history(conversationId, assistantId),
               queryFn: ({ signal }) =>
-                getHistory(conversationId, { fromMessageId: assistantId, signal }),
+                getHistory(conversationId, { fromTurnId: assistantId, signal }),
             });
           } catch {
             // The query retries once it is shown.
@@ -215,7 +215,7 @@ export function useConversationChat(conversationId: string, initialAnchor: strin
   );
 
   /** Resolves once the server took the question (true) or refused it. */
-  const sendMessage = useCallback(
+  const sendTurn = useCallback(
     ({ text, files }: ComposerDraft) =>
       new Promise<boolean>((resolve) => {
         const trimmed = text.trim();
@@ -227,9 +227,9 @@ export function useConversationChat(conversationId: string, initialAnchor: strin
         void startTurn(
           { kept: saved, question: questionRow(id, trimmed, [id], files), questionId: id },
           (agent) =>
-            agent.sendMessage({
-              parentMessageId: leafId,
-              message: { id, text: trimmed, fileIds: files.map((file) => file.id) },
+            agent.sendTurn({
+              parentTurnId: leafId,
+              turn: { id, text: trimmed, fileIds: files.map((file) => file.id) },
             }),
           [],
           resolve,
@@ -238,10 +238,10 @@ export function useConversationChat(conversationId: string, initialAnchor: strin
     [leafId, saved, startTurn],
   );
 
-  const editMessage = useCallback(
-    async (userMessageId: string, text: string) => {
+  const editTurn = useCallback(
+    async (userTurnId: string, text: string) => {
       const trimmed = text.trim();
-      const index = saved.findIndex((row) => row.id === userMessageId);
+      const index = saved.findIndex((row) => row.id === userTurnId);
       if (!trimmed || index === -1) return;
       const id = uuidv7();
       // The new version keeps the files of the one it replaces.
@@ -254,9 +254,9 @@ export function useConversationChat(conversationId: string, initialAnchor: strin
       await startTurn(
         { kept: saved.slice(0, index), question, questionId: id },
         (agent) =>
-          agent.editMessage({
-            userMessageId,
-            message: { id, text: trimmed, fileIds: files.map((file) => file.id) },
+          agent.editTurn({
+            userTurnId,
+            turn: { id, text: trimmed, fileIds: files.map((file) => file.id) },
           }),
         [],
       );
@@ -287,13 +287,13 @@ export function useConversationChat(conversationId: string, initialAnchor: strin
   }, [agentReady, attach, saved]);
 
   const regenerate = useCallback(
-    async (assistantMessageId: string) => {
-      const index = saved.findIndex((row) => row.id === assistantMessageId);
+    async (assistantTurnId: string) => {
+      const index = saved.findIndex((row) => row.id === assistantTurnId);
       const question = saved[index - 1];
       if (index < 1 || !question) return;
       await startTurn(
         { kept: saved.slice(0, index), question: null, questionId: question.id },
-        (agent) => agent.regenerate({ assistantMessageId }),
+        (agent) => agent.regenerate({ assistantTurnId }),
         // The answer streams after its question (see shownRows).
         question.content,
       );
@@ -302,8 +302,8 @@ export function useConversationChat(conversationId: string, initialAnchor: strin
   );
 
   const resume = useCallback(
-    async (assistantMessageId: string, answers: Record<string, InteractionAnswer>) => {
-      const index = saved.findIndex((row) => row.id === assistantMessageId);
+    async (assistantTurnId: string, answers: Record<string, InteractionAnswer>) => {
+      const index = saved.findIndex((row) => row.id === assistantTurnId);
       if (index === -1) return;
       await startTurn(
         {
@@ -312,7 +312,7 @@ export function useConversationChat(conversationId: string, initialAnchor: strin
           questionId: "",
           continued: withAnswers(saved[index], answers),
         },
-        (agent) => agent.resume({ assistantMessageId, resume: toResumeEntries(answers) }),
+        (agent) => agent.resume({ assistantTurnId, resume: toResumeEntries(answers) }),
         [],
       );
     },
@@ -321,15 +321,15 @@ export function useConversationChat(conversationId: string, initialAnchor: strin
 
   /** One answer; the turn resumes once every waiting question has one. */
   const answerInterrupt = useCallback(
-    (assistantMessageId: string, interruptId: string, answer: InteractionAnswer) => {
-      const row = saved.find((item) => item.id === assistantMessageId);
+    (assistantTurnId: string, interruptId: string, answer: InteractionAnswer) => {
+      const row = saved.find((item) => item.id === assistantTurnId);
       if (!row) return;
       const next = { ...drafts, [interruptId]: answer };
       const waiting = waitingInteractions(row);
       if (waiting.every((item) => item.interrupt_id in next)) {
         setDrafts({});
         void resume(
-          assistantMessageId,
+          assistantTurnId,
           Object.fromEntries(waiting.map((item) => [item.interrupt_id, next[item.interrupt_id]])),
         );
       } else {
@@ -340,10 +340,10 @@ export function useConversationChat(conversationId: string, initialAnchor: strin
   );
 
   const switchBranch = useCallback(
-    (messageId: string) => {
+    (turnId: string) => {
       if (runningRef.current) return;
       updateLive(() => null);
-      setAnchor(messageId);
+      setAnchor(turnId);
     },
     [updateLive],
   );
@@ -386,8 +386,8 @@ export function useConversationChat(conversationId: string, initialAnchor: strin
     waitingForUser,
     drafts,
     canStop: !!stopTarget,
-    sendMessage,
-    editMessage,
+    sendTurn,
+    editTurn,
     regenerate,
     answerInterrupt,
     switchBranch,

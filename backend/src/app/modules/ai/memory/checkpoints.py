@@ -5,7 +5,7 @@ A turn that completes or fails leaves nothing behind. A turn that pauses on an
 interrupt exports its boundary checkpoint with full channel versions and every
 pending write batch (not just `__interrupt__`: finished siblings must not run
 again), through `AsyncPostgresSaver` on the connection of the transaction that
-also marks the message `requires_action`. Resuming seeds a fresh saver with
+also marks the turn `requires_action`. Resuming seeds a fresh saver with
 that stored checkpoint before the graph starts, so no connection is held while
 the model runs.
 
@@ -134,7 +134,7 @@ class TurnSaver(InMemorySaver):
 
 async def durable_saver(session: AsyncSession) -> AsyncPostgresSaver:
     """The SDK saver on the session's own connection and transaction, so a
-    checkpoint commits or rolls back together with the message rows."""
+    checkpoint commits or rolls back together with the turn rows."""
     connection = await session.connection()
     # The saver's tables are unqualified; this lasts until the transaction ends.
     await connection.exec_driver_sql(

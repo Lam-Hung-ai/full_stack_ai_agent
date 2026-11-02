@@ -56,7 +56,7 @@ def db(pg: psycopg.Connection):
         "OR (schemaname = 'langgraph_checkpoints' "
         "AND tablename <> 'checkpoint_migrations')"
     ).fetchall()
-    # Messages forbid TRUNCATE by trigger; replica mode skips triggers for
+    # Turns forbid TRUNCATE by trigger; replica mode skips triggers for
     # this statement only, on the test superuser's connection.
     pg.execute("SET session_replication_role = replica")
     pg.execute(

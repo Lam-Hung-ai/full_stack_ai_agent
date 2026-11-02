@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 
 TurnStatus = Literal["completed", "failed", "cancelled", "requires_action"]
 #: Name of the CUSTOM event that ties the protocol stream to SQL rows.
-ASSISTANT_EVENT = "chat.assistant"
+TURN_EVENT = "chat.turn"
 
 
 @dataclass(frozen=True)
@@ -448,4 +448,4 @@ class Runner:
 
     @staticmethod
     def _status_event(announce: dict[str, Any], status: str) -> CustomEvent:
-        return CustomEvent(name=ASSISTANT_EVENT, value={**announce, "status": status})
+        return CustomEvent(name=TURN_EVENT, value={**announce, "status": status})

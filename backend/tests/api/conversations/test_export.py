@@ -29,7 +29,7 @@ async def test_zip_holds_each_own_chat_as_json_and_markdown(
     ).json()
     second = await new_conversation(client, user, headers)
     payload = body("Ảnh gì?")
-    payload["message"]["file_ids"] = [image["id"]]
+    payload["turn"]["file_ids"] = [image["id"]]
     await send(client, second, headers, payload)
     deleted = await new_conversation(client, user, headers)
     await client.delete(f"/api/v1/conversations/{deleted}", headers=headers)
@@ -59,14 +59,14 @@ async def test_zip_holds_each_own_chat_as_json_and_markdown(
 
     capital = next(d for d in documents if d["id"] == first)
     saved = (await history(client, first, headers))["data"]
-    assert [m["id"] for m in capital["messages"]] == [row["id"] for row in saved]
+    assert [m["id"] for m in capital["turns"]] == [row["id"] for row in saved]
     markdown = archive.read(f"{folders[documents.index(capital)]}/conversation.md")
     text = markdown.decode()
     assert "## Bạn\n\nThủ đô Việt Nam?" in text
     assert "## Agent\n\nHà Nội là thủ đô." in text
 
     with_file = next(d for d in documents if d["id"] == second)
-    question = with_file["messages"][0]
+    question = with_file["turns"][0]
     assert question["files"] == [
         {
             "id": image["id"],

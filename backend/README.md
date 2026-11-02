@@ -25,7 +25,7 @@ uv run uvicorn app.main:app --reload --port 8000
 ```
 
 - `GET /health` — liveness.
-- `/api/v1/...` — auth, workspaces, conversations. `POST /api/v1/conversations/{id}/messages` starts an assistant turn and streams it as AG-UI events; the turn runs in the app's runner, independent of the HTTP request. Full contract: `uv run openapi`.
+- `/api/v1/...` — auth, workspaces, conversations. `POST /api/v1/conversations/{id}/turns` starts an assistant turn and streams it as AG-UI events; the turn runs in the app's runner, independent of the HTTP request. Full contract: `uv run openapi`.
 
 `OPENROUTER_REASONING_EFFORT` turns on model reasoning when the model supports it (empty turns it off); it is streamed as `REASONING_*` events.
 

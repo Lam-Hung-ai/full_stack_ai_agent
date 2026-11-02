@@ -2,7 +2,7 @@
 (AGENTS §17.6, database phase 2 §7, QD-27).
 
 A file is recorded in `stored_files` only once `complete` has checked the
-bytes, under its final key. Until a message links it, the workspace in that
+bytes, under its final key. Until a turn links it, the workspace in that
 key and `uploaded_by` say who may attach it; once linked, the database keeps
 it within that owner and workspace.
 """
@@ -31,8 +31,8 @@ from app.database.session import SessionFactory
 from app.modules.authorization.service import AuthorizationService
 from app.modules.files.policy import (
     CHAT_FILE_TYPES,
+    MAX_ATTACHMENTS_PER_TURN,
     MAX_FILE_BYTES,
-    MAX_FILES_PER_MESSAGE,
     MAX_TEXT_CHARS,
     MAX_TURN_FILE_BYTES,
     STORED_FILE_SCHEME,
@@ -166,8 +166,8 @@ class FileService:
         """The files of a question, in the order given: each must be the
         user's own upload in this workspace."""
         unique = list(dict.fromkeys(ids))
-        if len(unique) > MAX_FILES_PER_MESSAGE:
-            fail(422, "too_many_files", details={"max": MAX_FILES_PER_MESSAGE})
+        if len(unique) > MAX_ATTACHMENTS_PER_TURN:
+            fail(422, "too_many_files", details={"max": MAX_ATTACHMENTS_PER_TURN})
         rows = {row["id"]: row for row in await self._files.by_ids(unique)}
         for file_id in unique:
             row = rows.get(file_id)

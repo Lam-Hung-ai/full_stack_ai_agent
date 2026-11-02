@@ -167,7 +167,7 @@ async def test_stop_reaches_the_process_running_the_turn(
     )
     try:
         response = await client.post(
-            f"/api/v1/conversations/{conversation_id}/messages/{assistant_id}/stop",
+            f"/api/v1/conversations/{conversation_id}/turns/{assistant_id}/stop",
             headers=headers,
         )
     finally:

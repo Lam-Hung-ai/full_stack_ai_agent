@@ -66,7 +66,7 @@ export function SharedChatScreen({ token }: { token: string }) {
   }
 
   const data = shared.data;
-  const rows = branchRows(data.messages, leafId ?? data.current_message_id);
+  const rows = branchRows(data.turns, leafId ?? data.current_turn_id);
   const continueChat = () =>
     copy.mutate(undefined, {
       onSuccess: (result) => {
@@ -102,7 +102,7 @@ export function SharedChatScreen({ token }: { token: string }) {
         </Alert>
       )}
       <ChatMessages
-        actions={{ onSwitch: (id) => setLeafId(latestLeaf(data.messages, id)) }}
+        actions={{ onSwitch: (id) => setLeafId(latestLeaf(data.turns, id)) }}
         fileSource={fileSource}
         isBusy={false}
         rows={rows}

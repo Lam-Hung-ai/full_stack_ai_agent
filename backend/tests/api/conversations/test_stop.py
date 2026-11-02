@@ -5,8 +5,8 @@ import asyncio
 from tests.support.chat import body, history, new_conversation, send
 
 
-def stop_url(conversation_id, message_id):
-    return f"/api/v1/conversations/{conversation_id}/messages/{message_id}/stop"
+def stop_url(conversation_id, turn_id):
+    return f"/api/v1/conversations/{conversation_id}/turns/{turn_id}/stop"
 
 
 async def test_stop_keeps_the_partial_answer(client, make_user, login, scripted_model):
@@ -71,7 +71,7 @@ async def test_stop_after_the_end_changes_nothing(
     response = await client.post(
         stop_url(conversation_id, question["id"]), headers=headers
     )
-    assert response.json()["error"]["code"] == "message_not_found"
+    assert response.json()["error"]["code"] == "turn_not_found"
 
 
 async def test_stop_frees_a_turn_orphaned_by_a_restart(
@@ -82,18 +82,18 @@ async def test_stop_frees_a_turn_orphaned_by_a_restart(
     headers = await login(user)
     conversation_id = await new_conversation(client, user, headers)
     await send(client, conversation_id, headers, body("Câu một"))
-    parent = (await history(client, conversation_id, headers))["current_message_id"]
+    parent = (await history(client, conversation_id, headers))["current_turn_id"]
     (question,) = db(
-        "INSERT INTO chat_app.messages "
-        "(id, conversation_id, parent_message_id, role, status, content) "
+        "INSERT INTO chat_app.turns "
+        "(id, conversation_id, parent_turn_id, role, status, content) "
         "VALUES (uuidv7(), %s, %s, 'user', 'completed', "
         '\'[{"id": "q", "role": "user", "content": "Câu hai"}]\') '
         "RETURNING id",
         (conversation_id, parent),
     )
     (orphan,) = db(
-        "INSERT INTO chat_app.messages "
-        "(conversation_id, parent_message_id, role, status) "
+        "INSERT INTO chat_app.turns "
+        "(conversation_id, parent_turn_id, role, status) "
         "VALUES (%s, %s, 'assistant', 'running') RETURNING id",
         (conversation_id, question["id"]),
     )

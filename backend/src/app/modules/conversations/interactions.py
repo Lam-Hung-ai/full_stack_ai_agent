@@ -1,6 +1,6 @@
 """What a paused turn waits for, and how answers are recorded (phase 4 §4, §5).
 
-`messages.metadata.pending_action` holds the server-side state: action id,
+`turns.metadata.pending_action` holds the server-side state: action id,
 graph version, the stored checkpoint pointer and the interrupts. The content
 holds one AG-UI activity `user_interaction` per interrupt, which is what the
 user sees: the question or the tool to approve, then the answer and who gave

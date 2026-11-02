@@ -1,6 +1,6 @@
 """Continue a shared chat as one's own copy (O04; database phase 1 §9, §13).
 
-The copy is a new conversation with new message and file ids and new
+The copy is a new conversation with new turn and file ids and new
 objects holding copied bytes; it stays hidden (`can_read_conversation`)
 until its job completes. The job is tied to one snapshot version and to the
 caller's `client_request_id`, so a retry finishes the same copy. Bytes are
@@ -25,7 +25,7 @@ from app.database.session import SessionFactory
 from app.modules.authorization.service import AuthorizationService
 from app.modules.conversations.repository import (
     ConversationRepository,
-    MessageRepository,
+    TurnRepository,
 )
 from app.modules.files.policy import file_key
 from app.modules.files.repository import FileRepository
@@ -115,10 +115,10 @@ class CopyService:
             pairs=[(UUID(old), UUID(new)) for old, new in new_file.items()],
         )
         current = await self._copy_tree(
-            snapshot_id, share["current_message_id"], target["id"], new_file, links
+            snapshot_id, share["current_turn_id"], target["id"], new_file, links
         )
         await conversations.update(
-            conversation_id=target["id"], current_message_id=current
+            conversation_id=target["id"], current_turn_id=current
         )
         await self._session.commit()
         return job
@@ -126,37 +126,35 @@ class CopyService:
     async def _copy_tree(
         self,
         snapshot_id: UUID,
-        current_message_id: UUID,
+        current_turn_id: UUID,
         conversation_id: UUID,
         new_file: dict[str, str],
         links: list[RowMapping],
     ) -> UUID:
-        rows = await self._shares.snapshot_messages(snapshot_id=snapshot_id)
+        rows = await self._shares.snapshot_turns(snapshot_id=snapshot_id)
         new_id = {row["id"]: UUID(str(uuid7())) for row in rows}
         files_of: dict[UUID, list[UUID]] = {}
         for link in links:
-            files_of.setdefault(link["message_id"], []).append(
+            files_of.setdefault(link["turn_id"], []).append(
                 UUID(new_file[str(link["id"])])
             )
-        messages = MessageRepository(self._session)
+        turns = TurnRepository(self._session)
         files = FileRepository(self._session)
         for row in rows:
             attached = files_of.get(row["id"], [])
             # Links are refused on terminal rows: stage pending, link, finish.
-            await messages.insert(
-                message_id=new_id[row["id"]],
+            await turns.insert(
+                turn_id=new_id[row["id"]],
                 conversation_id=conversation_id,
-                parent_message_id=new_id.get(row["parent_message_id"]),
+                parent_turn_id=new_id.get(row["parent_turn_id"]),
                 role=row["role"],
                 status="pending" if attached else row["status"],
                 content=remap_bundle(row, new_id[row["id"]], new_file),
             )
             if attached:
-                await files.link(message_id=new_id[row["id"]], file_ids=attached)
-                await messages.set_status(
-                    message_id=new_id[row["id"]], status=row["status"]
-                )
-        return new_id[current_message_id]
+                await files.link(turn_id=new_id[row["id"]], file_ids=attached)
+                await turns.set_status(turn_id=new_id[row["id"]], status=row["status"])
+        return new_id[current_turn_id]
 
     async def _copy_bytes(
         self, user: Principal, share: RowMapping, job: RowMapping
@@ -227,7 +225,7 @@ async def purge_abandoned_copies(
     """Give up on copies left unfinished for `older_than` and delete the
     bytes of every cancelled copy; returns how many jobs were purged (RR-18).
 
-    A cancelled copy never becomes readable, but its rows stay: messages are
+    A cancelled copy never becomes readable, but its rows stay: turns are
     never deleted and no purge is designed yet (database phase 1 §9).
     """
     async with session_factory() as session:

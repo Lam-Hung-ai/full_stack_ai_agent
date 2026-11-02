@@ -13,7 +13,7 @@ async def chat_with_branches(client, user, headers):
     answer = (await history(client, conversation_id, headers))["data"][-1]["id"]
     await stream_turn(
         client,
-        f"/api/v1/conversations/{conversation_id}/messages/{answer}/regenerate",
+        f"/api/v1/conversations/{conversation_id}/turns/{answer}/regenerate",
         headers,
     )
     return conversation_id
@@ -45,10 +45,10 @@ async def test_public_share_shows_the_whole_tree_to_anyone(
     assert view.status_code == 200
     data = view.json()
     assert data["can_copy"] is False
-    answers = [m for m in data["messages"] if m["role"] == "assistant"]
+    answers = [m for m in data["turns"] if m["role"] == "assistant"]
     assert len(answers) == 2
     assert len(answers[0]["sibling_ids"]) == 2
-    assert data["current_message_id"] == answers[1]["id"]
+    assert data["current_turn_id"] == answers[1]["id"]
 
     # The link is the same when asked again, and after a new version.
     again = (
@@ -147,7 +147,7 @@ async def test_copy_continues_as_a_private_chat_with_new_files(
     ).json()
     conversation_id = await new_conversation(client, owner, headers)
     payload = body("Ảnh gì?")
-    payload["message"]["file_ids"] = [image["id"]]
+    payload["turn"]["file_ids"] = [image["id"]]
     await send(client, conversation_id, headers, payload)
     token = token_of((await share(client, conversation_id, headers))["url"])
     reader_headers = await login(reader)
@@ -230,7 +230,7 @@ async def test_shared_files_follow_the_link(
     ).json()
     conversation_id = await new_conversation(client, owner, headers)
     payload = body("Ảnh")
-    payload["message"]["file_ids"] = [image["id"]]
+    payload["turn"]["file_ids"] = [image["id"]]
     await send(client, conversation_id, headers, payload)
     token = token_of((await share(client, conversation_id, headers))["url"])
 
@@ -266,7 +266,7 @@ async def test_unfinished_copy_stays_hidden_and_is_purged(
     ).json()
     conversation_id = await new_conversation(client, owner, headers)
     payload = body("Ảnh gì?")
-    payload["message"]["file_ids"] = [image["id"]]
+    payload["turn"]["file_ids"] = [image["id"]]
     await send(client, conversation_id, headers, payload)
     token = token_of((await share(client, conversation_id, headers))["url"])
     reader_headers = await login(reader)

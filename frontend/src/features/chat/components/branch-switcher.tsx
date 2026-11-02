@@ -13,7 +13,7 @@ export function BranchSwitcher({
   currentId: string;
   siblingIds: readonly string[];
   disabled?: boolean;
-  onSwitch: (messageId: string) => void;
+  onSwitch: (turnId: string) => void;
 }) {
   const index = siblingIds.indexOf(currentId);
   if (siblingIds.length < 2 || index === -1) return null;

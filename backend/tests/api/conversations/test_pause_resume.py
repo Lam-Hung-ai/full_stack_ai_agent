@@ -24,14 +24,14 @@ CLOCK_CALL = AIMessage(
 )
 
 
-def resume_url(conversation_id, message_id):
-    return f"/api/v1/conversations/{conversation_id}/messages/{message_id}/resume"
+def resume_url(conversation_id, turn_id):
+    return f"/api/v1/conversations/{conversation_id}/turns/{turn_id}/resume"
 
 
-async def resume(client, conversation_id, message_id, headers, interrupt_id, payload):
+async def resume(client, conversation_id, turn_id, headers, interrupt_id, payload):
     return await stream_turn(
         client,
-        resume_url(conversation_id, message_id),
+        resume_url(conversation_id, turn_id),
         headers,
         {
             "resume": [
@@ -117,7 +117,7 @@ async def test_question_pauses_then_resumes_after_a_restart(
     assert status == 200
     custom = [e["value"] for e in events if e["type"] == "CUSTOM"]
     assert custom[-1]["status"] == "completed"
-    assert custom[-1]["assistantMessageId"] == assistant["id"]
+    assert custom[-1]["assistantTurnId"] == assistant["id"]
     # The model got the answer as the result of its ask_user call.
     tool_results = [m for m in model.prompts[-1] if m.type == "tool"]
     assert [m.content for m in tool_results] == ["Phòng A"]
@@ -133,7 +133,7 @@ async def test_question_pauses_then_resumes_after_a_restart(
     assert answered["response"] == "Phòng A"
     assert answered["actor_id"] == str(user.id)
     assert final["content"][-1]["content"] == "Đã đặt phòng A"
-    (row,) = db("SELECT metadata FROM chat_app.messages WHERE id = %s", (final["id"],))
+    (row,) = db("SELECT metadata FROM chat_app.turns WHERE id = %s", (final["id"],))
     assert "pending_action" not in row["metadata"]
     assert row["metadata"]["actions"][0]["status"] == "answered"
     # Nothing resumes a finished turn: its checkpoint went with it (RR-16).
@@ -316,14 +316,14 @@ async def test_stop_cancels_a_waiting_turn(
     conversation_id, assistant, _ = await paused_turn(client, user, headers)
 
     response = await client.post(
-        f"/api/v1/conversations/{conversation_id}/messages/{assistant['id']}/stop",
+        f"/api/v1/conversations/{conversation_id}/turns/{assistant['id']}/stop",
         headers=headers,
     )
     assert response.json() == {"id": assistant["id"], "status": "cancelled"}
     final = (await history(client, conversation_id, headers))["data"][-1]
     activity = next(m for m in final["content"] if m["role"] == "activity")
     assert activity["content"]["status"] == "cancelled"
-    (row,) = db("SELECT metadata FROM chat_app.messages WHERE id = %s", (final["id"],))
+    (row,) = db("SELECT metadata FROM chat_app.turns WHERE id = %s", (final["id"],))
     assert "pending_action" not in row["metadata"]
     assert checkpoints(db, assistant["id"]) == 0
 
@@ -337,16 +337,16 @@ async def test_stop_cancels_a_waiting_turn(
 async def test_a_failed_pause_write_rolls_the_checkpoint_back(
     client, db, make_user, login, scripted_model, monkeypatch
 ):
-    from app.modules.conversations.repository import MessageRepository
+    from app.modules.conversations.repository import TurnRepository
 
-    original = MessageRepository.set_status
+    original = TurnRepository.set_status
 
-    async def failing(self, *, message_id, status, **kwargs):
+    async def failing(self, *, turn_id, status, **kwargs):
         if status == "requires_action":
             raise RuntimeError("disk full")
-        return await original(self, message_id=message_id, status=status, **kwargs)
+        return await original(self, turn_id=turn_id, status=status, **kwargs)
 
-    monkeypatch.setattr(MessageRepository, "set_status", failing)
+    monkeypatch.setattr(TurnRepository, "set_status", failing)
     scripted_model(ASK_ROOM)
     user = make_user("an@example.com")
     headers = await login(user)
@@ -373,7 +373,7 @@ async def test_stop_racing_a_resume_leaves_the_resumed_turn_alone(
         calls.append(assistant_id)
         if len(calls) == 1:
             db(
-                "UPDATE chat_app.messages SET status = 'running' WHERE id = %s",
+                "UPDATE chat_app.turns SET status = 'running' WHERE id = %s",
                 (assistant["id"],),
             )
             return "orphan"
@@ -381,7 +381,7 @@ async def test_stop_racing_a_resume_leaves_the_resumed_turn_alone(
 
     monkeypatch.setattr(Runner, "stop", racing_stop)
     response = await client.post(
-        f"/api/v1/conversations/{conversation_id}/messages/{assistant['id']}/stop",
+        f"/api/v1/conversations/{conversation_id}/turns/{assistant['id']}/stop",
         headers=headers,
     )
     # The cancel matched nothing and rolled back; the running process was
@@ -404,7 +404,7 @@ async def test_deleting_a_chat_cancels_its_waiting_turn(
     )
     assert response.status_code == 204
     (row,) = db(
-        "SELECT status, metadata FROM chat_app.messages WHERE id = %s",
+        "SELECT status, metadata FROM chat_app.turns WHERE id = %s",
         (assistant["id"],),
     )
     assert row["status"] == "cancelled"

@@ -1,7 +1,7 @@
 """Export one's own chats of a workspace as a zip (use case O08, QD-31).
 
 Each chat becomes a folder with `conversation.json` (the whole tree: every
-message, its AG-UI bundle, status and attached files) and `conversation.md`
+turn, its AG-UI bundle, status and attached files) and `conversation.md`
 (the saved branch as plain text). Attached files are listed by name, type
 and size; their bytes are not included. The zip is streamed one chat at a
 time, each read in a short transaction of its own.
@@ -21,7 +21,7 @@ from uuid import UUID
 from sqlalchemy import RowMapping
 
 from app.database.session import SessionFactory
-from app.modules.conversations.repository import MessageRepository
+from app.modules.conversations.repository import TurnRepository
 from app.modules.files.repository import FileRepository
 
 ROLE_HEADINGS = {"user": "Bạn", "assistant": "Agent"}
@@ -74,13 +74,13 @@ async def export_zip(
             conversations, _folders(conversations), strict=True
         ):
             async with session_factory() as session:
-                rows = await MessageRepository(session).tree(
+                rows = await TurnRepository(session).tree(
                     conversation_id=conversation["id"]
                 )
                 links = await FileRepository(session).links_of(
                     conversation_id=conversation["id"]
                 )
-            files = _files_by_message(links)
+            files = _files_by_turn(links)
             archive.writestr(
                 f"{folder}/conversation.json",
                 _json(_document(conversation, rows, files)),
@@ -115,10 +115,10 @@ def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2, default=str)
 
 
-def _files_by_message(links: list[RowMapping]) -> dict[UUID, list[dict[str, Any]]]:
+def _files_by_turn(links: list[RowMapping]) -> dict[UUID, list[dict[str, Any]]]:
     files: dict[UUID, list[dict[str, Any]]] = {}
     for link in links:
-        files.setdefault(link["message_id"], []).append(
+        files.setdefault(link["turn_id"], []).append(
             {
                 "id": str(link["id"]),
                 "name": link["original_name"],
@@ -140,11 +140,11 @@ def _document(
         "created_at": conversation["created_at"],
         "updated_at": conversation["updated_at"],
         "archived_at": conversation["archived_at"],
-        "current_message_id": conversation["current_message_id"],
-        "messages": [
+        "current_turn_id": conversation["current_turn_id"],
+        "turns": [
             {
                 "id": row["id"],
-                "parent_message_id": row["parent_message_id"],
+                "parent_turn_id": row["parent_turn_id"],
                 "role": row["role"],
                 "status": row["status"],
                 "created_at": row["created_at"],
@@ -161,7 +161,7 @@ def _branch(rows: list[RowMapping], leaf: UUID | None) -> list[RowMapping]:
     path: list[RowMapping] = []
     while leaf is not None and leaf in by_id:
         path.append(by_id[leaf])
-        leaf = by_id[leaf]["parent_message_id"]
+        leaf = by_id[leaf]["parent_turn_id"]
     return path[::-1]
 
 
@@ -185,7 +185,7 @@ def _markdown(
     files: dict[UUID, list[dict[str, Any]]],
 ) -> str:
     lines = [f"# {conversation['title']}", ""]
-    for row in _branch(rows, conversation["current_message_id"]):
+    for row in _branch(rows, conversation["current_turn_id"]):
         lines += [f"## {ROLE_HEADINGS.get(row['role'], row['role'])}", ""]
         lines += [text.strip() for text in _texts(row)]
         if row["status"] in ("failed", "cancelled"):

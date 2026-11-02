@@ -19,9 +19,9 @@ class ShareResponse(BaseModel):
     published_at: datetime
 
 
-class SharedMessage(BaseModel):
+class SharedTurn(BaseModel):
     id: UUID
-    parent_message_id: UUID | None
+    parent_turn_id: UUID | None
     role: str
     status: str
     content: list[dict[str, Any]]
@@ -37,8 +37,8 @@ class SharedConversation(BaseModel):
     version: int
     published_at: datetime
     #: Leaf of the branch the owner had open; the reader starts there.
-    current_message_id: UUID
-    messages: list[SharedMessage]
+    current_turn_id: UUID
+    turns: list[SharedTurn]
     #: Whether the reader may continue it as a copy of their own.
     can_copy: bool
 

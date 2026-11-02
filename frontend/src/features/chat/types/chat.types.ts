@@ -8,8 +8,8 @@ export type ConversationUpdate = components["schemas"]["ConversationUpdate"];
 export type ConversationSearch = components["schemas"]["ConversationSearchResponse"];
 export type ConversationSearchItem = components["schemas"]["ConversationSearchItem"];
 export type History = components["schemas"]["HistoryResponse"];
-export type MessageRow = components["schemas"]["MessageResponse"];
-export type MessageStatus = MessageRow["status"];
+export type TurnRow = components["schemas"]["TurnResponse"];
+export type TurnStatus = TurnRow["status"];
 export type StopResult = components["schemas"]["StopResponse"];
 export type Folder = components["schemas"]["FolderResponse"];
 export type FolderList = components["schemas"]["FolderListResponse"];
@@ -26,8 +26,8 @@ export type ConversationFilter =
  */
 export type RowView = {
   id: string;
-  role: MessageRow["role"];
-  status: MessageStatus;
+  role: TurnRow["role"];
+  status: TurnStatus;
   content: Message[];
   siblingIds: string[];
   live?: boolean;
@@ -44,5 +44,5 @@ export type LiveTurn = {
   /** Resume: the paused row this turn continues; its content stays first. */
   continued: RowView | null;
   assistantId: string | null;
-  status: MessageStatus;
+  status: TurnStatus;
 };

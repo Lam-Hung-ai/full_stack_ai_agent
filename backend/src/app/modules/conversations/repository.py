@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config.security import now
 from app.database.generated_tables import t_conversation_copy_jobs as copy_jobs
 from app.database.generated_tables import t_conversations as conversations
-from app.database.generated_tables import t_messages as messages
+from app.database.generated_tables import t_turns as turns
 from app.modules.conversations.schemas import ACTIVE_STATUSES
 
 DEFAULT_TITLE = "Cuộc trò chuyện mới"
@@ -99,18 +99,18 @@ class ConversationRepository:
         limit: int,
         offset: int,
     ) -> tuple[list[RowMapping], int]:
-        """Chats whose title or some message text matches the LIKE `pattern`
-        (compared as `search_key` forms), with the newest matching message."""
+        """Chats whose title or some turn text matches the LIKE `pattern`
+        (compared as `search_key` forms), with the newest matching turn."""
         key = func.chat_app.search_key
         wanted = key(literal(pattern))
-        text_of = func.chat_app.message_text(messages.c.content)
+        text_of = func.chat_app.turn_text(turns.c.content)
         match = (
-            select(messages.c.id.label("message_id"), text_of.label("message_text"))
+            select(turns.c.id.label("turn_id"), text_of.label("turn_text"))
             .where(
-                messages.c.conversation_id == conversations.c.id,
+                turns.c.conversation_id == conversations.c.id,
                 key(text_of).like(wanted),
             )
-            .order_by(messages.c.created_at.desc())
+            .order_by(turns.c.created_at.desc())
             .limit(1)
             .lateral("match")
         )
@@ -119,7 +119,7 @@ class ConversationRepository:
             conversations.c.owner_user_id == owner_user_id,
             conversations.c.deleted_at.is_(None),
             _not_unfinished_copy(),
-            key(conversations.c.title).like(wanted) | match.c.message_id.is_not(None),
+            key(conversations.c.title).like(wanted) | match.c.turn_id.is_not(None),
         ]
         source = conversations.outerjoin(match, literal(True))
         total = (
@@ -133,8 +133,8 @@ class ConversationRepository:
                 conversations.c.title,
                 conversations.c.archived_at,
                 conversations.c.updated_at,
-                match.c.message_id,
-                match.c.message_text,
+                match.c.turn_id,
+                match.c.turn_text,
             )
             .select_from(source)
             .where(*scope)
@@ -209,46 +209,44 @@ class ConversationRepository:
         )
 
 
-class MessageRepository:
+class TurnRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def get(
-        self, *, conversation_id: UUID, message_id: UUID
-    ) -> RowMapping | None:
-        statement = select(messages).where(
-            messages.c.conversation_id == conversation_id,
-            messages.c.id == message_id,
+    async def get(self, *, conversation_id: UUID, turn_id: UUID) -> RowMapping | None:
+        statement = select(turns).where(
+            turns.c.conversation_id == conversation_id,
+            turns.c.id == turn_id,
         )
         return (await self._session.execute(statement)).mappings().one_or_none()
 
-    async def exists(self, *, message_id: UUID) -> bool:
-        statement = select(messages.c.id).where(messages.c.id == message_id)
+    async def exists(self, *, turn_id: UUID) -> bool:
+        statement = select(turns.c.id).where(turns.c.id == turn_id)
         return (await self._session.execute(statement)).first() is not None
 
     async def has_any(self, *, conversation_id: UUID) -> bool:
         statement = (
-            select(messages.c.id)
-            .where(messages.c.conversation_id == conversation_id)
+            select(turns.c.id)
+            .where(turns.c.conversation_id == conversation_id)
             .limit(1)
         )
         return (await self._session.execute(statement)).first() is not None
 
     async def get_active(self, *, conversation_id: UUID) -> RowMapping | None:
         """The whole active assistant row, if any (one per conversation)."""
-        statement = select(messages).where(
-            messages.c.conversation_id == conversation_id,
-            messages.c.role == "assistant",
-            messages.c.status.in_(ACTIVE_STATUSES),
+        statement = select(turns).where(
+            turns.c.conversation_id == conversation_id,
+            turns.c.role == "assistant",
+            turns.c.status.in_(ACTIVE_STATUSES),
         )
         return (await self._session.execute(statement)).mappings().one_or_none()
 
     async def tree(self, *, conversation_id: UUID) -> list[RowMapping]:
-        """Every message of the conversation, oldest first (sibling order)."""
+        """Every turn of the conversation, oldest first (sibling order)."""
         statement = (
-            select(messages)
-            .where(messages.c.conversation_id == conversation_id)
-            .order_by(messages.c.created_at, messages.c.id)
+            select(turns)
+            .where(turns.c.conversation_id == conversation_id)
+            .order_by(turns.c.created_at, turns.c.id)
         )
         return list((await self._session.execute(statement)).mappings())
 
@@ -257,57 +255,57 @@ class MessageRepository:
     ) -> list[RowMapping]:
         """Unfinished assistant rows in every chat the user owns in a workspace."""
         statement = (
-            select(messages)
-            .join(conversations, conversations.c.id == messages.c.conversation_id)
+            select(turns)
+            .join(conversations, conversations.c.id == turns.c.conversation_id)
             .where(
                 conversations.c.workspace_id == workspace_id,
                 conversations.c.owner_user_id == owner_user_id,
-                messages.c.role == "assistant",
-                messages.c.status.in_(ACTIVE_STATUSES),
+                turns.c.role == "assistant",
+                turns.c.status.in_(ACTIVE_STATUSES),
             )
         )
         return list((await self._session.execute(statement)).mappings())
 
     async def active_assistant(self, *, conversation_id: UUID) -> RowMapping | None:
-        statement = select(messages.c.id, messages.c.status).where(
-            messages.c.conversation_id == conversation_id,
-            messages.c.role == "assistant",
-            messages.c.status.in_(ACTIVE_STATUSES),
+        statement = select(turns.c.id, turns.c.status).where(
+            turns.c.conversation_id == conversation_id,
+            turns.c.role == "assistant",
+            turns.c.status.in_(ACTIVE_STATUSES),
         )
         return (await self._session.execute(statement)).mappings().one_or_none()
 
     async def insert(
         self,
         *,
-        message_id: UUID | None = None,
+        turn_id: UUID | None = None,
         conversation_id: UUID,
-        parent_message_id: UUID | None,
+        parent_turn_id: UUID | None,
         role: str,
         status: str,
         content: list[dict[str, Any]],
     ) -> RowMapping:
         values: dict[str, Any] = {
             "conversation_id": conversation_id,
-            "parent_message_id": parent_message_id,
+            "parent_turn_id": parent_turn_id,
             "role": role,
             "status": status,
             "content": content,
         }
-        if message_id is not None:
-            values["id"] = message_id
-        statement = insert(messages).values(values).returning(messages)
+        if turn_id is not None:
+            values["id"] = turn_id
+        statement = insert(turns).values(values).returning(turns)
         return (await self._session.execute(statement)).mappings().one()
 
     async def set_status(
         self,
         *,
-        message_id: UUID,
+        turn_id: UUID,
         status: str,
         content: list[dict[str, Any]] | None = None,
         metadata: dict[str, Any] | None = None,
         expected: frozenset[str] = ACTIVE_STATUSES,
     ) -> bool:
-        """Change a message still in one of `expected` (by default any active
+        """Change a turn still in one of `expected` (by default any active
         status): terminal rows are immutable, and a turn finishing after a stop
         already marked it cancelled is a no-op. True when the row changed."""
         values: dict[str, Any] = {"status": status}
@@ -316,22 +314,22 @@ class MessageRepository:
         if metadata is not None:
             values["metadata"] = metadata
         result = await self._session.execute(
-            update(messages)
-            .where(messages.c.id == message_id, messages.c.status.in_(expected))
+            update(turns)
+            .where(turns.c.id == turn_id, turns.c.status.in_(expected))
             .values(values)
-            .returning(messages.c.id)
+            .returning(turns.c.id)
         )
         return result.first() is not None
 
     async def links(self, *, conversation_id: UUID) -> list[tuple[UUID, UUID | None]]:
-        """(id, parent) of every message, oldest first (messages_history_idx)."""
+        """(id, parent) of every turn, oldest first (turns_history_idx)."""
         statement = (
-            select(messages.c.id, messages.c.parent_message_id)
-            .where(messages.c.conversation_id == conversation_id)
-            .order_by(messages.c.created_at, messages.c.id)
+            select(turns.c.id, turns.c.parent_turn_id)
+            .where(turns.c.conversation_id == conversation_id)
+            .order_by(turns.c.created_at, turns.c.id)
         )
         rows = (await self._session.execute(statement)).all()
-        return [(row.id, row.parent_message_id) for row in rows]
+        return [(row.id, row.parent_turn_id) for row in rows]
 
     async def branch(self, *, conversation_id: UUID, leaf_id: UUID) -> list[RowMapping]:
         """The path from `leaf_id` up to the root, returned root first.
@@ -339,17 +337,17 @@ class MessageRepository:
         Follows parent links, never creation time: siblings from edits and
         regenerations share a parent and must not leak into the path."""
         path = (
-            select(messages, literal(0).label("depth"))
+            select(turns, literal(0).label("depth"))
             .where(
-                messages.c.conversation_id == conversation_id,
-                messages.c.id == leaf_id,
+                turns.c.conversation_id == conversation_id,
+                turns.c.id == leaf_id,
             )
             .cte("path", recursive=True)
         )
-        parent = messages.alias("parent")
+        parent = turns.alias("parent")
         path = path.union_all(
             select(parent, (path.c.depth + 1).label("depth")).where(
-                parent.c.id == path.c.parent_message_id,
+                parent.c.id == path.c.parent_turn_id,
                 parent.c.conversation_id == conversation_id,
             )
         )

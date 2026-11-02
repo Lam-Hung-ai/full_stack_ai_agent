@@ -11,9 +11,9 @@ from app.database.generated_tables import t_conversation_copy_jobs as copy_jobs
 from app.database.generated_tables import t_conversation_shares as shares
 from app.database.generated_tables import t_share_snapshot_files as snapshot_files
 from app.database.generated_tables import (
-    t_share_snapshot_message_files as snapshot_message_files,
+    t_share_snapshot_turn_files as snapshot_turn_files,
 )
-from app.database.generated_tables import t_share_snapshot_messages as snapshot_messages
+from app.database.generated_tables import t_share_snapshot_turns as snapshot_turns
 from app.database.generated_tables import t_share_snapshots as snapshots
 from app.database.generated_tables import t_stored_files as stored_files
 
@@ -67,7 +67,7 @@ class ShareRepository:
                 snapshots.c.title,
                 snapshots.c.version,
                 snapshots.c.sealed_at,
-                snapshots.c.current_message_id,
+                snapshots.c.current_turn_id,
             )
             .join(snapshots, snapshots.c.id == shares.c.current_snapshot_id)
             .where(shares.c.link_token_hash == token_hash)
@@ -122,9 +122,9 @@ class ShareRepository:
         )
         return (await self._session.execute(statement)).mappings().one()
 
-    async def add_messages(self, rows: list[dict[str, Any]]) -> None:
+    async def add_turns(self, rows: list[dict[str, Any]]) -> None:
         if rows:
-            await self._session.execute(insert(snapshot_messages).values(rows))
+            await self._session.execute(insert(snapshot_turns).values(rows))
 
     async def add_files(
         self, *, snapshot_id: UUID, workspace_id: UUID, file_ids: list[UUID]
@@ -143,16 +143,16 @@ class ShareRepository:
                 )
             )
 
-    async def add_message_files(
+    async def add_turn_files(
         self, *, snapshot_id: UUID, links: list[tuple[UUID, UUID]]
     ) -> None:
         if links:
             await self._session.execute(
-                insert(snapshot_message_files).values(
+                insert(snapshot_turn_files).values(
                     [
                         {
                             "snapshot_id": snapshot_id,
-                            "message_id": m,
+                            "turn_id": m,
                             "stored_file_id": f,
                         }
                         for m, f in links
@@ -160,32 +160,32 @@ class ShareRepository:
                 )
             )
 
-    async def seal(self, *, snapshot_id: UUID, current_message_id: UUID) -> datetime:
+    async def seal(self, *, snapshot_id: UUID, current_turn_id: UUID) -> datetime:
         statement = (
             update(snapshots)
             .where(snapshots.c.id == snapshot_id)
-            .values(current_message_id=current_message_id, sealed_at=now())
+            .values(current_turn_id=current_turn_id, sealed_at=now())
             .returning(snapshots.c.sealed_at)
         )
         return (await self._session.execute(statement)).scalar_one()
 
-    async def snapshot_messages(self, *, snapshot_id: UUID) -> list[RowMapping]:
+    async def snapshot_turns(self, *, snapshot_id: UUID) -> list[RowMapping]:
         statement = (
-            select(snapshot_messages)
-            .where(snapshot_messages.c.snapshot_id == snapshot_id)
-            .order_by(snapshot_messages.c.original_created_at, snapshot_messages.c.id)
+            select(snapshot_turns)
+            .where(snapshot_turns.c.snapshot_id == snapshot_id)
+            .order_by(snapshot_turns.c.original_created_at, snapshot_turns.c.id)
         )
         return list((await self._session.execute(statement)).mappings())
 
     async def snapshot_file_links(self, *, snapshot_id: UUID) -> list[RowMapping]:
-        """(message_id, file row) of every file in the snapshot."""
+        """(turn_id, file row) of every file in the snapshot."""
         statement = (
-            select(snapshot_message_files.c.message_id, stored_files)
+            select(snapshot_turn_files.c.turn_id, stored_files)
             .join(
                 stored_files,
-                stored_files.c.id == snapshot_message_files.c.stored_file_id,
+                stored_files.c.id == snapshot_turn_files.c.stored_file_id,
             )
-            .where(snapshot_message_files.c.snapshot_id == snapshot_id)
+            .where(snapshot_turn_files.c.snapshot_id == snapshot_id)
         )
         return list((await self._session.execute(statement)).mappings())
 

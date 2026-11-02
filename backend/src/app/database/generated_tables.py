@@ -106,7 +106,7 @@ t_conversations = Table(
         nullable=False,
         server_default=text("'Cuộc trò chuyện mới'::text"),
     ),
-    Column("current_message_id", Uuid),
+    Column("current_turn_id", Uuid),
     Column("deleted_at", DateTime(True)),
     Column("created_at", DateTime(True), nullable=False, server_default=text("now()")),
     Column("updated_at", DateTime(True), nullable=False, server_default=text("now()")),
@@ -125,11 +125,11 @@ t_conversations = Table(
         name="conversations_folder_scope_fk",
     ),
     ForeignKeyConstraint(
-        ["id", "current_message_id"],
-        ["chat_app.messages.conversation_id", "chat_app.messages.id"],
+        ["id", "current_turn_id"],
+        ["chat_app.turns.conversation_id", "chat_app.turns.id"],
         deferrable=True,
         initially="DEFERRED",
-        name="conversations_current_message_fk",
+        name="conversations_current_turn_fk",
     ),
     ForeignKeyConstraint(
         ["owner_user_id"],
@@ -184,15 +184,140 @@ t_conversations = Table(
         postgresql_where="((pinned_at IS NOT NULL) AND (deleted_at IS NULL) AND (archived_at IS NULL))",
     ),
     schema="chat_app",
-    comment="One owner per conversation; pin/archive/folder stored here. current_message_id is saved branch tip, not a live execution ID.",
+    comment="One owner per conversation; pin/archive/folder stored here. current_turn_id is saved branch tip, not a live execution ID.",
 )
 
-t_messages = Table(
-    "messages",
+t_permissions = Table(
+    "permissions",
+    metadata,
+    Column("id", Uuid, primary_key=True, server_default=text("uuidv7()")),
+    Column("resource", Text, nullable=False),
+    Column("action", Text, nullable=False),
+    Column("description", Text),
+    Column("created_at", DateTime(True), nullable=False, server_default=text("now()")),
+    CheckConstraint(
+        "action ~ '^[a-z][a-z0-9_]*$'::text", name="permissions_action_check"
+    ),
+    CheckConstraint(
+        "resource ~ '^[a-z][a-z0-9_]*$'::text", name="permissions_resource_check"
+    ),
+    PrimaryKeyConstraint("id", name="permissions_pkey"),
+    UniqueConstraint("resource", "action", name="permissions_resource_action_key"),
+    schema="chat_app",
+)
+
+t_share_snapshot_turns = Table(
+    "share_snapshot_turns",
+    metadata,
+    Column("snapshot_id", Uuid, primary_key=True),
+    Column("id", Uuid, primary_key=True, server_default=text("uuidv7()")),
+    Column("parent_turn_id", Uuid),
+    Column("role", Text, nullable=False),
+    Column("content", JSONB, nullable=False),
+    Column("original_created_at", DateTime(True), nullable=False),
+    Column(
+        "attachments",
+        JSONB,
+        nullable=False,
+        server_default=text("'[]'::jsonb"),
+        comment="Snapshot must preserve both attachments and content and remap embedded file/turn/tool IDs when copied.",
+    ),
+    Column("status", Text, nullable=False, server_default=text("'completed'::text")),
+    CheckConstraint(
+        "chat_app.valid_agui_bundle(role, content)",
+        name="share_snapshot_turns_content_check",
+    ),
+    CheckConstraint(
+        "jsonb_typeof(attachments) = 'array'::text",
+        name="share_snapshot_turns_attachments_check",
+    ),
+    CheckConstraint(
+        "parent_turn_id IS NULL OR parent_turn_id <> id",
+        name="share_snapshot_turns_check",
+    ),
+    CheckConstraint(
+        "role <> 'user'::text OR status = 'completed'::text",
+        name="snapshot_user_status_check",
+    ),
+    CheckConstraint(
+        "role = ANY (ARRAY['user'::text, 'assistant'::text])",
+        name="share_snapshot_turns_role_check",
+    ),
+    CheckConstraint(
+        "status = ANY (ARRAY['completed'::text, 'failed'::text, 'cancelled'::text])",
+        name="snapshot_turn_status_check",
+    ),
+    ForeignKeyConstraint(
+        ["snapshot_id", "parent_turn_id"],
+        [
+            "chat_app.share_snapshot_turns.snapshot_id",
+            "chat_app.share_snapshot_turns.id",
+        ],
+        deferrable=True,
+        initially="DEFERRED",
+        name="share_snapshot_turns_snapshot_id_parent_turn_id_fkey",
+    ),
+    ForeignKeyConstraint(
+        ["snapshot_id"],
+        ["chat_app.share_snapshots.id"],
+        ondelete="RESTRICT",
+        name="share_snapshot_turns_snapshot_id_fkey",
+    ),
+    PrimaryKeyConstraint("snapshot_id", "id", name="share_snapshot_turns_pkey"),
+    Index(
+        "share_snapshot_turns_history_idx", "snapshot_id", "original_created_at", "id"
+    ),
+    Index("share_snapshot_turns_parent_idx", "snapshot_id", "parent_turn_id"),
+    schema="chat_app",
+)
+
+t_share_snapshots = Table(
+    "share_snapshots",
+    metadata,
+    Column("id", Uuid, primary_key=True, server_default=text("uuidv7()")),
+    Column("share_id", Uuid, nullable=False),
+    Column("workspace_id", Uuid, nullable=False),
+    Column("version", BigInteger, nullable=False),
+    Column("title", Text, nullable=False),
+    Column("current_turn_id", Uuid),
+    Column("sealed_at", DateTime(True)),
+    Column("created_at", DateTime(True), nullable=False, server_default=text("now()")),
+    CheckConstraint("btrim(title) <> ''::text", name="share_snapshots_title_check"),
+    CheckConstraint("version > 0", name="share_snapshots_version_check"),
+    ForeignKeyConstraint(
+        ["id", "current_turn_id"],
+        [
+            "chat_app.share_snapshot_turns.snapshot_id",
+            "chat_app.share_snapshot_turns.id",
+        ],
+        deferrable=True,
+        initially="DEFERRED",
+        name="share_snapshots_current_turn_fk",
+    ),
+    ForeignKeyConstraint(
+        ["share_id", "workspace_id"],
+        [
+            "chat_app.conversation_shares.id",
+            "chat_app.conversation_shares.workspace_id",
+        ],
+        ondelete="RESTRICT",
+        name="share_snapshots_share_id_workspace_id_fkey",
+    ),
+    PrimaryKeyConstraint("id", name="share_snapshots_pkey"),
+    UniqueConstraint("id", "workspace_id", name="share_snapshots_id_workspace_id_key"),
+    UniqueConstraint("share_id", "id", name="share_snapshots_share_id_id_key"),
+    UniqueConstraint(
+        "share_id", "version", name="share_snapshots_share_id_version_key"
+    ),
+    schema="chat_app",
+)
+
+t_turns = Table(
+    "turns",
     metadata,
     Column("id", Uuid, primary_key=True, server_default=text("uuidv7()")),
     Column("conversation_id", Uuid, nullable=False),
-    Column("parent_message_id", Uuid),
+    Column("parent_turn_id", Uuid),
     Column("role", Text, nullable=False),
     Column(
         "content",
@@ -222,189 +347,60 @@ t_messages = Table(
         JSONB,
         nullable=False,
         server_default=text("'{}'::jsonb"),
-        comment="Backend-owned action/checkpoint state and resolved interactions. No client-controlled checkpoint pointers or credentials. Terminal messages remain immutable.",
+        comment="Backend-owned action/checkpoint state and resolved interactions. No client-controlled checkpoint pointers or credentials. Terminal turns remain immutable.",
     ),
     CheckConstraint(
-        "chat_app.valid_agui_bundle(role, content)", name="messages_content_check"
+        "chat_app.valid_agui_bundle(role, content)", name="turns_content_check"
     ),
     CheckConstraint(
-        "jsonb_typeof(attachments) = 'array'::text", name="messages_attachments_check"
+        "jsonb_typeof(attachments) = 'array'::text", name="turns_attachments_check"
     ),
     CheckConstraint(
-        "jsonb_typeof(metadata) = 'object'::text", name="messages_metadata_object_check"
+        "jsonb_typeof(metadata) = 'object'::text", name="turns_metadata_object_check"
     ),
     CheckConstraint(
-        "parent_message_id IS NULL OR parent_message_id <> id", name="messages_check"
+        "parent_turn_id IS NULL OR parent_turn_id <> id", name="turns_check"
     ),
     CheckConstraint(
         "role <> 'user'::text OR (status = ANY (ARRAY['pending'::text, 'completed'::text]))",
-        name="messages_user_status_check",
+        name="turns_user_status_check",
     ),
     CheckConstraint(
-        "role = ANY (ARRAY['user'::text, 'assistant'::text])",
-        name="messages_role_check",
+        "role = ANY (ARRAY['user'::text, 'assistant'::text])", name="turns_role_check"
     ),
     CheckConstraint(
         "status = ANY (ARRAY['pending'::text, 'running'::text, 'requires_action'::text, 'completed'::text, 'failed'::text, 'cancelled'::text])",
-        name="messages_status_check",
+        name="turns_status_check",
     ),
     ForeignKeyConstraint(
-        ["conversation_id", "parent_message_id"],
-        ["chat_app.messages.conversation_id", "chat_app.messages.id"],
+        ["conversation_id", "parent_turn_id"],
+        ["chat_app.turns.conversation_id", "chat_app.turns.id"],
         deferrable=True,
         initially="DEFERRED",
-        name="messages_conversation_id_parent_message_id_fkey",
+        name="turns_conversation_id_parent_turn_id_fkey",
     ),
     ForeignKeyConstraint(
         ["conversation_id"],
         ["chat_app.conversations.id"],
         ondelete="CASCADE",
-        name="messages_conversation_id_fkey",
+        name="turns_conversation_id_fkey",
     ),
-    PrimaryKeyConstraint("id", name="messages_pkey"),
-    UniqueConstraint("conversation_id", "id", name="messages_conversation_id_id_key"),
-    Index("messages_history_idx", "conversation_id", "created_at", "id"),
+    PrimaryKeyConstraint("id", name="turns_pkey"),
+    UniqueConstraint("conversation_id", "id", name="turns_conversation_id_id_key"),
+    Index("turns_history_idx", "conversation_id", "created_at", "id"),
     Index(
-        "messages_one_active_assistant_idx",
+        "turns_one_active_assistant_idx",
         "conversation_id",
         postgresql_where="((role = 'assistant'::text) AND (status = ANY (ARRAY['pending'::text, 'running'::text, 'requires_action'::text])))",
         unique=True,
     ),
-    Index("messages_parent_idx", "conversation_id", "parent_message_id"),
+    Index("turns_parent_idx", "conversation_id", "parent_turn_id"),
     Index(
-        "messages_search_idx",
+        "turns_search_idx",
         postgresql_ops={
-            "chat_app.search_key(chat_app.message_text(content))": "gin_trgm_ops"
+            "chat_app.search_key(chat_app.turn_text(content))": "gin_trgm_ops"
         },
         postgresql_using="gin",
-    ),
-    schema="chat_app",
-)
-
-t_permissions = Table(
-    "permissions",
-    metadata,
-    Column("id", Uuid, primary_key=True, server_default=text("uuidv7()")),
-    Column("resource", Text, nullable=False),
-    Column("action", Text, nullable=False),
-    Column("description", Text),
-    Column("created_at", DateTime(True), nullable=False, server_default=text("now()")),
-    CheckConstraint(
-        "action ~ '^[a-z][a-z0-9_]*$'::text", name="permissions_action_check"
-    ),
-    CheckConstraint(
-        "resource ~ '^[a-z][a-z0-9_]*$'::text", name="permissions_resource_check"
-    ),
-    PrimaryKeyConstraint("id", name="permissions_pkey"),
-    UniqueConstraint("resource", "action", name="permissions_resource_action_key"),
-    schema="chat_app",
-)
-
-t_share_snapshot_messages = Table(
-    "share_snapshot_messages",
-    metadata,
-    Column("snapshot_id", Uuid, primary_key=True),
-    Column("id", Uuid, primary_key=True, server_default=text("uuidv7()")),
-    Column("parent_message_id", Uuid),
-    Column("role", Text, nullable=False),
-    Column("content", JSONB, nullable=False),
-    Column("original_created_at", DateTime(True), nullable=False),
-    Column(
-        "attachments",
-        JSONB,
-        nullable=False,
-        server_default=text("'[]'::jsonb"),
-        comment="Snapshot must preserve both attachments and content and remap embedded file/message/tool IDs when copied.",
-    ),
-    Column("status", Text, nullable=False, server_default=text("'completed'::text")),
-    CheckConstraint(
-        "chat_app.valid_agui_bundle(role, content)",
-        name="share_snapshot_messages_content_check",
-    ),
-    CheckConstraint(
-        "jsonb_typeof(attachments) = 'array'::text",
-        name="share_snapshot_messages_attachments_check",
-    ),
-    CheckConstraint(
-        "parent_message_id IS NULL OR parent_message_id <> id",
-        name="share_snapshot_messages_check",
-    ),
-    CheckConstraint(
-        "role <> 'user'::text OR status = 'completed'::text",
-        name="snapshot_user_status_check",
-    ),
-    CheckConstraint(
-        "role = ANY (ARRAY['user'::text, 'assistant'::text])",
-        name="share_snapshot_messages_role_check",
-    ),
-    CheckConstraint(
-        "status = ANY (ARRAY['completed'::text, 'failed'::text, 'cancelled'::text])",
-        name="snapshot_message_status_check",
-    ),
-    ForeignKeyConstraint(
-        ["snapshot_id", "parent_message_id"],
-        [
-            "chat_app.share_snapshot_messages.snapshot_id",
-            "chat_app.share_snapshot_messages.id",
-        ],
-        deferrable=True,
-        initially="DEFERRED",
-        name="share_snapshot_messages_snapshot_id_parent_message_id_fkey",
-    ),
-    ForeignKeyConstraint(
-        ["snapshot_id"],
-        ["chat_app.share_snapshots.id"],
-        ondelete="RESTRICT",
-        name="share_snapshot_messages_snapshot_id_fkey",
-    ),
-    PrimaryKeyConstraint("snapshot_id", "id", name="share_snapshot_messages_pkey"),
-    Index(
-        "share_snapshot_messages_history_idx",
-        "snapshot_id",
-        "original_created_at",
-        "id",
-    ),
-    Index("share_snapshot_messages_parent_idx", "snapshot_id", "parent_message_id"),
-    schema="chat_app",
-)
-
-t_share_snapshots = Table(
-    "share_snapshots",
-    metadata,
-    Column("id", Uuid, primary_key=True, server_default=text("uuidv7()")),
-    Column("share_id", Uuid, nullable=False),
-    Column("workspace_id", Uuid, nullable=False),
-    Column("version", BigInteger, nullable=False),
-    Column("title", Text, nullable=False),
-    Column("current_message_id", Uuid),
-    Column("sealed_at", DateTime(True)),
-    Column("created_at", DateTime(True), nullable=False, server_default=text("now()")),
-    CheckConstraint("btrim(title) <> ''::text", name="share_snapshots_title_check"),
-    CheckConstraint("version > 0", name="share_snapshots_version_check"),
-    ForeignKeyConstraint(
-        ["id", "current_message_id"],
-        [
-            "chat_app.share_snapshot_messages.snapshot_id",
-            "chat_app.share_snapshot_messages.id",
-        ],
-        deferrable=True,
-        initially="DEFERRED",
-        name="share_snapshots_current_message_fk",
-    ),
-    ForeignKeyConstraint(
-        ["share_id", "workspace_id"],
-        [
-            "chat_app.conversation_shares.id",
-            "chat_app.conversation_shares.workspace_id",
-        ],
-        ondelete="RESTRICT",
-        name="share_snapshots_share_id_workspace_id_fkey",
-    ),
-    PrimaryKeyConstraint("id", name="share_snapshots_pkey"),
-    UniqueConstraint("id", "workspace_id", name="share_snapshots_id_workspace_id_key"),
-    UniqueConstraint("share_id", "id", name="share_snapshots_share_id_id_key"),
-    UniqueConstraint(
-        "share_id", "version", name="share_snapshots_share_id_version_key"
     ),
     schema="chat_app",
 )
@@ -662,29 +658,6 @@ t_user_accounts = Table(
     schema="chat_app",
 )
 
-t_message_files = Table(
-    "message_files",
-    metadata,
-    Column("message_id", Uuid, primary_key=True),
-    Column("stored_file_id", Uuid, primary_key=True),
-    ForeignKeyConstraint(
-        ["message_id"],
-        ["chat_app.messages.id"],
-        ondelete="RESTRICT",
-        name="message_files_message_id_fkey",
-    ),
-    ForeignKeyConstraint(
-        ["stored_file_id"],
-        ["chat_app.stored_files.id"],
-        ondelete="RESTRICT",
-        name="message_files_stored_file_id_fkey",
-    ),
-    PrimaryKeyConstraint("message_id", "stored_file_id", name="message_files_pkey"),
-    Index("message_files_stored_file_idx", "stored_file_id"),
-    schema="chat_app",
-    comment="Authoritative many-to-many links. Resolve conversation/owner/workspace through messages. No extra files/chat_files table, kind or file status.",
-)
-
 t_organization_invitations = Table(
     "organization_invitations",
     metadata,
@@ -858,6 +831,29 @@ t_share_snapshot_files = Table(
     Index("share_snapshot_files_file_idx", "stored_file_id", "workspace_id"),
     schema="chat_app",
     comment="Immutable snapshot file manifest; stored_file_id -> stored_files, metadata is backend-allowlisted snapshot, never live raw metadata.",
+)
+
+t_turn_files = Table(
+    "turn_files",
+    metadata,
+    Column("turn_id", Uuid, primary_key=True),
+    Column("stored_file_id", Uuid, primary_key=True),
+    ForeignKeyConstraint(
+        ["stored_file_id"],
+        ["chat_app.stored_files.id"],
+        ondelete="RESTRICT",
+        name="turn_files_stored_file_id_fkey",
+    ),
+    ForeignKeyConstraint(
+        ["turn_id"],
+        ["chat_app.turns.id"],
+        ondelete="RESTRICT",
+        name="turn_files_turn_id_fkey",
+    ),
+    PrimaryKeyConstraint("turn_id", "stored_file_id", name="turn_files_pkey"),
+    Index("turn_files_stored_file_idx", "stored_file_id"),
+    schema="chat_app",
+    comment="Authoritative many-to-many links. Resolve conversation/owner/workspace through turns. No extra files/chat_files table, kind or file status.",
 )
 
 t_workspaces = Table(
@@ -1086,21 +1082,12 @@ t_role_permissions = Table(
     schema="chat_app",
 )
 
-t_share_snapshot_message_files = Table(
-    "share_snapshot_message_files",
+t_share_snapshot_turn_files = Table(
+    "share_snapshot_turn_files",
     metadata,
     Column("snapshot_id", Uuid, primary_key=True),
-    Column("message_id", Uuid, primary_key=True),
+    Column("turn_id", Uuid, primary_key=True),
     Column("stored_file_id", Uuid, primary_key=True),
-    ForeignKeyConstraint(
-        ["snapshot_id", "message_id"],
-        [
-            "chat_app.share_snapshot_messages.snapshot_id",
-            "chat_app.share_snapshot_messages.id",
-        ],
-        ondelete="RESTRICT",
-        name="share_snapshot_message_files_snapshot_id_message_id_fkey",
-    ),
     ForeignKeyConstraint(
         ["snapshot_id", "stored_file_id"],
         [
@@ -1108,15 +1095,24 @@ t_share_snapshot_message_files = Table(
             "chat_app.share_snapshot_files.stored_file_id",
         ],
         ondelete="RESTRICT",
-        name="share_snapshot_message_files_snapshot_id_file_id_fkey",
+        name="share_snapshot_turn_files_snapshot_id_file_id_fkey",
+    ),
+    ForeignKeyConstraint(
+        ["snapshot_id", "turn_id"],
+        [
+            "chat_app.share_snapshot_turns.snapshot_id",
+            "chat_app.share_snapshot_turns.id",
+        ],
+        ondelete="RESTRICT",
+        name="share_snapshot_turn_files_snapshot_id_turn_id_fkey",
     ),
     PrimaryKeyConstraint(
         "snapshot_id",
-        "message_id",
+        "turn_id",
         "stored_file_id",
-        name="share_snapshot_message_files_pkey",
+        name="share_snapshot_turn_files_pkey",
     ),
-    Index("share_snapshot_message_files_file_idx", "snapshot_id", "stored_file_id"),
+    Index("share_snapshot_turn_files_file_idx", "snapshot_id", "stored_file_id"),
     schema="chat_app",
 )
 

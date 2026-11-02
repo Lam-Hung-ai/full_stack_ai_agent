@@ -47,13 +47,13 @@
 
 | Mã | Việc | Chi tiết | Nc | Nghiệm thu | Trạng thái |
 | --- | --- | --- | --- | --- | --- |
-| CH-S11-DOC-01 | Bắt đầu sprint | Ghi dòng `BẮT ĐẦU` ở dòng thời gian; rà rủi ro | 0,1 | Dòng thời gian có dòng bắt đầu | ☐ |
-| CH-S11-DB-01 | Migration đổi tên | `ALTER TABLE … RENAME`, `RENAME COLUMN`, `RENAME CONSTRAINT`, `ALTER INDEX … RENAME`, `ALTER FUNCTION … RENAME`; viết lại thân mọi hàm nhắc tới bảng/cột cũ (`CREATE OR REPLACE`), gồm `valid_agui_bundle`, các guard của share/copy/file và `turn_text` (index tìm kiếm dựng lại); `migrate:down` đổi ngược. Regenerate `schema.sql`, `generated_tables.py` | 0,6 | `dbmate up`/`down`/`up` sạch trên database dùng một lần; test phát lại migration khớp `schema.sql`; dữ liệu dev còn nguyên sau `up` | ☐ |
-| CH-S11-BE-01 | Backend conversations | `TurnRepository`, `tree.py`, `context.py`, `service.py`, `connect.py`, `interactions.py`, `export.py`, `titles.py`, `router.py`, `schemas.py` theo mapping; mã lỗi mới; event `chat.turn` | 0,6 | Test conversations, pause/resume, connect, search, export xanh với tên mới | ☐ |
-| CH-S11-BE-02 | Backend files, shares, ai, tools | `files` (link, `generated.py`), `shares` (snapshot, copy, remap), `ai/runtime/runner.py` (`ASSISTANT_EVENT`), `tools/loadtest.py` | 0,3 | Test files, generated files, shares, copy, roles xanh; `uv run loadtest` chạy | ☐ |
-| CH-S11-FE-01 | Frontend | Regenerate kiểu OpenAPI; `ChatAgent` (đường dẫn, body), `conversations-api`, `use-conversation-chat`, `use-conversations`, `conversation-screen`, `chat-messages`, `branch-switcher`, `conversation-search`, trang `/c/{id}?t=`, `shares` (`shared-chat-screen`, `branch`); không đổi `components/ai-elements` | 0,5 | Vitest, `typecheck`, `eslint`, `build` xanh | ☐ |
-| CH-S11-QA-01 | Kịch bản nghiệm thu | Chạy thật kịch bản 1–4 | 0,2 | Đạt | ☐ |
-| CH-S11-DOC-02 | Cập nhật tài liệu | API contract (§2–§7), quyết định ID (thêm bảng từ ngữ turn / bundle / message AG-UI), client decisions, `van-hanh.md`; ghi chú QD-33 ở `database_decisions/README.md` | 0,2 | — | ☐ |
+| CH-S11-DOC-01 | Bắt đầu sprint | Ghi dòng `BẮT ĐẦU` ở dòng thời gian; rà rủi ro | 0,1 | Dòng thời gian có dòng bắt đầu | ☑ |
+| CH-S11-DB-01 | Migration đổi tên | `ALTER TABLE … RENAME`, `RENAME COLUMN`, `RENAME CONSTRAINT`, `ALTER INDEX … RENAME`, `ALTER FUNCTION … RENAME`; viết lại thân mọi hàm nhắc tới bảng/cột cũ (`CREATE OR REPLACE`), gồm `valid_agui_bundle`, các guard của share/copy/file và `turn_text` (index tìm kiếm dựng lại); `migrate:down` đổi ngược. Regenerate `schema.sql`, `generated_tables.py` | 0,6 | `dbmate up`/`down`/`up` sạch trên database dùng một lần; test phát lại migration khớp `schema.sql`; dữ liệu dev còn nguyên sau `up` | ☑ |
+| CH-S11-BE-01 | Backend conversations | `TurnRepository`, `tree.py`, `context.py`, `service.py`, `connect.py`, `interactions.py`, `export.py`, `titles.py`, `router.py`, `schemas.py` theo mapping; mã lỗi mới; event `chat.turn` | 0,6 | Test conversations, pause/resume, connect, search, export xanh với tên mới | ☑ |
+| CH-S11-BE-02 | Backend files, shares, ai, tools | `files` (link, `generated.py`), `shares` (snapshot, copy, remap), `ai/runtime/runner.py` (`ASSISTANT_EVENT`), `tools/loadtest.py` | 0,3 | Test files, generated files, shares, copy, roles xanh; `uv run loadtest` chạy | ☑ |
+| CH-S11-FE-01 | Frontend | Regenerate kiểu OpenAPI; `ChatAgent` (đường dẫn, body), `conversations-api`, `use-conversation-chat`, `use-conversations`, `conversation-screen`, `chat-messages`, `branch-switcher`, `conversation-search`, trang `/c/{id}?t=`, `shares` (`shared-chat-screen`, `branch`); không đổi `components/ai-elements` | 0,5 | Vitest, `typecheck`, `eslint`, `build` xanh | ☑ |
+| CH-S11-QA-01 | Kịch bản nghiệm thu | Chạy thật kịch bản 1–4 | 0,2 | Đạt | ☑ |
+| CH-S11-DOC-02 | Cập nhật tài liệu | API contract (§2–§7), quyết định ID (thêm bảng từ ngữ turn / bundle / message AG-UI), client decisions, `van-hanh.md`; ghi chú QD-33 ở `database_decisions/README.md` | 0,2 | — | ☑ |
 
 **Migration**: một file đổi tên (CH-S11-DB-01).
 
@@ -77,12 +77,22 @@
 
 ## Tổng kết
 
-Điền ngày cuối sprint.
+Kết thúc 02/11/2026 (sớm hơn lịch dự kiến 05/04 – 07/04/2027).
 
-**Đã xong**: <x/y task>.
+**Đã xong**: 7/7 task.
+- Migration `20261102100000_rename_messages_to_turns.sql` đổi tên tại chỗ 4 bảng, 6 cột, constraint (kể cả NOT NULL tự đặt tên của PG18) và index bằng khối `DO`, 7 hàm, trigger `user_turn_final`, viết lại thân 16 hàm; `down` khôi phục đúng thân hàm cũ.
+- Backend, API, frontend và tài liệu theo mapping. Thêm tên tránh trùng nghĩa: `MAX_ATTACHMENTS_PER_TURN` (tệp đính kèm của câu hỏi, khác `MAX_FILES_PER_TURN` của tệp agent tạo), `TurnState` (trạng thái của turn, khác `TurnStatus` kết quả lượt chạy của runner).
+- Kèm theo: `TurnContext` đánh dấu hai trường hàm là `SkipJsonSchema` vì adapter AG-UI không sinh được JSON schema của context và mỗi lượt ghi cảnh báo `get_schema_keys` rồi dùng khoá mặc định (lộ ra từ TD-019).
 
-**Kiểm tra**: <lệnh đã chạy và kết quả>.
+**Kiểm tra** (QD-16, phần liên quan):
+- Migration: up/down/up trên database dùng một lần; `pg_dump` sau `down` trùng hệt bản trước migration (chỉ khác token `\restrict`); `schema.sql` không còn chữ "message"; test phát lại migration khớp.
+- Backend: `ruff`, `pyrefly` sạch; `pytest` 154 passed.
+- Frontend: `pnpm test` 68 passed; `typecheck`, `eslint` sạch; `pnpm build` thành công.
+- Database dev: migrate tại chỗ, 751 turn, 12 liên kết tệp, 132 chat còn nguyên.
+- Kịch bản 1–4 chạy thật với model OpenRouter: chat cũ mở được; gửi, sửa, chạy lại, dừng qua `/turns…` với event `chat.turn`; `turn_not_found`; tìm kiếm trả `turn_id`, `?t=` mở đúng nhánh; share có `turns`, "Hỏi tiếp" tạo bản copy; export có `turns`. Giao diện gọi `POST /turns`, `GET /turns?from_turn_id=`, không lỗi console. Kịch bản 3 (resume lượt chờ tạo trước S11) không có dữ liệu thật để chạy; phần resume sau khởi động lại do test `test_question_pauses_then_resumes_after_a_restart` bao.
 
-**Thay đổi**: <TD-xxx>.
+**Lỗi**: không.
 
-**Dời**: <task và sprint nhận, hoặc "không">.
+**Thay đổi**: TD-021.
+
+**Dời**: không.

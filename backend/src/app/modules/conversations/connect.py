@@ -26,8 +26,8 @@ from uuid_utils.compat import uuid7
 
 from app.common.dependencies.auth import Principal
 from app.modules.ai.runtime.live import LiveStore, LiveView
-from app.modules.ai.runtime.runner import ASSISTANT_EVENT
-from app.modules.conversations.repository import MessageRepository
+from app.modules.ai.runtime.runner import TURN_EVENT
+from app.modules.conversations.repository import TurnRepository
 from app.modules.conversations.service import ConversationService
 
 LIVE_STATUSES = frozenset({"pending", "running"})
@@ -39,7 +39,7 @@ class ConnectService:
     def __init__(self, session: AsyncSession, *, live: LiveStore | None) -> None:
         self._session = session
         self._live = live
-        self._messages = MessageRepository(session)
+        self._turns = TurnRepository(session)
 
     async def open(
         self, *, user: Principal, conversation_id: UUID
@@ -49,10 +49,10 @@ class ConnectService:
         conversation = await ConversationService(self._session).require_owned(
             user=user, conversation_id=conversation_id
         )
-        active = await self._messages.get_active(conversation_id=conversation_id)
-        leaf = active["id"] if active else conversation["current_message_id"]
+        active = await self._turns.get_active(conversation_id=conversation_id)
+        leaf = active["id"] if active else conversation["current_turn_id"]
         rows = (
-            await self._messages.branch(conversation_id=conversation_id, leaf_id=leaf)
+            await self._turns.branch(conversation_id=conversation_id, leaf_id=leaf)
             if leaf
             else []
         )
@@ -86,11 +86,11 @@ class ConnectService:
         messages: list[dict[str, Any]] = [m for row in rows for m in row["content"]]
         if active is not None:
             yield CustomEvent(
-                name=ASSISTANT_EVENT,
+                name=TURN_EVENT,
                 value={
                     "conversationId": thread_id,
-                    "userMessageId": str(active["parent_message_id"]),
-                    "assistantMessageId": str(active["id"]),
+                    "userTurnId": str(active["parent_turn_id"]),
+                    "assistantTurnId": str(active["id"]),
                     "status": active["status"],
                 },
             )

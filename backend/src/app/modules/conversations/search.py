@@ -1,4 +1,4 @@
-"""Find a user's chats by title or message text (use case C09, QD-31).
+"""Find a user's chats by title or turn text (use case C09, QD-31).
 
 PostgreSQL compares `chat_app.search_key` forms (lower case, no accents) with
 trigram indexes; this module builds the pattern and the snippet shown for a

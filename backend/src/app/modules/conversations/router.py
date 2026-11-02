@@ -22,10 +22,10 @@ from app.modules.conversations.schemas import (
     ConversationResponse,
     ConversationSearchResponse,
     ConversationUpdate,
-    EditMessage,
+    EditTurn,
     HistoryResponse,
-    ResumeMessage,
-    SendMessage,
+    ResumeTurn,
+    SendTurn,
     StopResponse,
 )
 from app.modules.conversations.search import MAX_QUERY, MIN_QUERY
@@ -95,8 +95,8 @@ async def search_conversations(
     q: Annotated[str, Query(min_length=MIN_QUERY, max_length=MAX_QUERY)],
     params: Annotated[PageParams, Depends(page_params)],
 ) -> ConversationSearchResponse:
-    """Own chats matching `q` by title or message text, ignoring accents and
-    case; each with the newest matching message and a snippet."""
+    """Own chats matching `q` by title or turn text, ignoring accents and
+    case; each with the newest matching turn and a snippet."""
     return await ConversationService(session).search(
         user=user, workspace=workspace, query=q, params=params
     )
@@ -156,29 +156,29 @@ async def delete_conversation(
     )
 
 
-@router.get("/conversations/{conversation_id}/messages", response_model=HistoryResponse)
+@router.get("/conversations/{conversation_id}/turns", response_model=HistoryResponse)
 async def get_history(
     conversation_id: UUID,
     user: CurrentUser,
     session: SessionDep,
-    from_message_id: Annotated[
+    from_turn_id: Annotated[
         UUID | None,
-        Query(description="Open the branch through this message instead"),
+        Query(description="Open the branch through this turn instead"),
     ] = None,
 ) -> HistoryResponse:
     return await ConversationService(session).history(
-        user=user, conversation_id=conversation_id, from_message_id=from_message_id
+        user=user, conversation_id=conversation_id, from_turn_id=from_turn_id
     )
 
 
 @router.post(
-    "/conversations/{conversation_id}/messages",
+    "/conversations/{conversation_id}/turns",
     response_class=StreamingResponse,
     responses=TURN_RESPONSES,
 )
-async def send_message(
+async def send_turn(
     conversation_id: UUID,
-    data: SendMessage,
+    data: SendTurn,
     request: Request,
     user: CurrentUser,
     session: SessionDep,
@@ -197,14 +197,14 @@ async def send_message(
 
 
 @router.post(
-    "/conversations/{conversation_id}/messages/{message_id}/edit",
+    "/conversations/{conversation_id}/turns/{turn_id}/edit",
     response_class=StreamingResponse,
     responses=TURN_RESPONSES,
 )
-async def edit_message(
+async def edit_turn(
     conversation_id: UUID,
-    message_id: UUID,
-    data: EditMessage,
+    turn_id: UUID,
+    data: EditTurn,
     request: Request,
     user: CurrentUser,
     session: SessionDep,
@@ -214,40 +214,40 @@ async def edit_message(
     """Answer a new version of a user question; the old branch stays."""
     turn = await TurnService(
         session, runner=runner, session_factory=SessionLocal, storage=storage
-    ).edit(user=user, conversation_id=conversation_id, message_id=message_id, data=data)
+    ).edit(user=user, conversation_id=conversation_id, turn_id=turn_id, data=data)
     return _turn_stream(turn, request)
 
 
 @router.post(
-    "/conversations/{conversation_id}/messages/{message_id}/regenerate",
+    "/conversations/{conversation_id}/turns/{turn_id}/regenerate",
     response_class=StreamingResponse,
     responses=TURN_RESPONSES,
 )
-async def regenerate_message(
+async def regenerate_turn(
     conversation_id: UUID,
-    message_id: UUID,
+    turn_id: UUID,
     request: Request,
     user: CurrentUser,
     session: SessionDep,
     runner: RunnerDep,
     storage: OptionalStorageDep,
 ) -> StreamingResponse:
-    """Answer the same question again beside the given assistant message."""
+    """Answer the same question again beside the given assistant turn."""
     turn = await TurnService(
         session, runner=runner, session_factory=SessionLocal, storage=storage
-    ).regenerate(user=user, conversation_id=conversation_id, message_id=message_id)
+    ).regenerate(user=user, conversation_id=conversation_id, turn_id=turn_id)
     return _turn_stream(turn, request)
 
 
 @router.post(
-    "/conversations/{conversation_id}/messages/{message_id}/resume",
+    "/conversations/{conversation_id}/turns/{turn_id}/resume",
     response_class=StreamingResponse,
     responses=TURN_RESPONSES,
 )
-async def resume_message(
+async def resume_turn(
     conversation_id: UUID,
-    message_id: UUID,
-    data: ResumeMessage,
+    turn_id: UUID,
+    data: ResumeTurn,
     request: Request,
     user: CurrentUser,
     session: SessionDep,
@@ -258,26 +258,24 @@ async def resume_message(
     # Storage too: the continued turn may create files (D06).
     turn = await TurnService(
         session, runner=runner, session_factory=SessionLocal, storage=storage
-    ).resume(
-        user=user, conversation_id=conversation_id, message_id=message_id, data=data
-    )
+    ).resume(user=user, conversation_id=conversation_id, turn_id=turn_id, data=data)
     return _turn_stream(turn, request)
 
 
 @router.post(
-    "/conversations/{conversation_id}/messages/{message_id}/stop",
+    "/conversations/{conversation_id}/turns/{turn_id}/stop",
     response_model=StopResponse,
 )
-async def stop_message(
+async def stop_turn(
     conversation_id: UUID,
-    message_id: UUID,
+    turn_id: UUID,
     user: CurrentUser,
     session: SessionDep,
     runner: RunnerDep,
 ) -> StopResponse:
     """Stop an assistant turn, keeping what it produced so far."""
     return await TurnService(session, runner=runner, session_factory=SessionLocal).stop(
-        user=user, conversation_id=conversation_id, message_id=message_id
+        user=user, conversation_id=conversation_id, turn_id=turn_id
     )
 
 

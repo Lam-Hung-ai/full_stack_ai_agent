@@ -3,7 +3,7 @@ import type { components } from "@/generated/api/schema";
 
 type Schemas = components["schemas"];
 export type SharedConversation = Schemas["SharedConversation"];
-export type SharedMessage = Schemas["SharedMessage"];
+export type SharedTurn = Schemas["SharedTurn"];
 export type CopyResult = Schemas["CopyResponse"];
 type FileLink = Schemas["DownloadResponse"];
 

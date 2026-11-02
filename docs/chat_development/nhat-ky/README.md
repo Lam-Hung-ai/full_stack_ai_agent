@@ -148,3 +148,6 @@ Loại: `BẮT ĐẦU`, `KẾT THÚC`, `LỖI`, `SỬA`, `THAY ĐỔI`, `QUYẾT
 | 02/11/2026 | Sau S10 | THAY ĐỔI | TD-019 | Tái tổ chức module `ai` theo agents/tools/models/prompts/runtime; runtime context thay `ContextVar`; model dự phòng `OPENROUTER_FALLBACK_MODELS` | — |
 | 02/11/2026 | — | QUYẾT ĐỊNH | QD-33, QD-34 | Đổi tên message thành turn ở mọi tầng; bảng LLM model lưu key mã hoá, toàn hệ thống, superuser quản lý | — |
 | 02/11/2026 | — | THAY ĐỔI | TD-020 | Thêm S11 đổi tên turn và S12 quản lý LLM vào lộ trình | — |
+| 02/11/2026 | S11 | BẮT ĐẦU | — | Đổi tên message thành turn (QD-33) | — |
+| 02/11/2026 | S11 | THAY ĐỔI | TD-021 | Bảng, cột, hàm, API, event, frontend đổi từ message sang turn | CH-S11-DB-01 → DOC-02 |
+| 02/11/2026 | S11 | KẾT THÚC | — | Xong 7/7 task; backend 154 test, frontend 68 test xanh; migration up/down/up khớp; kịch bản đạt | — |

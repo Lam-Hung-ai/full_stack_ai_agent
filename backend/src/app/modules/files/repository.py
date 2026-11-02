@@ -7,10 +7,10 @@ from sqlalchemy import RowMapping, delete, exists, insert, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.generated_tables import t_conversation_copy_files as copy_files
-from app.database.generated_tables import t_message_files as message_files
-from app.database.generated_tables import t_messages as messages
 from app.database.generated_tables import t_share_snapshot_files as snapshot_files
 from app.database.generated_tables import t_stored_files as stored_files
+from app.database.generated_tables import t_turn_files as turn_files
+from app.database.generated_tables import t_turns as turns
 
 
 class FileRepository:
@@ -33,14 +33,14 @@ class FileRepository:
     async def in_conversation(
         self, *, conversation_id: UUID, file_id: UUID
     ) -> RowMapping | None:
-        """The file, if a message of the conversation is linked to it
+        """The file, if a turn of the conversation is linked to it
         (as `can_read_conversation_file` requires)."""
         statement = (
             select(stored_files)
-            .join(message_files, message_files.c.stored_file_id == stored_files.c.id)
-            .join(messages, messages.c.id == message_files.c.message_id)
+            .join(turn_files, turn_files.c.stored_file_id == stored_files.c.id)
+            .join(turns, turns.c.id == turn_files.c.turn_id)
             .where(
-                messages.c.conversation_id == conversation_id,
+                turns.c.conversation_id == conversation_id,
                 stored_files.c.id == file_id,
                 stored_files.c.deleted_at.is_(None),
             )
@@ -49,34 +49,34 @@ class FileRepository:
         return (await self._session.execute(statement)).mappings().one_or_none()
 
     async def links_of(self, *, conversation_id: UUID) -> list[RowMapping]:
-        """(message_id, file row) of every file attached in the conversation."""
+        """(turn_id, file row) of every file attached in the conversation."""
         statement = (
-            select(message_files.c.message_id, stored_files)
-            .join(stored_files, stored_files.c.id == message_files.c.stored_file_id)
-            .join(messages, messages.c.id == message_files.c.message_id)
-            .where(messages.c.conversation_id == conversation_id)
+            select(turn_files.c.turn_id, stored_files)
+            .join(stored_files, stored_files.c.id == turn_files.c.stored_file_id)
+            .join(turns, turns.c.id == turn_files.c.turn_id)
+            .where(turns.c.conversation_id == conversation_id)
         )
         return list((await self._session.execute(statement)).mappings())
 
-    async def link(self, *, message_id: UUID, file_ids: Collection[UUID]) -> None:
-        """Attach files to a message that is not terminal yet (trigger)."""
+    async def link(self, *, turn_id: UUID, file_ids: Collection[UUID]) -> None:
+        """Attach files to a turn that is not terminal yet (trigger)."""
         if file_ids:
             await self._session.execute(
-                insert(message_files).values(
-                    [{"message_id": message_id, "stored_file_id": f} for f in file_ids]
+                insert(turn_files).values(
+                    [{"turn_id": turn_id, "stored_file_id": f} for f in file_ids]
                 )
             )
 
     async def unattached(
         self, *, created_before: datetime, limit: int
     ) -> list[RowMapping]:
-        """Files nothing refers to: no message, snapshot or copy (RR-17)."""
+        """Files nothing refers to: no turn, snapshot or copy (RR-17)."""
         statement = (
             select(stored_files)
             .where(
                 stored_files.c.deleted_at.is_(None),
                 stored_files.c.created_at < created_before,
-                ~exists().where(message_files.c.stored_file_id == stored_files.c.id),
+                ~exists().where(turn_files.c.stored_file_id == stored_files.c.id),
                 ~exists().where(snapshot_files.c.stored_file_id == stored_files.c.id),
                 ~exists().where(
                     or_(

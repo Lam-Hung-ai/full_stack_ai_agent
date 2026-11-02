@@ -19,7 +19,7 @@ from app.common.storage.file_types import (
 
 MAX_FILE_BYTES = 10 * 1024 * 1024
 #: Files on one question.
-MAX_FILES_PER_MESSAGE = 10
+MAX_ATTACHMENTS_PER_TURN = 10
 #: Characters of a text file given to the model; the rest is cut.
 MAX_TEXT_CHARS = 200_000
 #: Bytes of files given to the model in one turn, newest first; older files
@@ -52,7 +52,7 @@ CHAT_FILE_TYPES: dict[str, ChatFileType] = {
     )
 }
 
-#: Scheme of the placeholder source a stored message keeps for a file: the
+#: Scheme of the placeholder source a stored turn keeps for a file: the
 #: bytes are fetched again for each turn, presigned URLs are never stored.
 STORED_FILE_SCHEME = "stored-file:"
 
