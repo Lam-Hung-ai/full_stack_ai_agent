@@ -56,6 +56,10 @@ const ANSWER_CLASS = cn(
   "*:max-w-[35em] [&>div]:max-w-none",
   "[&_:is(h1,h2,h3)]:font-semibold [&_:is(h1,h2,h3)]:leading-tight",
   "[&_h1]:text-2xl [&_h2]:text-xl [&_h3]:text-lg",
+  // Tables are data to scan: the interface sans with aligned digits.
+  "[&_table]:font-sans [&_table]:text-sm [&_table]:tabular-nums",
+  // Inline code scales with the text around it (mono looks large per px).
+  "[&_:not(pre)>code]:text-[0.875em]",
 );
 
 /** Turn footers: small, quiet icons. */
@@ -243,7 +247,8 @@ function AnswerRow({
     // One block, so the footer sits right under the answer instead of a
     // whole conversation gap below it.
     <div className="flex flex-col gap-2">
-      <div className="flex flex-col gap-8">
+      {/* Steps of one answer sit closer than turns do (32px). */}
+      <div className="flex flex-col gap-3">
         {items.length === 0 && waiting && (
           <Message from="assistant">
             <MessageContent>
@@ -378,7 +383,7 @@ function TurnView({
 
           return (
             <Fragment key={toolCall.id}>
-              <Tool className="border-border/60">
+              <Tool className="mb-0 border-border/60">
                 <ToolHeader
                   // Steps behind the answer: a regular-weight, muted name.
                   className="[&_span.font-medium]:font-normal [&_span.font-medium]:text-muted-foreground"
