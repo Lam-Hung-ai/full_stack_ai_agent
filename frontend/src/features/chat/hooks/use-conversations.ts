@@ -13,7 +13,7 @@ import { createFolder, deleteFolder, listFolders, renameFolder } from "../api/fo
 import type { ConversationFilter, ConversationUpdate } from "../types/chat.types";
 
 export const chatKeys = {
-  // Workspace-scoped, so switching workspace drops them (WorkspaceSwitcher).
+  // Workspace-scoped, so switching workspace drops them (WorkspaceMenu).
   conversations: (workspaceId: string) => ["workspaces", workspaceId, "conversations"] as const,
   conversationList: (workspaceId: string, filter: ConversationFilter) =>
     [...chatKeys.conversations(workspaceId), filter] as const,
@@ -76,7 +76,12 @@ export function useConversationActions(workspaceId: string) {
   const update = useMutation({
     mutationFn: ({ id, changes }: { id: string; changes: ConversationUpdate }) =>
       updateConversation(id, changes),
-    onSuccess: refresh,
+    // The open chat's header shows the same title and state.
+    onSuccess: (_, { id }) =>
+      Promise.all([
+        refresh(),
+        queryClient.invalidateQueries({ queryKey: chatKeys.conversation(id), exact: true }),
+      ]),
   });
   const remove = useMutation({
     mutationFn: (id: string) => deleteConversation(id),

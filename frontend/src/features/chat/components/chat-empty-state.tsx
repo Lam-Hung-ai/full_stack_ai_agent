@@ -3,10 +3,14 @@ import { ConversationEmptyState } from "@/components/ai-elements/conversation";
 
 export function ChatEmptyState() {
   return (
-    <ConversationEmptyState
-      description="Hỏi bất cứ điều gì — agent trả lời và có thể dùng công cụ."
-      icon={<SparklesIcon className="size-6" />}
-      title="Bắt đầu cuộc trò chuyện"
-    />
+    <ConversationEmptyState className="size-auto">
+      <div className="flex items-center gap-3">
+        <SparklesIcon className="size-7 text-primary" />
+        <h2 className="font-serif text-3xl">Hôm nay bạn cần gì?</h2>
+      </div>
+      <p className="text-muted-foreground text-sm">
+        Hỏi bất cứ điều gì — agent trả lời và có thể dùng công cụ.
+      </p>
+    </ConversationEmptyState>
   );
 }

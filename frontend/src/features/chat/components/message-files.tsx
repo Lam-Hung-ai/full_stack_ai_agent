@@ -1,12 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { FileIcon } from "lucide-react";
+import { FileTextIcon } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  Attachment,
+  AttachmentContent,
+  AttachmentDescription,
+  AttachmentMedia,
+  AttachmentTitle,
+  AttachmentTrigger,
+} from "@/components/ui/attachment";
 import { type FileLink, getFileLink } from "../api/files-api";
 import { cn } from "@/lib/utils";
 import { chatKeys } from "../hooks/use-conversations";
-import { type AttachedFile, formatBytes } from "../utils/files";
+import { type AttachedFile, fileLabel } from "../utils/files";
 
 /** Where links to a message's files come from: the owner's chat or a share. */
 export type FileLinkSource = {
@@ -38,9 +46,7 @@ export function MessageFiles({
 }) {
   if (files.length === 0) return null;
   return (
-    <div
-      className={cn("flex flex-wrap gap-2", align === "end" ? "justify-end" : "justify-start")}
-    >
+    <div className={cn("flex flex-wrap gap-2", align === "end" ? "justify-end" : "justify-start")}>
       {files.map((file) =>
         file.isImage ? (
           <FileImage file={file} key={file.id} source={source} />
@@ -91,7 +97,11 @@ function FileImage({ source, file }: { source: FileLinkSource; file: AttachedFil
   return (
     <button className="flex flex-col items-end gap-1" onClick={() => void open()} type="button">
       {/* eslint-disable-next-line @next/next/no-img-element -- a presigned URL, not a static asset */}
-      <img alt={file.name} className="max-h-48 max-w-64 rounded-md border object-contain" src={link.data.url} />
+      <img
+        alt={file.name}
+        className="max-h-56 max-w-72 rounded-xl border object-contain"
+        src={link.data.url}
+      />
       {failed && <OpenFailed />}
     </button>
   );
@@ -100,18 +110,18 @@ function FileImage({ source, file }: { source: FileLinkSource; file: AttachedFil
 function FileButton({ source, file }: { source: FileLinkSource; file: AttachedFile }) {
   const { open, failed } = useOpenFile(source, file);
   return (
-    <button
-      className="flex max-w-64 items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-left text-sm hover:bg-muted"
-      onClick={() => void open()}
-      type="button"
-    >
-      <FileIcon className="size-4 shrink-0" />
-      <span className="min-w-0">
-        <span className="block truncate">{file.name}</span>
-        <span className="text-muted-foreground text-xs">{formatBytes(file.sizeBytes)}</span>
-        {failed && <OpenFailed />}
-      </span>
-    </button>
+    <Attachment className="max-w-72" state={failed ? "error" : "done"} title={file.name}>
+      <AttachmentMedia>
+        <FileTextIcon />
+      </AttachmentMedia>
+      <AttachmentContent>
+        <AttachmentTitle>{file.name}</AttachmentTitle>
+        <AttachmentDescription>
+          {failed ? "Không mở được tệp, thử lại sau." : fileLabel(file.name, file.sizeBytes)}
+        </AttachmentDescription>
+      </AttachmentContent>
+      <AttachmentTrigger aria-label={`Mở ${file.name}`} onClick={() => void open()} />
+    </Attachment>
   );
 }
 

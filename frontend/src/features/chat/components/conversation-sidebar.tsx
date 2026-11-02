@@ -1,30 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  ArchiveIcon,
-  ChevronRightIcon,
-  FolderPlusIcon,
-  PlusIcon,
-  SearchIcon,
-  XIcon,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ChevronDownIcon, FolderPlusIcon, PlusIcon, SearchIcon } from "lucide-react";
+import { NameDialog } from "@/components/shared/name-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Input } from "@/components/ui/input";
+import { Kbd } from "@/components/ui/kbd";
+import {
+  SidebarGroup,
+  SidebarGroupAction,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  useSidebar,
+} from "@/components/ui/sidebar";
 import { useCurrentWorkspace } from "@/features/workspaces";
-import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { cn } from "@/lib/utils";
 import { useFolderActions, useFolders } from "../hooks/use-conversations";
-import { ConversationList } from "./conversation-list";
-import { ConversationSearchResults } from "./conversation-search";
-import { searchTerm } from "../utils/search";
 import { folderErrorMessage } from "../utils/folders";
+import { ConversationList } from "./conversation-list";
+import { ConversationSearchDialog } from "./conversation-search";
 import { FolderGroup } from "./folder-group";
-import { NameDialog } from "@/components/shared/name-dialog";
-
-const SEARCH_DELAY_MS = 300;
 
 export function ConversationSidebar() {
   const workspace = useCurrentWorkspace();
@@ -34,105 +32,131 @@ export function ConversationSidebar() {
 }
 
 function WorkspaceSidebar({ workspaceId }: { workspaceId: string }) {
+  const { isMobile, setOpenMobile } = useSidebar();
+  const [searching, setSearching] = useState(false);
+
+  // Ctrl+K (Cmd+K on a Mac) opens the search from anywhere.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() === "k" && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        setSearching(true);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  return (
+    <nav aria-label="Cuộc trò chuyện" className="flex flex-col">
+      <SidebarGroup>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild tooltip="Chat mới">
+              <Link href="/" onClick={() => isMobile && setOpenMobile(false)}>
+                <PlusIcon />
+                <span>Chat mới</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton onClick={() => setSearching(true)} tooltip="Tìm kiếm">
+              <SearchIcon />
+              <span className="flex-1">Tìm kiếm</span>
+              <Kbd className="group-data-[collapsible=icon]:hidden">Ctrl K</Kbd>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarGroup>
+      {/* The lists need the full width: the icon rail shows only the actions. */}
+      <div className="flex flex-col group-data-[collapsible=icon]:hidden">
+        <FoldersSection workspaceId={workspaceId} />
+        <Section title="Gần đây">
+          <ConversationList
+            emptyText="Chưa có cuộc trò chuyện nào."
+            filter={{ kind: "unfiled" }}
+            workspaceId={workspaceId}
+          />
+        </Section>
+        <Section defaultOpen={false} title="Đã lưu trữ">
+          <ConversationList
+            emptyText="Không có cuộc trò chuyện lưu trữ."
+            filter={{ kind: "archived" }}
+            workspaceId={workspaceId}
+          />
+        </Section>
+      </div>
+      {searching && (
+        <ConversationSearchDialog onClose={() => setSearching(false)} workspaceId={workspaceId} />
+      )}
+    </nav>
+  );
+}
+
+/** A sidebar section whose title folds it; content mounts only while open. */
+function Section({
+  title,
+  defaultOpen = true,
+  action,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <Collapsible asChild onOpenChange={setOpen} open={open}>
+      <SidebarGroup className="py-1">
+        <SidebarGroupLabel asChild className="w-fit gap-1 hover:text-sidebar-foreground">
+          <CollapsibleTrigger>
+            {title}
+            <ChevronDownIcon
+              className={cn("size-3! transition-transform", !open && "-rotate-90")}
+            />
+          </CollapsibleTrigger>
+        </SidebarGroupLabel>
+        {action}
+        <CollapsibleContent asChild>
+          <SidebarGroupContent>{open && children}</SidebarGroupContent>
+        </CollapsibleContent>
+      </SidebarGroup>
+    </Collapsible>
+  );
+}
+
+function FoldersSection({ workspaceId }: { workspaceId: string }) {
   const folders = useFolders(workspaceId);
   const { create } = useFolderActions(workspaceId);
   const [creating, setCreating] = useState(false);
-  const [showArchived, setShowArchived] = useState(false);
-  const [query, setQuery] = useState("");
-  const term = searchTerm(useDebouncedValue(query, SEARCH_DELAY_MS));
   const folderList = folders.data?.data ?? [];
 
   return (
-    <nav aria-label="Cuộc trò chuyện" className="flex h-full flex-col gap-2 p-2">
-      <Button asChild className="justify-start" size="sm" variant="outline">
-        <Link href="/">
-          <PlusIcon />
-          Chat mới
-        </Link>
-      </Button>
-      <div className="relative">
-        <SearchIcon className="-translate-y-1/2 pointer-events-none absolute top-1/2 left-2 size-3.5 text-muted-foreground" />
-        <Input
-          aria-label="Tìm cuộc trò chuyện"
-          className="h-8 pr-7 pl-7 text-sm"
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => event.key === "Escape" && setQuery("")}
-          placeholder="Tìm theo tên hoặc nội dung"
-          value={query}
-        />
-        {query && (
-          <Button
-            aria-label="Xoá tìm kiếm"
-            className="-translate-y-1/2 absolute top-1/2 right-1"
-            onClick={() => setQuery("")}
-            size="icon-xs"
-            variant="ghost"
+    <>
+      <Section
+        action={
+          <SidebarGroupAction
+            aria-label="Folder mới"
+            className="top-2.5"
+            onClick={() => setCreating(true)}
+            title="Folder mới"
           >
-            <XIcon />
-          </Button>
-        )}
-      </div>
-      {term ? (
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-          <ConversationSearchResults term={term} workspaceId={workspaceId} />
-        </div>
-      ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
-          <section aria-labelledby="sidebar-folders">
-            <div className="flex items-center justify-between px-2">
-              <h2 className="font-medium text-muted-foreground text-xs" id="sidebar-folders">
-                Folder
-              </h2>
-              <Button
-                aria-label="Folder mới"
-                onClick={() => setCreating(true)}
-                size="icon-xs"
-                variant="ghost"
-              >
-                <FolderPlusIcon />
-              </Button>
-            </div>
+            <FolderPlusIcon />
+          </SidebarGroupAction>
+        }
+        title="Folder"
+      >
+        {folders.isSuccess && folderList.length === 0 ? (
+          <p className="px-2 py-1 text-muted-foreground text-sm">Chưa có folder.</p>
+        ) : (
+          <SidebarMenu>
             {folderList.map((folder) => (
-              <FolderGroup
-                folder={folder}
-                folders={folderList}
-                key={folder.id}
-                workspaceId={workspaceId}
-              />
+              <FolderGroup folder={folder} key={folder.id} workspaceId={workspaceId} />
             ))}
-          </section>
-          <section aria-labelledby="sidebar-chats">
-            <h2 className="px-2 pb-1 font-medium text-muted-foreground text-xs" id="sidebar-chats">
-              Cuộc trò chuyện
-            </h2>
-            <ConversationList
-              emptyText="Chưa có cuộc trò chuyện nào."
-              filter={{ kind: "unfiled" }}
-              folders={folderList}
-              workspaceId={workspaceId}
-            />
-          </section>
-        </div>
-      )}
-      <Collapsible onOpenChange={setShowArchived} open={showArchived}>
-        <CollapsibleTrigger className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-muted-foreground text-sm hover:bg-accent">
-          <ChevronRightIcon
-            className={cn("size-3.5 transition-transform", showArchived && "rotate-90")}
-          />
-          <ArchiveIcon className="size-3.5" />
-          Đã lưu trữ
-        </CollapsibleTrigger>
-        <CollapsibleContent className="max-h-60 overflow-y-auto">
-          {showArchived && (
-            <ConversationList
-              emptyText="Không có cuộc trò chuyện lưu trữ."
-              filter={{ kind: "archived" }}
-              folders={folderList}
-              workspaceId={workspaceId}
-            />
-          )}
-        </CollapsibleContent>
-      </Collapsible>
+          </SidebarMenu>
+        )}
+      </Section>
       {creating && (
         <NameDialog
           error={create.isError ? folderErrorMessage(create.error) : null}
@@ -147,6 +171,6 @@ function WorkspaceSidebar({ workspaceId }: { workspaceId: string }) {
           title="Folder mới"
         />
       )}
-    </nav>
+    </>
   );
 }

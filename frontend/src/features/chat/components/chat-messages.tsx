@@ -18,7 +18,13 @@ import {
   MessageResponse,
 } from "@/components/ai-elements/message";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning";
-import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "@/components/ai-elements/tool";
+import {
+  Tool,
+  ToolContent,
+  ToolHeader,
+  ToolInput,
+  ToolOutput,
+} from "@/components/ai-elements/tool";
 import type { RowView } from "../types/chat.types";
 import { buildItems, findToolResult, parseToolArgs, type Turn } from "../utils/agui-messages";
 import { isActive, isTerminal } from "../utils/history";
@@ -64,7 +70,7 @@ export function ChatMessages({
   const locked = isBusy || waitingForUser;
   return (
     <Conversation>
-      <ConversationContent>
+      <ConversationContent className="mx-auto w-full max-w-3xl px-4 py-6">
         {rows.length === 0
           ? empty
           : rows.map((row) =>
@@ -127,7 +133,7 @@ function QuestionRow({
     <Message from="user">
       {fileSource && <MessageFiles files={files} source={fileSource} />}
       {text && (
-        <MessageContent>
+        <MessageContent className="text-[0.9375rem] group-[.is-user]:rounded-2xl">
           <MessageResponse>{text}</MessageResponse>
         </MessageContent>
       )}
@@ -170,7 +176,8 @@ function AnswerRow({
   const waiting = isStreaming || (!row.live && isActive(row));
   const showActions = actions && !row.live && isTerminal(row);
   // Only a saved pause can be answered; the server checks it again.
-  const onAnswer = answerable && !row.live && row.status === "requires_action" ? actions?.onAnswer : undefined;
+  const onAnswer =
+    answerable && !row.live && row.status === "requires_action" ? actions?.onAnswer : undefined;
 
   return (
     <>
@@ -274,7 +281,7 @@ function TurnView({
 
   return (
     <Message from="assistant">
-      <MessageContent>
+      <MessageContent className="text-base">
         {reasoning && (
           <Reasoning defaultOpen={isReasoningStreaming} isStreaming={isReasoningStreaming}>
             <ReasoningTrigger>
@@ -284,7 +291,7 @@ function TurnView({
           </Reasoning>
         )}
         {message.content ? (
-          <MessageResponse>{message.content}</MessageResponse>
+          <MessageResponse className="font-serif leading-7">{message.content}</MessageResponse>
         ) : toolCalls.length === 0 && !reasoning && isStreaming ? (
           <Loader />
         ) : null}

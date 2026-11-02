@@ -1,27 +1,47 @@
-/** Application frame: a top bar, an optional sidebar, a full-height main area. */
+import {
+  Sidebar,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarInset,
+  SidebarProvider,
+  SidebarRail,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
+
+/**
+ * Application frame: a full-height sidebar that folds to an icon rail
+ * (Ctrl+B) and becomes a sheet on phones, beside the main area.
+ */
 export function AppShell({
-  start,
-  end,
+  brand,
   sidebar,
+  footer,
   children,
 }: {
-  start?: React.ReactNode;
-  end?: React.ReactNode;
+  brand: React.ReactNode;
   sidebar?: React.ReactNode;
+  footer?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex h-dvh flex-col">
-      <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b px-4">
-        <div className="flex min-w-0 items-center gap-2">{start}</div>
-        <div className="flex items-center gap-2">{end}</div>
-      </header>
-      <div className="flex min-h-0 flex-1">
-        {sidebar && (
-          <aside className="hidden w-64 shrink-0 border-r md:block">{sidebar}</aside>
-        )}
-        <main className="min-w-0 flex-1">{children}</main>
-      </div>
-    </div>
+    <SidebarProvider className="h-dvh min-h-0">
+      <Sidebar collapsible="icon">
+        <SidebarHeader className="flex-row items-center gap-1">
+          <SidebarTrigger aria-label="Ẩn hoặc hiện thanh bên" />
+          <span className="truncate font-serif font-semibold text-lg group-data-[collapsible=icon]:hidden">
+            {brand}
+          </span>
+        </SidebarHeader>
+        <div
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto group-data-[collapsible=icon]:overflow-hidden"
+          data-sidebar="content"
+        >
+          {sidebar}
+        </div>
+        {footer && <SidebarFooter>{footer}</SidebarFooter>}
+        <SidebarRail />
+      </Sidebar>
+      <SidebarInset className="min-h-0 min-w-0 overflow-hidden">{children}</SidebarInset>
+    </SidebarProvider>
   );
 }

@@ -85,6 +85,19 @@ export function useConversationChat(conversationId: string, initialAnchor: strin
     acceptRef.current = null;
   }, []);
 
+  // The sidebar lists and the chat's own title (named in the background).
+  const refreshListing = useCallback(
+    () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workspaces"] }),
+        queryClient.invalidateQueries({
+          queryKey: chatKeys.conversation(conversationId),
+          exact: true,
+        }),
+      ]),
+    [conversationId, queryClient],
+  );
+
   const updateLive = useCallback((next: (current: LiveTurn | null) => LiveTurn | null) => {
     liveRef.current = next(liveRef.current);
     setLive(liveRef.current);
@@ -198,20 +211,17 @@ export function useConversationChat(conversationId: string, initialAnchor: strin
         // nothing was saved.
         settleAccepted(Boolean(assistantId));
         updateLive(() => null);
-        await queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+        await refreshListing();
         if (assistantId && turn.kept.length === 0 && !turn.continued) {
           // A new chat is named in the background (C01) and the name may
           // land after the answer: look again a little later.
           for (const delay of TITLE_REFRESH_MS) {
-            setTimeout(
-              () => void queryClient.invalidateQueries({ queryKey: ["workspaces"] }),
-              delay,
-            );
+            setTimeout(() => void refreshListing(), delay);
           }
         }
       }
     },
-    [conversationId, queryClient, settleAccepted, updateLive],
+    [conversationId, queryClient, refreshListing, settleAccepted, updateLive],
   );
 
   /** Resolves once the server took the question (true) or refused it. */

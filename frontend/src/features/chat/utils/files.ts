@@ -106,6 +106,13 @@ export function formatBytes(bytes: number): string {
   return `${unit === 0 ? value : value.toFixed(1)} ${SIZE_UNITS[unit]}`;
 }
 
+/** "PDF · 1.2 MB": a file's extension and size, under its name. */
+export function fileLabel(name: string, sizeBytes: number): string {
+  const dot = name.lastIndexOf(".");
+  const kind = dot > 0 ? name.slice(dot + 1).toUpperCase() : "Tệp";
+  return `${kind} · ${formatBytes(sizeBytes)}`;
+}
+
 /** Name of the tool that writes a file into the answer (D06). */
 export const CREATE_FILE_TOOL = "create_file";
 

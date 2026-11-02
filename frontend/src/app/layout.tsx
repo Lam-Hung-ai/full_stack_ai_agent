@@ -1,18 +1,16 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono, Source_Serif_4 } from "next/font/google";
 import { AppProviders } from "./providers";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+// Each with the Vietnamese subset, so diacritics never fall back to another face.
+const sans = Inter({ variable: "--font-inter", subsets: ["latin", "vietnamese"] });
+const serif = Source_Serif_4({
+  variable: "--font-source-serif",
+  subsets: ["latin", "vietnamese"],
 });
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const mono = JetBrains_Mono({ variable: "--font-jetbrains", subsets: ["latin", "vietnamese"] });
 
 export const metadata: Metadata = {
   title: "Agent Chat",
@@ -23,7 +21,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="vi"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${sans.variable} ${serif.variable} ${mono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <AppProviders>{children}</AppProviders>

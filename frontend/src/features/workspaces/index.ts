@@ -1,4 +1,4 @@
-export { WorkspaceSwitcher } from "./components/workspace-switcher";
+export { CurrentWorkspaceName, WorkspaceMenu } from "./components/workspace-menu";
 export {
   useCurrentWorkspace,
   useSelectWorkspace,

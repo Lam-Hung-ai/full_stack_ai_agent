@@ -9,10 +9,21 @@ import { contentTypeOf, MAX_FILE_BYTES, MAX_FILES } from "../utils/files";
 export type Attachment = {
   localId: string;
   name: string;
+  sizeBytes: number;
   status: "uploading" | "ready" | "failed";
+  /** A local object URL showing a picture before it is sent. */
+  previewUrl?: string;
   file?: ChatFile;
   error?: string;
 };
+
+function preview(file: File): string | undefined {
+  return contentTypeOf(file).startsWith("image/") ? URL.createObjectURL(file) : undefined;
+}
+
+function release(items: readonly Attachment[]) {
+  for (const item of items) if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+}
 
 const ERRORS: Record<string, string> = {
   unsupported_file_type: "Loại tệp này chưa được hỗ trợ.",
@@ -25,8 +36,7 @@ const ERRORS: Record<string, string> = {
 };
 
 function uploadError(error: unknown): string {
-  const code =
-    error instanceof ApiError || error instanceof StorageUploadError ? error.code : null;
+  const code = error instanceof ApiError || error instanceof StorageUploadError ? error.code : null;
   return (code && ERRORS[code]) || "Không tải được tệp.";
 }
 
@@ -38,10 +48,18 @@ function uploadError(error: unknown): string {
 export function useAttachments(workspaceId: string | undefined) {
   const [items, setItems] = useState<Attachment[]>([]);
   const controllers = useRef(new Map<string, AbortController>());
+  // The latest list, for releasing previews when the composer goes away.
+  const itemsRef = useRef(items);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
 
   useEffect(() => {
     const pending = controllers.current;
-    return () => pending.forEach((controller) => controller.abort());
+    return () => {
+      pending.forEach((controller) => controller.abort());
+      release(itemsRef.current);
+    };
   }, []);
 
   const update = (localId: string, change: Partial<Attachment>) =>
@@ -89,7 +107,9 @@ export function useAttachments(workspaceId: string | undefined) {
         ...picked.map(({ file, localId }) => ({
           localId,
           name: file.name,
+          sizeBytes: file.size,
           status: "uploading" as const,
+          previewUrl: preview(file),
         })),
       ]);
       for (const { file, localId } of picked) void upload(localId, file);
@@ -99,10 +119,14 @@ export function useAttachments(workspaceId: string | undefined) {
 
   const remove = useCallback((localId: string) => {
     controllers.current.get(localId)?.abort();
+    release(itemsRef.current.filter((item) => item.localId === localId));
     setItems((current) => current.filter((item) => item.localId !== localId));
   }, []);
 
-  const clear = useCallback(() => setItems([]), []);
+  const clear = useCallback(() => {
+    release(itemsRef.current);
+    setItems([]);
+  }, []);
 
   return {
     items,

@@ -1,84 +1,170 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
-import { ArchiveIcon } from "lucide-react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Command as CommandPrimitive } from "cmdk";
+import { ArchiveIcon, MessageCircleIcon, SearchIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandDialog,
+  CommandGroup,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { DialogClose } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { cn } from "@/lib/utils";
-import { useConversationSearch } from "../hooks/use-conversations";
+import { useConversationSearch, useConversations } from "../hooks/use-conversations";
 import type { ConversationSearchItem } from "../types/chat.types";
-import { highlight } from "../utils/search";
+import { highlight, searchTerm } from "../utils/search";
 
-/** Chats matching `term`; each opens on the branch of its matching turn. */
-export function ConversationSearchResults({
+const SEARCH_DELAY_MS = 300;
+
+/**
+ * Search over the workspace's chats by name and content. Before a term is
+ * typed it lists the recent chats; a result opens on its matching turn.
+ */
+export function ConversationSearchDialog({
   workspaceId,
-  term,
+  onClose,
 }: {
   workspaceId: string;
-  term: string;
+  onClose: () => void;
 }) {
-  const results = useConversationSearch(workspaceId, term);
+  const router = useRouter();
+  const [query, setQuery] = useState("");
+  const term = searchTerm(useDebouncedValue(query, SEARCH_DELAY_MS));
+  const open = (href: string) => {
+    onClose();
+    router.push(href);
+  };
 
-  if (results.isLoading) {
-    return (
-      <div className="flex flex-col gap-2 p-1">
-        <Skeleton className="h-10" />
-        <Skeleton className="h-10" />
-      </div>
-    );
-  }
-  if (results.isError) {
-    return <p className="p-2 text-destructive text-sm">Không tìm được. Vui lòng thử lại.</p>;
-  }
-  const items = results.data?.pages.flatMap((page) => page.data) ?? [];
-  if (items.length === 0) {
-    return <p className="px-2 py-1 text-muted-foreground text-sm">Không có kết quả.</p>;
-  }
   return (
-    <>
-      <ul aria-label="Kết quả tìm kiếm" className="flex flex-col gap-0.5">
-        {items.map((item) => (
-          <SearchResult item={item} key={item.id} term={term} />
-        ))}
-      </ul>
-      {results.hasNextPage && (
-        <Button
-          className="w-full justify-start text-muted-foreground"
-          disabled={results.isFetchingNextPage}
-          onClick={() => void results.fetchNextPage()}
-          size="sm"
-          variant="ghost"
-        >
-          {results.isFetchingNextPage ? "Đang tải…" : "Xem thêm"}
-        </Button>
-      )}
-    </>
+    <CommandDialog
+      className="top-[12%] sm:max-w-2xl"
+      description="Tìm theo tên hoặc nội dung cuộc trò chuyện"
+      onOpenChange={(isOpen) => !isOpen && onClose()}
+      open
+      title="Tìm kiếm"
+    >
+      {/* Results come from the server, already filtered and ranked. */}
+      <Command className="p-0" shouldFilter={false}>
+        <div className="flex items-center gap-3 border-b px-5 py-3">
+          <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
+          <CommandPrimitive.Input
+            className="h-9 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground"
+            onValueChange={setQuery}
+            placeholder="Tìm kiếm cuộc trò chuyện…"
+            value={query}
+          />
+          <DialogClose asChild>
+            <Button aria-label="Đóng" size="icon-sm" variant="ghost">
+              <XIcon />
+            </Button>
+          </DialogClose>
+        </div>
+        <CommandList className="max-h-[min(28rem,60dvh)] p-2">
+          {term ? (
+            <SearchResults onOpen={open} term={term} workspaceId={workspaceId} />
+          ) : (
+            <RecentChats onOpen={open} workspaceId={workspaceId} />
+          )}
+        </CommandList>
+      </Command>
+    </CommandDialog>
   );
 }
 
-function SearchResult({ item, term }: { item: ConversationSearchItem; term: string }) {
-  const pathname = usePathname();
-  const openTurn = useSearchParams().get("t");
-  const href = item.turn_id ? `/c/${item.id}?t=${item.turn_id}` : `/c/${item.id}`;
-  const active = pathname === `/c/${item.id}` && openTurn === (item.turn_id ?? null);
+const ITEM_CLASS = "gap-3 px-3 py-2.5";
+
+function RecentChats({
+  workspaceId,
+  onOpen,
+}: {
+  workspaceId: string;
+  onOpen: (href: string) => void;
+}) {
+  const recent = useConversations(workspaceId, { kind: "unfiled" });
+  const items = recent.data?.pages[0]?.data ?? [];
+  if (recent.isLoading) return <Loading />;
+  if (items.length === 0) return <Note>Chưa có cuộc trò chuyện nào.</Note>;
   return (
-    <li>
-      <Link
-        aria-current={active ? "page" : undefined}
-        className={cn(
-          "flex flex-col gap-0.5 rounded-md px-2 py-1.5 text-sm hover:bg-accent",
-          active && "bg-accent",
-        )}
-        href={href}
-      >
-        <span className="flex items-center gap-1.5 truncate font-medium">
-          {item.archived_at && (
-            <ArchiveIcon
-              aria-label="Đã lưu trữ"
-              className="size-3 shrink-0 text-muted-foreground"
-            />
-          )}
+    <CommandGroup heading="Cuộc trò chuyện gần đây">
+      {items.map((item) => (
+        <CommandItem
+          className={ITEM_CLASS}
+          key={item.id}
+          onSelect={() => onOpen(`/c/${item.id}`)}
+          value={item.id}
+        >
+          <MessageCircleIcon className="text-muted-foreground" />
+          <span className="truncate">{item.title}</span>
+        </CommandItem>
+      ))}
+    </CommandGroup>
+  );
+}
+
+function SearchResults({
+  workspaceId,
+  term,
+  onOpen,
+}: {
+  workspaceId: string;
+  term: string;
+  onOpen: (href: string) => void;
+}) {
+  const results = useConversationSearch(workspaceId, term);
+  if (results.isLoading) return <Loading />;
+  if (results.isError) {
+    return <Note className="text-destructive">Không tìm được. Vui lòng thử lại.</Note>;
+  }
+  const items = results.data?.pages.flatMap((page) => page.data) ?? [];
+  if (items.length === 0) return <Note>Không có kết quả.</Note>;
+  return (
+    <CommandGroup heading="Kết quả">
+      {items.map((item) => (
+        <SearchResult item={item} key={item.id} onOpen={onOpen} term={term} />
+      ))}
+      {results.hasNextPage && (
+        <CommandItem
+          className={cn(ITEM_CLASS, "justify-center text-muted-foreground")}
+          disabled={results.isFetchingNextPage}
+          onSelect={() => void results.fetchNextPage()}
+          value="more"
+        >
+          {results.isFetchingNextPage ? "Đang tải…" : "Xem thêm kết quả"}
+        </CommandItem>
+      )}
+    </CommandGroup>
+  );
+}
+
+function SearchResult({
+  item,
+  term,
+  onOpen,
+}: {
+  item: ConversationSearchItem;
+  term: string;
+  onOpen: (href: string) => void;
+}) {
+  const href = item.turn_id ? `/c/${item.id}?t=${item.turn_id}` : `/c/${item.id}`;
+  const Icon = item.archived_at ? ArchiveIcon : MessageCircleIcon;
+  return (
+    <CommandItem
+      className={cn(ITEM_CLASS, "items-start")}
+      onSelect={() => onOpen(href)}
+      value={`${item.id}:${item.turn_id ?? ""}`}
+    >
+      <Icon
+        aria-label={item.archived_at ? "Đã lưu trữ" : undefined}
+        className="mt-0.5 text-muted-foreground"
+      />
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="truncate font-medium">
           <Highlighted term={term} text={item.title} />
         </span>
         {item.snippet && (
@@ -86,26 +172,37 @@ function SearchResult({ item, term }: { item: ConversationSearchItem; term: stri
             <Highlighted term={term} text={item.snippet} />
           </span>
         )}
-      </Link>
-    </li>
+      </span>
+    </CommandItem>
   );
 }
 
 function Highlighted({ text, term }: { text: string; term: string }) {
+  return highlight(text, term).map((part, index) =>
+    part.match ? (
+      <mark className="rounded-sm bg-yellow-200/70 text-inherit dark:bg-yellow-500/30" key={index}>
+        {part.text}
+      </mark>
+    ) : (
+      <span key={index}>{part.text}</span>
+    ),
+  );
+}
+
+function Loading() {
   return (
-    <span className="truncate">
-      {highlight(text, term).map((part, index) =>
-        part.match ? (
-          <mark
-            className="rounded-sm bg-yellow-200/70 text-inherit dark:bg-yellow-500/30"
-            key={index}
-          >
-            {part.text}
-          </mark>
-        ) : (
-          <span key={index}>{part.text}</span>
-        ),
-      )}
-    </span>
+    <div aria-busy className="flex flex-col gap-2 p-2">
+      <Skeleton className="h-9" />
+      <Skeleton className="h-9" />
+      <Skeleton className="h-9" />
+    </div>
+  );
+}
+
+function Note({ className, children }: { className?: string; children: React.ReactNode }) {
+  return (
+    <p className={cn("px-3 py-6 text-center text-muted-foreground text-sm", className)}>
+      {children}
+    </p>
   );
 }

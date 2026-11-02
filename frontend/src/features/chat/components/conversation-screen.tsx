@@ -7,8 +7,9 @@ import { useConversationChat } from "../hooks/use-conversation-chat";
 import { useConversation } from "../hooks/use-conversations";
 import { usePendingMessageStore } from "../stores/pending-message-store";
 import { chatErrorMessage } from "../utils/history";
-import { ChatComposer } from "./chat-composer";
+import { ChatComposer, ChatFooter } from "./chat-composer";
 import { ChatEmptyState } from "./chat-empty-state";
+import { ChatHeader } from "./chat-header";
 import { ChatMessages } from "./chat-messages";
 import { conversationFiles } from "./message-files";
 
@@ -24,8 +25,7 @@ export function ConversationScreen({
   const conversation = useConversation(conversationId);
   const fileSource = useMemo(() => conversationFiles(conversationId), [conversationId]);
   const take = usePendingMessageStore((state) => state.take);
-  const { isReady, sendTurn, editTurn, regenerate, answerInterrupt, switchBranch, stop } =
-    chat;
+  const { isReady, sendTurn, editTurn, regenerate, answerInterrupt, switchBranch, stop } = chat;
 
   // The question typed on the new-chat screen, sent once the chat is ready.
   useEffect(() => {
@@ -36,19 +36,25 @@ export function ConversationScreen({
 
   if (chat.isLoading) {
     return (
-      <div className="flex h-full items-center justify-center" aria-busy="true">
-        <Spinner aria-label="Đang tải cuộc trò chuyện" />
+      <div className="flex h-full flex-col">
+        <ChatHeader />
+        <div className="flex flex-1 items-center justify-center" aria-busy="true">
+          <Spinner aria-label="Đang tải cuộc trò chuyện" />
+        </div>
       </div>
     );
   }
   if (chat.loadError) {
     return (
-      <div className="mx-auto w-full max-w-3xl p-4">
-        <Alert variant="destructive">
-          <AlertDescription>
-            Không tìm thấy cuộc trò chuyện hoặc bạn không có quyền xem.
-          </AlertDescription>
-        </Alert>
+      <div className="flex h-full flex-col">
+        <ChatHeader />
+        <div className="mx-auto w-full max-w-3xl p-4">
+          <Alert variant="destructive">
+            <AlertDescription>
+              Không tìm thấy cuộc trò chuyện hoặc bạn không có quyền xem.
+            </AlertDescription>
+          </Alert>
+        </div>
       </div>
     );
   }
@@ -56,7 +62,8 @@ export function ConversationScreen({
   const locked = chat.isBusy || chat.remoteTurnRunning || chat.isSwitching;
   const composerLocked = locked || chat.waitingForUser;
   return (
-    <div className="mx-auto flex h-full w-full max-w-3xl flex-col p-4">
+    <div className="flex h-full flex-col">
+      <ChatHeader conversation={conversation.data} />
       <ChatMessages
         fileSource={fileSource}
         actions={{
@@ -71,26 +78,28 @@ export function ConversationScreen({
         rows={chat.rows}
         waitingForUser={chat.waitingForUser}
       />
-      {chat.remoteTurnRunning && (
-        <p className="py-2 text-muted-foreground text-sm">Câu trả lời đang được tạo…</p>
-      )}
-      {chat.waitingForUser && (
-        <p className="py-2 text-muted-foreground text-sm">
-          Agent đang chờ bạn trả lời ở trên. Bấm dừng để bỏ qua và hỏi câu khác.
-        </p>
-      )}
-      {chat.error && (
-        <Alert variant="destructive">
-          <AlertDescription>{chatErrorMessage(chat.error)}</AlertDescription>
-        </Alert>
-      )}
-      <ChatComposer
-        disabled={composerLocked}
-        onStop={chat.canStop ? () => void stop() : undefined}
-        onSubmit={sendTurn}
-        status={chat.status}
-        workspaceId={conversation.data?.workspace_id}
-      />
+      <ChatFooter>
+        {chat.remoteTurnRunning && (
+          <p className="py-2 text-muted-foreground text-sm">Câu trả lời đang được tạo…</p>
+        )}
+        {chat.waitingForUser && (
+          <p className="py-2 text-muted-foreground text-sm">
+            Agent đang chờ bạn trả lời ở trên. Bấm dừng để bỏ qua và hỏi câu khác.
+          </p>
+        )}
+        {chat.error && (
+          <Alert variant="destructive">
+            <AlertDescription>{chatErrorMessage(chat.error)}</AlertDescription>
+          </Alert>
+        )}
+        <ChatComposer
+          disabled={composerLocked}
+          onStop={chat.canStop ? () => void stop() : undefined}
+          onSubmit={sendTurn}
+          status={chat.status}
+          workspaceId={conversation.data?.workspace_id}
+        />
+      </ChatFooter>
     </div>
   );
 }

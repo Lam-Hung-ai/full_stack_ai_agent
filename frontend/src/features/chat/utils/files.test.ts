@@ -4,6 +4,7 @@ import {
   attachedFiles,
   madeFile,
   contentTypeOf,
+  fileLabel,
   formatBytes,
   questionContent,
   questionText,
@@ -57,6 +58,12 @@ describe("helpers", () => {
     expect(formatBytes(512)).toBe("512 B");
     expect(formatBytes(2048)).toBe("2.0 KB");
     expect(formatBytes(5 * 1024 * 1024)).toBe("5.0 MB");
+  });
+
+  it("labels a file by its extension and size", () => {
+    expect(fileLabel("Báo cáo.final.pdf", 2048)).toBe("PDF · 2.0 KB");
+    expect(fileLabel("README", 10)).toBe("Tệp · 10 B");
+    expect(fileLabel(".env", 10)).toBe("Tệp · 10 B");
   });
 });
 
