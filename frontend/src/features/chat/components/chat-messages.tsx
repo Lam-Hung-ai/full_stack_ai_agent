@@ -1,9 +1,10 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useLayoutEffect, useState } from "react";
+import { useStickToBottomContext } from "use-stick-to-bottom";
 import type { Message as AGUIMessage } from "@ag-ui/client";
 import type { ToolUIPart } from "ai";
-import { PencilIcon, RefreshCcwIcon } from "lucide-react";
+import { PencilIcon, RefreshCcwIcon, RotateCcwIcon } from "lucide-react";
 import {
   Conversation,
   ConversationContent,
@@ -25,16 +26,28 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import { cn } from "@/lib/utils";
 import type { RowView } from "../types/chat.types";
-import { buildItems, findToolResult, parseToolArgs, type Turn } from "../utils/agui-messages";
+import {
+  answerText,
+  buildItems,
+  findToolResult,
+  parseToolArgs,
+  type Turn,
+} from "../utils/agui-messages";
 import { isActive, isTerminal } from "../utils/history";
 import { attachedFiles, madeFile, questionText as textOf } from "../utils/files";
+import { turnTime, turnTimeTitle } from "../utils/turn-time";
 import { ASK_USER_TOOL, type InteractionAnswer, interactionOf } from "../utils/interactions";
 import { BranchSwitcher } from "./branch-switcher";
+import { CopyAction } from "./copy-action";
 import { EditQuestionForm } from "./edit-question-form";
 import { InteractionCard } from "./interaction-card";
 import { type FileLinkSource, MessageFiles } from "./message-files";
 import { ReasoningSummary } from "./reasoning-summary";
+
+/** Turn footers: small, quiet icons. */
+const FOOTER_CLASS = "gap-0.5 text-muted-foreground [&_button]:size-7 [&_svg]:size-3.5";
 
 /** What the reader may do; a shared snapshot only switches versions. */
 export type RowActions = {
@@ -69,14 +82,17 @@ export function ChatMessages({
 }) {
   const locked = isBusy || waitingForUser;
   return (
-    <Conversation>
+    // Opens at the last turn at once, and follows growth without animating:
+    // a smooth scroll down the whole chat on every load is hard on the eyes.
+    <Conversation initial="instant" resize="instant">
       <ConversationContent className="mx-auto w-full max-w-3xl px-4 py-6">
         {rows.length === 0
           ? empty
-          : rows.map((row) =>
+          : rows.map((row, index) =>
               row.role === "user" ? (
                 <QuestionRow
                   actions={actions}
+                  answer={rows[index + 1]?.role === "assistant" ? rows[index + 1] : undefined}
                   disabled={locked}
                   fileSource={fileSource}
                   key={row.id}
@@ -95,6 +111,7 @@ export function ChatMessages({
               ),
             )}
       </ConversationContent>
+      <OpenAtEnd />
       <ConversationScrollButton />
     </Conversation>
   );
@@ -102,11 +119,14 @@ export function ChatMessages({
 
 function QuestionRow({
   row,
+  answer,
   actions,
   fileSource,
   disabled,
 }: {
   row: RowView;
+  /** The answer below; "Thử lại" regenerates it. */
+  answer?: RowView;
   actions?: RowActions;
   fileSource?: FileLinkSource;
   disabled: boolean;
@@ -137,21 +157,44 @@ function QuestionRow({
           <MessageResponse>{text}</MessageResponse>
         </MessageContent>
       )}
-      {actions && (
-        <MessageActions className="justify-end">
+      {/* Shown on hover (always on touch screens), like Claude. */}
+      <MessageActions
+        className={cn(
+          FOOTER_CLASS,
+          "justify-end transition-opacity focus-within:opacity-100 group-hover:opacity-100 md:opacity-0",
+        )}
+      >
+        <TurnTime createdAt={row.createdAt} />
+        {actions && (
           <BranchSwitcher
             currentId={row.id}
             disabled={disabled}
             onSwitch={actions.onSwitch}
             siblingIds={row.siblingIds}
           />
-          {onEdit && (
-            <MessageAction disabled={disabled} label="Sửa câu hỏi" onClick={() => setEditing(true)}>
-              <PencilIcon />
-            </MessageAction>
-          )}
-        </MessageActions>
-      )}
+        )}
+        {actions?.onRegenerate && answer && !answer.live && isTerminal(answer) && (
+          <MessageAction
+            disabled={disabled}
+            label="Thử lại"
+            onClick={() => actions.onRegenerate?.(answer.id)}
+            tooltip="Thử lại"
+          >
+            <RotateCcwIcon />
+          </MessageAction>
+        )}
+        {onEdit && (
+          <MessageAction
+            disabled={disabled}
+            label="Sửa câu hỏi"
+            onClick={() => setEditing(true)}
+            tooltip="Sửa"
+          >
+            <PencilIcon />
+          </MessageAction>
+        )}
+        {text && <CopyAction text={text} />}
+      </MessageActions>
     </Message>
   );
 }
@@ -174,7 +217,9 @@ function AnswerRow({
   const items = buildItems(row.content);
   // Content is saved when a turn ends: one running elsewhere has none yet.
   const waiting = isStreaming || (!row.live && isActive(row));
-  const showActions = actions && !row.live && isTerminal(row);
+  const finished = !row.live && isTerminal(row);
+  const showActions = actions && finished;
+  const copyText = answerText(row.content);
   // Only a saved pause can be answered; the server checks it again.
   const onAnswer =
     answerable && !row.live && row.status === "requires_action" ? actions?.onAnswer : undefined;
@@ -217,32 +262,33 @@ function AnswerRow({
           </Message>
         );
       })}
-      {(row.status === "cancelled" || row.status === "failed" || showActions) && (
-        <MessageActions>
+      {(row.status === "cancelled" || row.status === "failed" || finished) && (
+        <MessageActions className={FOOTER_CLASS}>
+          {finished && copyText && <CopyAction text={copyText} />}
+          {showActions && actions.onRegenerate && (
+            <MessageAction
+              disabled={disabled}
+              label="Tạo lại câu trả lời"
+              onClick={() => actions.onRegenerate?.(row.id)}
+              tooltip="Tạo lại"
+            >
+              <RefreshCcwIcon />
+            </MessageAction>
+          )}
+          {showActions && (
+            <BranchSwitcher
+              currentId={row.id}
+              disabled={disabled}
+              onSwitch={actions.onSwitch}
+              siblingIds={row.siblingIds}
+            />
+          )}
+          {finished && <TurnTime createdAt={row.createdAt} />}
           {row.status === "cancelled" && (
-            <span className="px-1 text-muted-foreground text-xs">Đã dừng</span>
+            <span className="px-1 text-muted-foreground text-xs">· Đã dừng</span>
           )}
           {row.status === "failed" && (
             <span className="px-1 text-destructive text-xs">Câu trả lời chưa hoàn tất do lỗi</span>
-          )}
-          {showActions && (
-            <>
-              {actions.onRegenerate && (
-                <MessageAction
-                  disabled={disabled}
-                  label="Tạo lại câu trả lời"
-                  onClick={() => actions.onRegenerate?.(row.id)}
-                >
-                  <RefreshCcwIcon />
-                </MessageAction>
-              )}
-              <BranchSwitcher
-                currentId={row.id}
-                disabled={disabled}
-                onSwitch={actions.onSwitch}
-                siblingIds={row.siblingIds}
-              />
-            </>
           )}
         </MessageActions>
       )}
@@ -328,4 +374,30 @@ function TurnView({
       </MessageContent>
     </Message>
   );
+}
+
+/** When a turn was saved, shortly; the full time on hover. */
+function TurnTime({ createdAt }: { createdAt?: string }) {
+  return (
+    <time
+      className="px-1 text-muted-foreground text-xs"
+      dateTime={createdAt}
+      title={turnTimeTitle(createdAt)}
+    >
+      {turnTime(createdAt)}
+    </time>
+  );
+}
+
+/**
+ * Puts the chat at its last turn before the first paint; the library alone
+ * paints the top first and jumps a frame or two later.
+ */
+function OpenAtEnd() {
+  const { scrollRef } = useStickToBottomContext();
+  useLayoutEffect(() => {
+    const scroller = scrollRef.current;
+    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+  }, [scrollRef]);
+  return null;
 }

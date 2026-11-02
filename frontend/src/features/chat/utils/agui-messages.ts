@@ -100,3 +100,14 @@ export function latestLine(text: string): string {
   const newline = visible.lastIndexOf("\n");
   return newline === -1 ? visible : visible.slice(newline + 1);
 }
+
+/** The text an assistant turn wrote, for copying: its answers, without reasoning or tools. */
+export function answerText(messages: readonly AGUIMessage[]): string {
+  return messages
+    .flatMap((message) =>
+      message.role === "assistant" && typeof message.content === "string" && message.content.trim()
+        ? [message.content.trim()]
+        : [],
+    )
+    .join("\n\n");
+}

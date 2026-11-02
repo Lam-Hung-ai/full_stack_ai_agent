@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Message as AGUIMessage } from "@ag-ui/client";
 import {
   PENDING_REASONING_ID,
+  answerText,
   buildTurns,
   findToolResult,
   latestLine,
@@ -57,5 +58,18 @@ describe("helpers", () => {
   it("returns the latest non-blank line", () => {
     expect(latestLine("one\ntwo\n\n")).toBe("two");
     expect(latestLine("single")).toBe("single");
+  });
+});
+
+describe("answerText", () => {
+  it("joins the assistant answers and skips reasoning, tools and empty steps", () => {
+    const messages = [
+      { id: "r1", role: "reasoning", content: "thinking" },
+      { id: "a1", role: "assistant", content: "", toolCalls: [] },
+      { id: "t1", role: "tool", content: "{}", toolCallId: "c1" },
+      { id: "a2", role: "assistant", content: " Tokyo. " },
+      { id: "a3", role: "assistant", content: "Thêm nữa" },
+    ] as AGUIMessage[];
+    expect(answerText(messages)).toBe("Tokyo.\n\nThêm nữa");
   });
 });

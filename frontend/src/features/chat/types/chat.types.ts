@@ -35,6 +35,8 @@ export type RowView = {
   status: TurnStatus;
   content: Message[];
   siblingIds: string[];
+  /** When the turn was saved; absent while this tab is still sending it. */
+  createdAt?: string;
   live?: boolean;
 };
 

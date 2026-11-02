@@ -15,6 +15,7 @@ export function branchRows(turns: readonly SharedTurn[], leafId: string): RowVie
       status: turn.status as RowView["status"],
       content: turn.content as unknown as RowView["content"],
       siblingIds: turn.sibling_ids,
+      createdAt: turn.created_at,
     });
     turn = turn.parent_turn_id ? byId.get(turn.parent_turn_id) : undefined;
   }
