@@ -44,6 +44,7 @@ from app.modules.ai.runtime.lifecycle import OpenSpans
 from app.modules.ai.runtime.live import LiveStore, LiveView
 from app.modules.ai.runtime.stream import RunStream
 from app.modules.ai.tools.context import FileSink, ToolGuard, TurnContext
+from app.modules.llm.catalog import ModelChain
 
 logger = logging.getLogger(__name__)
 
@@ -67,9 +68,15 @@ type Finalizer = Callable[
     [TurnStatus, list[AguiMessage], Pause | None], Awaitable[list[BaseEvent]]
 ]
 type InputPreparer = Callable[[RunAgentInput], Awaitable[RunAgentInput]]
-#: (tools, saver, turn context, trace ids) -> the turn's agent.
+#: (tools, models, saver, turn context, trace ids) -> the turn's agent.
 type AgentFactory = Callable[
-    [frozenset[str], BaseCheckpointSaver, TurnContext, dict[str, str]],
+    [
+        frozenset[str],
+        ModelChain | None,
+        BaseCheckpointSaver,
+        TurnContext,
+        dict[str, str],
+    ],
     LangGraphAgent,
 ]
 
@@ -169,6 +176,7 @@ class Runner:
         on_running: Callable[[], Awaitable[None]],
         finalize: Finalizer,
         file_sink: FileSink | None = None,
+        models: ModelChain | None = None,
         known_ids: set[str] | None = None,
         resume_from: CheckpointTuple | None = None,
         prepare: InputPreparer | None = None,
@@ -176,7 +184,8 @@ class Runner:
     ) -> RunStream:
         """Run a turn in the background. `known_ids` are protocol messages the
         bundle must not repeat (default: the input); `resume_from` is the
-        stored pause a resumed turn continues from; `prepare` completes the
+        stored pause a resumed turn continues from; `models` are the models
+        configured in the database (None: the environment's); `prepare` completes the
         input inside the turn (attached files), where a failure fails the turn."""
         stream = RunStream()
         self._streams[assistant_id] = stream
@@ -189,6 +198,7 @@ class Runner:
                 tools=tools,
                 tool_guard=tool_guard,
                 file_sink=file_sink,
+                models=models,
                 on_running=on_running,
                 finalize=finalize,
                 known_ids=known_ids,
@@ -265,6 +275,7 @@ class Runner:
         tools: frozenset[str],
         tool_guard: ToolGuard,
         file_sink: FileSink | None,
+        models: ModelChain | None,
         on_running: Callable[[], Awaitable[None]],
         finalize: Finalizer,
         known_ids: set[str] | None,
@@ -300,6 +311,7 @@ class Runner:
                 saver.seed(resume_from)
             agent = self._agent_factory(
                 tools,
+                models,
                 saver,
                 TurnContext(tool_guard=tool_guard, file_sink=file_sink),
                 {

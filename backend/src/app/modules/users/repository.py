@@ -16,6 +16,7 @@ class UserRepository:
             users.c.name,
             users.c.email,
             users.c.email_verified,
+            users.c.is_superuser,
             users.c.avatar_url,
             users.c.created_at,
         ).where(users.c.id == user_id)

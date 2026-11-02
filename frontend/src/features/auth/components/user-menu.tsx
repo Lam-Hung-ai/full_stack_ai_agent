@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LogOutIcon, MailCheckIcon } from "lucide-react";
+import { LogOutIcon, MailCheckIcon, ServerCogIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -44,6 +45,14 @@ export function UserMenu() {
           >
             <MailCheckIcon />
             {verifyMutation.isSuccess ? "Đã gửi thư xác minh" : "Gửi thư xác minh email"}
+          </DropdownMenuItem>
+        )}
+        {data.user.is_superuser && (
+          <DropdownMenuItem asChild>
+            <Link href="/admin/llm">
+              <ServerCogIcon />
+              Quản trị LLM
+            </Link>
           </DropdownMenuItem>
         )}
         <DropdownMenuItem

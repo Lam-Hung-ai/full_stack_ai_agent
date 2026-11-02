@@ -693,6 +693,53 @@ CREATE TABLE chat_app.conversations (
 
 COMMENT ON TABLE chat_app.conversations IS 'One owner per conversation; pin/archive/folder stored here. current_turn_id is saved branch tip, not a live execution ID.';
 
+CREATE TABLE chat_app.llm_connections (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    key text NOT NULL,
+    name text NOT NULL,
+    provider text NOT NULL,
+    client_params jsonb DEFAULT '{}'::jsonb NOT NULL,
+    api_key_ciphertext text,
+    api_key_hint text,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT llm_connections_api_key_check CHECK (((api_key_ciphertext IS NULL) = (api_key_hint IS NULL))),
+    CONSTRAINT llm_connections_client_params_check CHECK ((jsonb_typeof(client_params) = 'object'::text)),
+    CONSTRAINT llm_connections_key_check CHECK ((key ~ '^[a-z][a-z0-9_-]{0,62}$'::text)),
+    CONSTRAINT llm_connections_name_check CHECK ((btrim(name) <> ''::text)),
+    CONSTRAINT llm_connections_provider_check CHECK ((provider ~ '^[a-z][a-z0-9_]*$'::text))
+);
+
+COMMENT ON TABLE chat_app.llm_connections IS 'System-wide connections for init_chat_model (QD-34). api_key_ciphertext is Fernet-encrypted by the backend; api_key_hint keeps the last characters for display.';
+
+CREATE TABLE chat_app.llm_model_assignments (
+    purpose text NOT NULL,
+    "position" smallint NOT NULL,
+    model_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT llm_model_assignments_position_check CHECK (("position" >= 0)),
+    CONSTRAINT llm_model_assignments_purpose_check CHECK ((purpose ~ '^[a-z][a-z0-9_]*$'::text))
+);
+
+COMMENT ON TABLE chat_app.llm_model_assignments IS 'Models tried in order for a purpose (chat, title): position 0 is primary, the rest are fallbacks. Replaced as a whole by the backend.';
+
+CREATE TABLE chat_app.llm_models (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    key text NOT NULL,
+    connection_id uuid NOT NULL,
+    model text NOT NULL,
+    name text NOT NULL,
+    params jsonb DEFAULT '{}'::jsonb NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT llm_models_key_check CHECK ((key ~ '^[a-z][a-z0-9_-]{0,62}$'::text)),
+    CONSTRAINT llm_models_model_check CHECK ((btrim(model) <> ''::text)),
+    CONSTRAINT llm_models_name_check CHECK ((btrim(name) <> ''::text)),
+    CONSTRAINT llm_models_params_check CHECK ((jsonb_typeof(params) = 'object'::text))
+);
+
 CREATE TABLE chat_app.member_role_assignments (
     id uuid DEFAULT uuidv7() NOT NULL,
     organization_id uuid NOT NULL,
@@ -1014,6 +1061,24 @@ ALTER TABLE ONLY chat_app.conversations
 ALTER TABLE ONLY chat_app.conversations
     ADD CONSTRAINT conversations_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY chat_app.llm_connections
+    ADD CONSTRAINT llm_connections_key_key UNIQUE (key);
+
+ALTER TABLE ONLY chat_app.llm_connections
+    ADD CONSTRAINT llm_connections_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY chat_app.llm_model_assignments
+    ADD CONSTRAINT llm_model_assignments_pkey PRIMARY KEY (purpose, "position");
+
+ALTER TABLE ONLY chat_app.llm_model_assignments
+    ADD CONSTRAINT llm_model_assignments_purpose_model_key UNIQUE (purpose, model_id);
+
+ALTER TABLE ONLY chat_app.llm_models
+    ADD CONSTRAINT llm_models_key_key UNIQUE (key);
+
+ALTER TABLE ONLY chat_app.llm_models
+    ADD CONSTRAINT llm_models_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY chat_app.member_role_assignments
     ADD CONSTRAINT member_role_assignments_organization_id_member_id_role_id_key UNIQUE (organization_id, member_id, role_id);
 
@@ -1159,6 +1224,10 @@ CREATE INDEX idx_conversations_pinned ON chat_app.conversations USING btree (wor
 
 CREATE INDEX idx_stored_files_uploaded_by ON chat_app.stored_files USING btree (uploaded_by) WHERE (uploaded_by IS NOT NULL);
 
+CREATE INDEX llm_model_assignments_model_idx ON chat_app.llm_model_assignments USING btree (model_id);
+
+CREATE INDEX llm_models_connection_idx ON chat_app.llm_models USING btree (connection_id);
+
 CREATE INDEX member_role_assignments_member_idx ON chat_app.member_role_assignments USING btree (member_id, organization_id);
 
 CREATE INDEX member_role_assignments_role_idx ON chat_app.member_role_assignments USING btree (role_id, organization_id);
@@ -1285,6 +1354,10 @@ CREATE TRIGGER touch_updated_at BEFORE UPDATE ON chat_app.conversation_shares FO
 
 CREATE TRIGGER touch_updated_at BEFORE UPDATE ON chat_app.conversations FOR EACH ROW EXECUTE FUNCTION chat_app.touch_updated_at();
 
+CREATE TRIGGER touch_updated_at BEFORE UPDATE ON chat_app.llm_connections FOR EACH ROW EXECUTE FUNCTION chat_app.touch_updated_at();
+
+CREATE TRIGGER touch_updated_at BEFORE UPDATE ON chat_app.llm_models FOR EACH ROW EXECUTE FUNCTION chat_app.touch_updated_at();
+
 CREATE TRIGGER touch_updated_at BEFORE UPDATE ON chat_app.member_role_assignments FOR EACH ROW EXECUTE FUNCTION chat_app.touch_updated_at();
 
 CREATE TRIGGER touch_updated_at BEFORE UPDATE ON chat_app.organization_invitations FOR EACH ROW EXECUTE FUNCTION chat_app.touch_updated_at();
@@ -1370,6 +1443,12 @@ ALTER TABLE ONLY chat_app.conversation_copy_files
 
 ALTER TABLE ONLY chat_app.conversation_copy_files
     ADD CONSTRAINT copy_target_stored_file_fk FOREIGN KEY (target_stored_file_id) REFERENCES chat_app.stored_files(id) ON DELETE RESTRICT;
+
+ALTER TABLE ONLY chat_app.llm_model_assignments
+    ADD CONSTRAINT llm_model_assignments_model_id_fkey FOREIGN KEY (model_id) REFERENCES chat_app.llm_models(id) ON DELETE RESTRICT;
+
+ALTER TABLE ONLY chat_app.llm_models
+    ADD CONSTRAINT llm_models_connection_id_fkey FOREIGN KEY (connection_id) REFERENCES chat_app.llm_connections(id) ON DELETE RESTRICT;
 
 ALTER TABLE ONLY chat_app.member_role_assignments
     ADD CONSTRAINT member_role_assignments_member_id_organization_id_fkey FOREIGN KEY (member_id, organization_id) REFERENCES chat_app.organization_members(id, organization_id) ON DELETE CASCADE;

@@ -1,15 +1,32 @@
 """Chat models the agents run on.
 
-Agents call these through the module (`models.build_chat_model()`), so tests
-replace them with scripted fakes. Each model comes from `init_chat_model`; a
-new provider is a module beside `openrouter.py` and a `langchain-<provider>`
-dependency.
+A purpose with models assigned in the database (`/admin/llm`, QD-34) runs on
+those, built by `init_chat_model` (`llm.catalog`); otherwise on the
+environment configuration below (OPENROUTER_*). Agents call these through the
+module (`models.build_chain(...)`), so tests replace them with scripted fakes.
 """
+
+from typing import Any
 
 from langchain_core.language_models import BaseChatModel
 
 from app.config.settings import get_settings
 from app.modules.ai.models.openrouter import openrouter_model
+from app.modules.llm import catalog
+from app.modules.llm.catalog import ModelChain, ModelSpec
+
+
+def from_spec(spec: ModelSpec, **overrides: Any) -> BaseChatModel:
+    """A model configured in the database."""
+    return catalog.build(spec, **overrides)
+
+
+def build_chain(chain: ModelChain | None) -> tuple[BaseChatModel, list[BaseChatModel]]:
+    """The model answering a turn and its fallbacks, in order."""
+    if chain is None or get_settings().agent_fake_model:
+        return build_chat_model(), build_fallback_models()
+    built = [from_spec(spec, streaming=True) for spec in chain.specs]
+    return built[0], built[1:]
 
 
 def _chat_params() -> dict:
@@ -39,9 +56,12 @@ def build_fallback_models() -> list[BaseChatModel]:
     ]
 
 
-def build_title_model() -> BaseChatModel:
-    """A short, non-streaming call that names a new chat (C01)."""
+def build_title_model(chain: ModelChain | None = None) -> BaseChatModel:
+    """A short, non-streaming call that names a new chat (C01): the first
+    model of the `title` purpose, or the environment's model."""
     settings = get_settings()
+    if chain is not None and not settings.agent_fake_model:
+        return from_spec(chain.specs[0], streaming=False, max_tokens=40)
     if settings.agent_fake_model:
         from app.modules.ai.models.fake import LoadTestModel
 

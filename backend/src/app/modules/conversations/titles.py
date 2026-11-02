@@ -15,6 +15,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from app.database.session import SessionFactory
 from app.modules.ai import models
 from app.modules.conversations.repository import ConversationRepository
+from app.modules.llm.catalog import ModelCatalog, ModelChain
 
 logger = logging.getLogger(__name__)
 
@@ -43,13 +44,13 @@ def clean(raw: str) -> str | None:
     return clip(line) or None
 
 
-async def suggest(question: str) -> str | None:
+async def suggest(question: str, chain: ModelChain | None = None) -> str | None:
     # Framed as data, so the model names the question instead of answering it.
     framed = (
         f"Câu hỏi của người dùng:\n<<<\n{question[:QUESTION_CHARS]}\n>>>\n\n"
         "Chỉ trả về tên cuộc trò chuyện."
     )
-    reply = await models.build_title_model().ainvoke(
+    reply = await models.build_title_model(chain).ainvoke(
         [SystemMessage(PROMPT), HumanMessage(framed)]
     )
     usage = getattr(reply, "usage_metadata", None) or {}
@@ -90,7 +91,9 @@ async def _name(
     session_factory: SessionFactory, conversation_id: UUID, current: str, question: str
 ) -> None:
     try:
-        title = await suggest(question)
+        async with session_factory() as session:
+            chain = await ModelCatalog(session).chain("title")
+        title = await suggest(question, chain)
     except Exception:
         logger.warning("Could not name conversation %s", conversation_id, exc_info=True)
         return

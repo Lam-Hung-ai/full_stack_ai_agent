@@ -39,6 +39,12 @@ Từ S11 (QD-33):
 - Migration đổi tên `messages` thành `turns` (và bảng, cột, hàm liên quan) tại chỗ, không chép dữ liệu. Chạy khi không có lượt `running`.
 - API đổi đường dẫn (`/conversations/{id}/turns…`) và tên trường (`turn_id`, `parent_turn_id`, `current_turn_id`, event `chat.turn`): triển khai backend và frontend **cùng lúc**, không có route cũ song song.
 
+Từ S12 (QD-34, QD-35):
+- Đặt `LLM_ENCRYPTION_KEY` (khoá Fernet, sinh bằng lệnh trong `backend/.env.example`) trước khi lưu API key ở `/admin/llm`. Mọi process dùng cùng một khoá. Mất khoá thì không giải mã được key đã lưu: gửi câu hỏi trả 503 `model_unavailable` cho tới khi nhập lại key ở trang quản trị (hoặc bỏ gán model để quay về biến môi trường).
+- Đổi khoá bằng tay: đặt khoá mới, rồi nhập lại API key của từng kết nối ở `/admin/llm`.
+- Cấp superuser: `UPDATE chat_app.users SET is_superuser = true WHERE email = '…'` (chưa có màn hình cấp quyền này). Mục "Quản trị LLM" hiện trong menu người dùng của superuser.
+- Model của mục đích `chat`, `title` lấy từ database khi có gán; chưa gán thì dùng `OPENROUTER_*` như trước. Đổi gán có hiệu lực từ lượt tiếp theo ở mọi process. `AGENT_FAKE_MODEL=true` luôn thắng (load test).
+
 ## 3. Proxy trước backend (RR-13)
 
 Stream SSE phải đi qua không bị gom. Backend đã gửi `Cache-Control: no-cache` và `X-Accel-Buffering: no`; proxy vẫn cần tắt buffer và nén cho đường dẫn API, và đặt timeout đọc dài hơn một lượt:

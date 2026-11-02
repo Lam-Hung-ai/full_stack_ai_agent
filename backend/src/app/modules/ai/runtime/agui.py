@@ -9,6 +9,7 @@ from langgraph.types import Command
 from app.modules.ai.agents import DEFAULT_AGENT, get_agent
 from app.modules.ai.observability.tracing import tracing_config
 from app.modules.ai.tools.context import TurnContext
+from app.modules.llm.catalog import ModelChain
 
 
 class TurnAgent(LangGraphAgent):
@@ -44,17 +45,19 @@ class TurnAgent(LangGraphAgent):
 
 def turn_agent(
     tool_names: frozenset[str],
+    chain: ModelChain | None,
     saver: BaseCheckpointSaver,
     context: TurnContext,
     trace: Mapping[str, str] | None = None,
 ) -> TurnAgent:
     """A fresh wrapper per turn: LangGraphAgent keeps per-run state on the
     instance, and the shared compiled graph must not have its saver swapped
-    under a turn that is using it, so the turn gets a copy. `trace` names
+    under a turn that is using it, so the turn gets a copy. `chain` is the
+    models configured in the database, None for the environment's. `trace` names
     the turn for Langfuse when tracing is on."""
     agent = TurnAgent(
         name=DEFAULT_AGENT.key,
-        graph=get_agent(tool_names).copy(update={"checkpointer": saver}),
+        graph=get_agent(tool_names, chain).copy(update={"checkpointer": saver}),
         config=tracing_config(trace or {}),
         # RAW callback events are verbose; flip on for debugging.
         emit_raw_events=False,

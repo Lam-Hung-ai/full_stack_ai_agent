@@ -117,14 +117,18 @@ def title_model(request, monkeypatch):
     request.getfixturevalue("pg")
     from app.modules.ai import models
 
-    def unavailable():
+    real = models.build_title_model
+
+    def unavailable(chain=None):
+        if chain is not None:  # models from the database (tests replace those)
+            return real(chain)
         raise RuntimeError("no title model in tests")
 
     monkeypatch.setattr(models, "build_title_model", unavailable)
 
     def install(reply: str) -> GenericFakeChatModel:
         model = GenericFakeChatModel(messages=iter([AIMessage(content=reply)]))
-        monkeypatch.setattr(models, "build_title_model", lambda: model)
+        monkeypatch.setattr(models, "build_title_model", lambda chain=None: model)
         return model
 
     return install

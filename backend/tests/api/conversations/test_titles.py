@@ -42,13 +42,13 @@ async def test_a_rename_before_the_model_answers_wins(
     # The user renames while the title call is still on its way.
     suggest = titles().suggest
 
-    async def slow_suggest(question):
+    async def slow_suggest(question, chain=None):
         await client.patch(
             f"/api/v1/conversations/{conversation_id}",
             json={"title": "Tên của tôi"},
             headers=headers,
         )
-        return await suggest(question)
+        return await suggest(question, chain)
 
     monkeypatch.setattr(titles(), "suggest", slow_suggest)
 

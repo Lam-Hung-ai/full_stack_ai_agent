@@ -54,6 +54,16 @@ async def current_user(
 CurrentUser = Annotated[Principal, Depends(current_user)]
 
 
+async def superuser(user: CurrentUser) -> Principal:
+    """System administration (QD-34): superusers only, whatever their roles."""
+    if not user.is_superuser:
+        fail(403, "superuser_required")
+    return user
+
+
+SuperUser = Annotated[Principal, Depends(superuser)]
+
+
 async def optional_user(
     session: SessionDep,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],

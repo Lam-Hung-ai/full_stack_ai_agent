@@ -4,6 +4,8 @@ from typing import Any
 
 from langgraph.graph.state import CompiledStateGraph
 
+from app.modules.llm.catalog import ModelChain
+
 #: A compiled agent graph, whatever its state and context schemas.
 type AgentGraph = CompiledStateGraph[Any, Any, Any, Any]
 
@@ -15,5 +17,6 @@ class AgentSpec:
     #: (RR-07). Bump it when nodes, tools or state change incompatibly.
     version: str
     #: Compiles the graph offering these tools (already filtered to the
-    #: member's grants); no checkpointer, each turn adds its own saver.
-    build: Callable[[frozenset[str]], AgentGraph]
+    #: member's grants) on these models (None: the environment's); no
+    #: checkpointer, each turn adds its own saver.
+    build: Callable[[frozenset[str], ModelChain | None], AgentGraph]

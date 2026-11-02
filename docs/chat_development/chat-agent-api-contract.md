@@ -90,6 +90,21 @@ Từ S10 (TD-018, QD-31, QD-32): tìm kiếm, export, tệp do agent tạo.
 
 Mở chat ở nhánh của một kết quả tìm kiếm: frontend dùng `/c/{id}?t={turn_id}`, history gọi `?from_turn_id=`.
 
+Từ S12 (TD-022, QD-34, QD-35): quản trị LLM model, **chỉ superuser** (người khác nhận 403 `superuser_required`). `GET /users/me` có thêm `is_superuser`.
+
+| Method/path | Chức năng |
+|---|---|
+| GET /admin/llm/providers | Provider của `init_chat_model` (`provider`, `package`, `installed`) |
+| GET, POST /admin/llm/connections | Liệt kê, tạo kết nối: `key`, `name`, `provider`, `client_params` (object JSON truyền nguyên vào `init_chat_model`), `api_key` (chỉ ghi, lưu mã hoá), `is_active`. Response có `has_api_key`, `api_key_hint` (4 ký tự cuối), không bao giờ có key |
+| PATCH, DELETE /admin/llm/connections/{id} | Sửa (bỏ `api_key` là giữ key, `null` là xoá key); xoá khi còn model dùng trả 409 `connection_in_use` |
+| GET, POST /admin/llm/models | Liệt kê, tạo model: `key`, `connection_id`, `model` (tên phía provider), `name`, `params`, `is_active` |
+| PATCH, DELETE /admin/llm/models/{id} | Sửa; xoá khi đang được gán trả 409 `model_in_use` |
+| POST /admin/llm/models/{id}/test | Gọi thử một lần: `{ok, detail}` (câu trả lời hoặc lỗi của provider) |
+| GET /admin/llm/assignments | Mỗi mục đích (`chat`, `title`): `purpose`, `description`, `model_ids` theo thứ tự |
+| PUT /admin/llm/assignments/{purpose} | `{model_ids}` thay toàn bộ danh sách: model đầu trả lời, các model sau là dự phòng; rỗng là quay về cấu hình biến môi trường |
+
+Lỗi chung: `unknown_provider`, `provider_not_installed`, `secret_in_settings` (tham số có tên giống khoá bí mật), `llm_key_taken`, `llm_encryption_unavailable` (503, thiếu hoặc sai `LLM_ENCRYPTION_KEY`). Gửi câu hỏi khi key đã lưu không giải mã được trả 503 `model_unavailable` trước khi ghi gì.
+
 Tool `create_file` (quyền `tool.create_file`): agent tạo tệp CSV, MD, TXT, XLSX gắn vào assistant đang chạy. Kết quả tool là JSON `{file_id, name, content_type, size_bytes}`; tệp tải qua `GET /conversations/{id}/files/{fileId}` như tệp đính kèm, đi theo share và copy (id trong kết quả tool được đổi ở bản copy). Tối đa 5 tệp mỗi câu trả lời, 5 MB mỗi tệp; ô bảng tính luôn là dữ liệu, không là công thức.
 
 Sidebar (`GET /workspaces/{id}/conversations`) nhận `archived=true` (chỉ chat đã lưu trữ), `folder_id` (chat của một folder) hoặc `unfiled=true` (chat ngoài folder); mặc định là mọi chat chưa lưu trữ. Chat ghim lên đầu, rồi theo `updated_at` giảm dần. `PATCH /conversations/{id}` nhận `title`, `pinned`, `archived`, `folder_id` (null là bỏ khỏi folder); field bỏ trống giữ nguyên, field khác bị từ chối. Các nhóm còn lại chốt khi tới sprint tương ứng. Health endpoints thuộc vận hành service, không phải API agent discovery.

@@ -9,6 +9,7 @@ from sqlalchemy import (
     Integer,
     MetaData,
     PrimaryKeyConstraint,
+    SmallInteger,
     Table,
     Text,
     UniqueConstraint,
@@ -185,6 +186,40 @@ t_conversations = Table(
     ),
     schema="chat_app",
     comment="One owner per conversation; pin/archive/folder stored here. current_turn_id is saved branch tip, not a live execution ID.",
+)
+
+t_llm_connections = Table(
+    "llm_connections",
+    metadata,
+    Column("id", Uuid, primary_key=True, server_default=text("uuidv7()")),
+    Column("key", Text, nullable=False),
+    Column("name", Text, nullable=False),
+    Column("provider", Text, nullable=False),
+    Column("client_params", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
+    Column("api_key_ciphertext", Text),
+    Column("api_key_hint", Text),
+    Column("is_active", Boolean, nullable=False, server_default=text("true")),
+    Column("created_at", DateTime(True), nullable=False, server_default=text("now()")),
+    Column("updated_at", DateTime(True), nullable=False, server_default=text("now()")),
+    CheckConstraint(
+        "(api_key_ciphertext IS NULL) = (api_key_hint IS NULL)",
+        name="llm_connections_api_key_check",
+    ),
+    CheckConstraint("btrim(name) <> ''::text", name="llm_connections_name_check"),
+    CheckConstraint(
+        "jsonb_typeof(client_params) = 'object'::text",
+        name="llm_connections_client_params_check",
+    ),
+    CheckConstraint(
+        "key ~ '^[a-z][a-z0-9_-]{0,62}$'::text", name="llm_connections_key_check"
+    ),
+    CheckConstraint(
+        "provider ~ '^[a-z][a-z0-9_]*$'::text", name="llm_connections_provider_check"
+    ),
+    PrimaryKeyConstraint("id", name="llm_connections_pkey"),
+    UniqueConstraint("key", name="llm_connections_key_key"),
+    schema="chat_app",
+    comment="System-wide connections for init_chat_model (QD-34). api_key_ciphertext is Fernet-encrypted by the backend; api_key_hint keeps the last characters for display.",
 )
 
 t_permissions = Table(
@@ -465,6 +500,38 @@ t_verifications = Table(
     schema="chat_app",
 )
 
+t_llm_models = Table(
+    "llm_models",
+    metadata,
+    Column("id", Uuid, primary_key=True, server_default=text("uuidv7()")),
+    Column("key", Text, nullable=False),
+    Column("connection_id", Uuid, nullable=False),
+    Column("model", Text, nullable=False),
+    Column("name", Text, nullable=False),
+    Column("params", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
+    Column("is_active", Boolean, nullable=False, server_default=text("true")),
+    Column("created_at", DateTime(True), nullable=False, server_default=text("now()")),
+    Column("updated_at", DateTime(True), nullable=False, server_default=text("now()")),
+    CheckConstraint("btrim(model) <> ''::text", name="llm_models_model_check"),
+    CheckConstraint("btrim(name) <> ''::text", name="llm_models_name_check"),
+    CheckConstraint(
+        "jsonb_typeof(params) = 'object'::text", name="llm_models_params_check"
+    ),
+    CheckConstraint(
+        "key ~ '^[a-z][a-z0-9_-]{0,62}$'::text", name="llm_models_key_check"
+    ),
+    ForeignKeyConstraint(
+        ["connection_id"],
+        ["chat_app.llm_connections.id"],
+        ondelete="RESTRICT",
+        name="llm_models_connection_id_fkey",
+    ),
+    PrimaryKeyConstraint("id", name="llm_models_pkey"),
+    UniqueConstraint("key", name="llm_models_key_key"),
+    Index("llm_models_connection_idx", "connection_id"),
+    schema="chat_app",
+)
+
 t_organizations = Table(
     "organizations",
     metadata,
@@ -656,6 +723,33 @@ t_user_accounts = Table(
     ),
     Index("user_accounts_user_idx", "user_id"),
     schema="chat_app",
+)
+
+t_llm_model_assignments = Table(
+    "llm_model_assignments",
+    metadata,
+    Column("purpose", Text, primary_key=True),
+    Column("position", SmallInteger, primary_key=True),
+    Column("model_id", Uuid, nullable=False),
+    Column("created_at", DateTime(True), nullable=False, server_default=text("now()")),
+    CheckConstraint('"position" >= 0', name="llm_model_assignments_position_check"),
+    CheckConstraint(
+        "purpose ~ '^[a-z][a-z0-9_]*$'::text",
+        name="llm_model_assignments_purpose_check",
+    ),
+    ForeignKeyConstraint(
+        ["model_id"],
+        ["chat_app.llm_models.id"],
+        ondelete="RESTRICT",
+        name="llm_model_assignments_model_id_fkey",
+    ),
+    PrimaryKeyConstraint("purpose", "position", name="llm_model_assignments_pkey"),
+    UniqueConstraint(
+        "purpose", "model_id", name="llm_model_assignments_purpose_model_key"
+    ),
+    Index("llm_model_assignments_model_idx", "model_id"),
+    schema="chat_app",
+    comment="Models tried in order for a purpose (chat, title): position 0 is primary, the rest are fallbacks. Replaced as a whole by the backend.",
 )
 
 t_organization_invitations = Table(

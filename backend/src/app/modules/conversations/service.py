@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from functools import partial
@@ -56,8 +57,12 @@ from app.modules.files.generated import save_generated
 from app.modules.files.repository import FileRepository
 from app.modules.files.service import FileService, file_part, resolve_files
 from app.modules.folders.service import FolderService
+from app.modules.llm.catalog import ModelCatalog, ModelChain
+from app.modules.llm.crypto import EncryptionUnavailable
 from app.modules.workspaces.schemas import WorkspaceContext
 from app.modules.workspaces.service import WorkspaceService
+
+logger = logging.getLogger(__name__)
 
 TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled"})
 #: How long a stop request waits for the turn to save its partial answer.
@@ -450,6 +455,7 @@ class TurnService:
             conversation_id=conversation_id, leaf_id=question_id
         )
         tools = await authorization.allowed_actions(workspace, TOOL_RESOURCE)
+        models = await self._chat_models()
         await self._session.commit()
 
         # The graph state replays the context and this turn so far; only what
@@ -467,6 +473,7 @@ class TurnService:
             resume=interactions.resume_entries(values),
             resume_from=stored,
             known_ids=known,
+            models=models,
             base_content=content,
             base_metadata=metadata,
         )
@@ -680,6 +687,7 @@ class TurnService:
         tools = await AuthorizationService(self._session).allowed_actions(
             workspace, TOOL_RESOURCE
         )
+        models = await self._chat_models()
         await self._session.commit()
         return self._run(
             user,
@@ -689,7 +697,18 @@ class TurnService:
             user_turn_id=user_turn_id,
             tools=tools,
             messages=messages,
+            models=models,
         )
+
+    async def _chat_models(self) -> ModelChain | None:
+        """The models assigned to chat in `/admin/llm`, or None for the
+        environment's. A key that cannot be decrypted stops the turn before
+        anything is saved."""
+        try:
+            return await ModelCatalog(self._session).chain("chat")
+        except EncryptionUnavailable as error:
+            logger.error("Chat models unavailable: %s", error)
+            fail(503, "model_unavailable")
 
     def _run(
         self,
@@ -706,6 +725,7 @@ class TurnService:
         known_ids: set[str] | None = None,
         base_content: list[AguiMessage] | None = None,
         base_metadata: dict[str, Any] | None = None,
+        models: ModelChain | None = None,
     ) -> StartedTurn:
         """Hand a committed turn to the runner."""
         run_input = RunAgentInput.model_validate(
@@ -750,6 +770,7 @@ class TurnService:
             finalize=finalize,
             known_ids=known_ids,
             resume_from=resume_from,
+            models=models,
             # A resumed turn continues from its checkpoint, which already holds
             # the files it was given.
             prepare=self._with_files if resume_from is None else None,

@@ -19,6 +19,7 @@ from app.modules.authorization.router import router as authorization_router
 from app.modules.conversations.router import router as conversations_router
 from app.modules.files.router import router as files_router
 from app.modules.folders.router import router as folders_router
+from app.modules.llm.router import router as llm_router
 from app.modules.members.router import invitations_router
 from app.modules.members.router import router as members_router
 from app.modules.organizations.router import router as organizations_router
@@ -83,6 +84,7 @@ api_router.include_router(invitations_router)
 api_router.include_router(authorization_router)
 api_router.include_router(shares_router)
 api_router.include_router(share_links_router)
+api_router.include_router(llm_router)
 app.include_router(api_router)
 
 

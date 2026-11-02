@@ -104,6 +104,11 @@ class Settings(BaseSettings):
     openrouter_site_url: str | None = None
     openrouter_app_name: str | None = "ai-backend"
 
+    #: Fernet key that encrypts the API keys of LLM connections stored in the
+    #: database (QD-34). Generate one with `Fernet.generate_key()` (see
+    #: `.env.example`).
+    llm_encryption_key: SecretStr | None = None
+
     @field_validator("database_url")
     @classmethod
     def _postgres_psycopg(cls, value: SecretStr) -> SecretStr:
@@ -125,7 +130,12 @@ class Settings(BaseSettings):
             raise ValueError("storage URL must not contain a query or fragment")
         return normalized
 
-    @field_validator("storage_secret_access_key", "langfuse_secret_key", mode="before")
+    @field_validator(
+        "storage_secret_access_key",
+        "langfuse_secret_key",
+        "llm_encryption_key",
+        mode="before",
+    )
     @classmethod
     def _blank_secret_is_unset(cls, value: object) -> object:
         return value or None

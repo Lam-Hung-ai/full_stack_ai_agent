@@ -151,3 +151,7 @@ Loại: `BẮT ĐẦU`, `KẾT THÚC`, `LỖI`, `SỬA`, `THAY ĐỔI`, `QUYẾT
 | 02/11/2026 | S11 | BẮT ĐẦU | — | Đổi tên message thành turn (QD-33) | — |
 | 02/11/2026 | S11 | THAY ĐỔI | TD-021 | Bảng, cột, hàm, API, event, frontend đổi từ message sang turn | CH-S11-DB-01 → DOC-02 |
 | 02/11/2026 | S11 | KẾT THÚC | — | Xong 7/7 task; backend 154 test, frontend 68 test xanh; migration up/down/up khớp; kịch bản đạt | — |
+| 02/11/2026 | S12 | BẮT ĐẦU | — | Quản lý LLM model (QD-34) | — |
+| 02/11/2026 | S12 | QUYẾT ĐỊNH | QD-35 | Chi tiết quản trị LLM: module `llm`, mục đích chat/title, fallback biến môi trường, cache theo chuỗi model | CH-S12-BE-01, BE-02 |
+| 02/11/2026 | S12 | THAY ĐỔI | TD-022 | Bảng LLM, API quản trị, `LLM_ENCRYPTION_KEY`, trang `/admin/llm` | CH-S12-DB-01 → DOC-02 |
+| 02/11/2026 | S12 | KẾT THÚC | — | Xong 7/7 task; backend 161 test, frontend 74 test xanh; kịch bản 1–3 đạt | — |
