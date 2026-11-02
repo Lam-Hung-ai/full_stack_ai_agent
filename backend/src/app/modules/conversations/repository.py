@@ -17,7 +17,7 @@ from app.config.security import now
 from app.database.generated_tables import t_conversation_copy_jobs as copy_jobs
 from app.database.generated_tables import t_conversations as conversations
 from app.database.generated_tables import t_turns as turns
-from app.modules.conversations.schemas import ACTIVE_STATUSES
+from app.modules.conversations.schemas import ACTIVE_STATUSES, ConversationSort
 
 DEFAULT_TITLE = "Cuộc trò chuyện mới"
 
@@ -46,6 +46,8 @@ class ConversationRepository:
         archived: bool,
         folder_id: UUID | None,
         unfiled: bool,
+        pinned: bool | None = None,
+        sort: ConversationSort = "updated",
         limit: int,
         offset: int,
     ) -> tuple[list[RowMapping], int]:
@@ -62,6 +64,17 @@ class ConversationRepository:
             scope.append(conversations.c.folder_id == folder_id)
         elif unfiled:
             scope.append(conversations.c.folder_id.is_(None))
+        if pinned is not None:
+            scope.append(
+                conversations.c.pinned_at.is_not(None)
+                if pinned
+                else conversations.c.pinned_at.is_(None)
+            )
+        newest = (
+            conversations.c.created_at
+            if sort == "created"
+            else conversations.c.updated_at
+        )
         total = (
             await self._session.execute(
                 select(func.count()).select_from(conversations).where(*scope)
@@ -74,14 +87,16 @@ class ConversationRepository:
                 conversations.c.pinned_at,
                 conversations.c.archived_at,
                 conversations.c.folder_id,
+                conversations.c.created_at,
                 conversations.c.updated_at,
             )
             .where(*scope)
-            # Pinned chats first, then conversations_sidebar_idx order; id
-            # breaks ties for a stable page boundary.
+            # Pinned chats first, then newest (by activity, the
+            # conversations_sidebar_idx order); id breaks ties for a stable
+            # page boundary.
             .order_by(
                 conversations.c.pinned_at.desc().nulls_last(),
-                conversations.c.updated_at.desc(),
+                newest.desc(),
                 conversations.c.id.desc(),
             )
             .limit(limit)

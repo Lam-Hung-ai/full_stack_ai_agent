@@ -906,7 +906,7 @@ export interface paths {
         };
         /**
          * List Conversations
-         * @description Pinned chats come first, then the most recently updated.
+         * @description Pinned chats come first, then the newest by `sort`.
          */
         get: operations["list_conversations_api_v1_workspaces__workspace_id__conversations_get"];
         put?: never;
@@ -1161,6 +1161,11 @@ export interface components {
         ConversationListItem: {
             /** Archived At */
             archived_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
             /** Folder Id */
             folder_id: string | null;
             /**
@@ -3975,6 +3980,10 @@ export interface operations {
                 folder_id?: string | null;
                 /** @description Chats outside any folder */
                 unfiled?: boolean;
+                /** @description Only pinned (true) or only unpinned (false) */
+                pinned?: boolean | null;
+                /** @description Newest activity or newest created first */
+                sort?: "updated" | "created";
                 page?: number;
                 page_size?: number;
             };

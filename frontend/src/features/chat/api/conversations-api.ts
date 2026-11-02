@@ -12,17 +12,19 @@ import type {
 
 function filterQuery(filter: ConversationFilter) {
   switch (filter.kind) {
-    case "unfiled":
-      return { unfiled: true };
+    case "pinned":
+      return { unfiled: true, pinned: true };
+    case "recent":
+      return { unfiled: true, pinned: false, sort: filter.sort };
     case "folder":
       return { folder_id: filter.folderId };
     case "archived":
-      return { archived: true };
+      return { archived: true, sort: filter.sort };
   }
 }
 
-/** Chats shown per sidebar page; more load on demand. */
-export const CONVERSATION_PAGE_SIZE = 50;
+/** Chats per page; the next page loads when the list is scrolled to its end. */
+export const CONVERSATION_PAGE_SIZE = 20;
 
 export function listConversations(
   workspaceId: string,

@@ -76,12 +76,17 @@ class ConversationResponse(BaseModel):
     active_assistant: ActiveAssistant | None = None
 
 
+#: Sidebar order after pinned chats: newest activity or newest created.
+ConversationSort = Literal["updated", "created"]
+
+
 class ConversationListItem(BaseModel):
     id: UUID
     title: str
     pinned_at: datetime | None
     archived_at: datetime | None
     folder_id: UUID | None
+    created_at: datetime
     updated_at: datetime
 
 

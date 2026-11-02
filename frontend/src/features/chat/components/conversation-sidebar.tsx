@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronDownIcon, FolderPlusIcon, PlusIcon, SearchIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  FolderPlusIcon,
+  MessageCircleIcon,
+  PlusIcon,
+  SearchIcon,
+} from "lucide-react";
 import { NameDialog } from "@/components/shared/name-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Kbd } from "@/components/ui/kbd";
@@ -18,11 +24,13 @@ import {
 } from "@/components/ui/sidebar";
 import { useCurrentWorkspace } from "@/features/workspaces";
 import { cn } from "@/lib/utils";
-import { useFolderActions, useFolders } from "../hooks/use-conversations";
+import { useConversations, useFolderActions, useFolders } from "../hooks/use-conversations";
+import { useSidebarStore } from "../stores/sidebar-store";
 import { folderErrorMessage } from "../utils/folders";
 import { ConversationList } from "./conversation-list";
 import { ConversationSearchDialog } from "./conversation-search";
 import { FolderGroup } from "./folder-group";
+import { RecentFilterMenu } from "./recent-filter-menu";
 
 export function ConversationSidebar() {
   const workspace = useCurrentWorkspace();
@@ -70,21 +78,8 @@ function WorkspaceSidebar({ workspaceId }: { workspaceId: string }) {
       </SidebarGroup>
       {/* The lists need the full width: the icon rail shows only the actions. */}
       <div className="flex flex-col group-data-[collapsible=icon]:hidden">
-        <FoldersSection workspaceId={workspaceId} />
-        <Section title="Gần đây">
-          <ConversationList
-            emptyText="Chưa có cuộc trò chuyện nào."
-            filter={{ kind: "unfiled" }}
-            workspaceId={workspaceId}
-          />
-        </Section>
-        <Section defaultOpen={false} title="Đã lưu trữ">
-          <ConversationList
-            emptyText="Không có cuộc trò chuyện lưu trữ."
-            filter={{ kind: "archived" }}
-            workspaceId={workspaceId}
-          />
-        </Section>
+        <PinnedSection workspaceId={workspaceId} />
+        <RecentSection workspaceId={workspaceId} />
       </div>
       {searching && (
         <ConversationSearchDialog onClose={() => setSearching(false)} workspaceId={workspaceId} />
@@ -126,11 +121,18 @@ function Section({
   );
 }
 
-function FoldersSection({ workspaceId }: { workspaceId: string }) {
+/** Folders and the pinned chats outside them, like Claude's "Pinned". */
+function PinnedSection({ workspaceId }: { workspaceId: string }) {
   const folders = useFolders(workspaceId);
+  const pinned = useConversations(workspaceId, { kind: "pinned" });
   const { create } = useFolderActions(workspaceId);
   const [creating, setCreating] = useState(false);
   const folderList = folders.data?.data ?? [];
+  const isEmpty =
+    folders.isSuccess &&
+    folderList.length === 0 &&
+    pinned.isSuccess &&
+    pinned.data.pages[0]?.data.length === 0;
 
   return (
     <>
@@ -145,16 +147,25 @@ function FoldersSection({ workspaceId }: { workspaceId: string }) {
             <FolderPlusIcon />
           </SidebarGroupAction>
         }
-        title="Folder"
+        title="Ghim"
       >
-        {folders.isSuccess && folderList.length === 0 ? (
-          <p className="px-2 py-1 text-muted-foreground text-sm">Chưa có folder.</p>
+        {isEmpty ? (
+          <p className="px-2 py-1 text-muted-foreground text-sm">
+            Tạo folder hoặc ghim chat để giữ ở đây.
+          </p>
         ) : (
-          <SidebarMenu>
-            {folderList.map((folder) => (
-              <FolderGroup folder={folder} key={folder.id} workspaceId={workspaceId} />
-            ))}
-          </SidebarMenu>
+          <>
+            <SidebarMenu>
+              {folderList.map((folder) => (
+                <FolderGroup folder={folder} key={folder.id} workspaceId={workspaceId} />
+              ))}
+            </SidebarMenu>
+            <ConversationList
+              filter={{ kind: "pinned" }}
+              itemIcon={<MessageCircleIcon className="text-muted-foreground" />}
+              workspaceId={workspaceId}
+            />
+          </>
         )}
       </Section>
       {creating && (
@@ -172,5 +183,24 @@ function FoldersSection({ workspaceId }: { workspaceId: string }) {
         />
       )}
     </>
+  );
+}
+
+/** Chats outside folders and not pinned, as the filter menu says. */
+function RecentSection({ workspaceId }: { workspaceId: string }) {
+  const { status, grouping, sort } = useSidebarStore();
+  return (
+    <Section action={<RecentFilterMenu />} title={status === "archived" ? "Đã lưu trữ" : "Gần đây"}>
+      <ConversationList
+        emptyText={
+          status === "archived"
+            ? "Không có cuộc trò chuyện lưu trữ."
+            : "Chưa có cuộc trò chuyện nào."
+        }
+        filter={status === "archived" ? { kind: "archived", sort } : { kind: "recent", sort }}
+        grouping={grouping}
+        workspaceId={workspaceId}
+      />
+    </Section>
   );
 }

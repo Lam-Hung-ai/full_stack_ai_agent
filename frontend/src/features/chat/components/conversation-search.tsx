@@ -15,6 +15,7 @@ import {
 import { DialogClose } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useOnVisible } from "@/hooks/use-on-visible";
 import { cn } from "@/lib/utils";
 import { useConversationSearch, useConversations } from "../hooks/use-conversations";
 import type { ConversationSearchItem } from "../types/chat.types";
@@ -86,7 +87,7 @@ function RecentChats({
   workspaceId: string;
   onOpen: (href: string) => void;
 }) {
-  const recent = useConversations(workspaceId, { kind: "unfiled" });
+  const recent = useConversations(workspaceId, { kind: "recent", sort: "updated" });
   const items = recent.data?.pages[0]?.data ?? [];
   if (recent.isLoading) return <Loading />;
   if (items.length === 0) return <Note>Chưa có cuộc trò chuyện nào.</Note>;
@@ -117,6 +118,12 @@ function SearchResults({
   onOpen: (href: string) => void;
 }) {
   const results = useConversationSearch(workspaceId, term);
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = results;
+  // The next page loads as the list is scrolled to its end.
+  const more = useOnVisible<HTMLDivElement>(
+    () => void fetchNextPage(),
+    hasNextPage && !isFetchingNextPage,
+  );
   if (results.isLoading) return <Loading />;
   if (results.isError) {
     return <Note className="text-destructive">Không tìm được. Vui lòng thử lại.</Note>;
@@ -128,15 +135,10 @@ function SearchResults({
       {items.map((item) => (
         <SearchResult item={item} key={item.id} onOpen={onOpen} term={term} />
       ))}
-      {results.hasNextPage && (
-        <CommandItem
-          className={cn(ITEM_CLASS, "justify-center text-muted-foreground")}
-          disabled={results.isFetchingNextPage}
-          onSelect={() => void results.fetchNextPage()}
-          value="more"
-        >
-          {results.isFetchingNextPage ? "Đang tải…" : "Xem thêm kết quả"}
-        </CommandItem>
+      {hasNextPage && (
+        <div aria-busy={isFetchingNextPage} className="p-2" ref={more}>
+          <Skeleton className="h-9" />
+        </div>
       )}
     </CommandGroup>
   );

@@ -16,9 +16,12 @@ import { ConversationActionsMenu } from "./conversation-actions-menu";
 export function ConversationItem({
   conversation,
   workspaceId,
+  icon,
 }: {
   conversation: ConversationListItem;
   workspaceId: string;
+  /** Shown before the title; by default a pin on a pinned chat. */
+  icon?: React.ReactNode;
 }) {
   const href = `/c/${conversation.id}`;
   const active = usePathname() === href;
@@ -33,9 +36,10 @@ export function ConversationItem({
           // On a phone the sidebar is a sheet over the chat being opened.
           onClick={() => isMobile && setOpenMobile(false)}
         >
-          {conversation.pinned_at && (
-            <PinIcon aria-label="Đã ghim" className="text-muted-foreground" />
-          )}
+          {icon ??
+            (conversation.pinned_at && (
+              <PinIcon aria-label="Đã ghim" className="text-muted-foreground" />
+            ))}
           <span>{conversation.title}</span>
         </Link>
       </SidebarMenuButton>

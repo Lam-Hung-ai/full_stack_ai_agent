@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import type { ChatStatus } from "ai";
 import { FileTextIcon, PaperclipIcon, TriangleAlertIcon, XIcon } from "lucide-react";
 import {
@@ -13,7 +13,6 @@ import {
   PromptInputSubmit,
   PromptInputTextarea,
   PromptInputTools,
-  useProviderAttachments,
 } from "@/components/ai-elements/prompt-input";
 import {
   Attachment,
@@ -28,7 +27,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import type { ChatFile } from "../api/files-api";
 import { type Attachment as Picked, useAttachments } from "../hooks/use-attachments";
-import { ACCEPTED_FILES, fileLabel } from "../utils/files";
+import { ACCEPTED_FILES, fileLabel, filesOf } from "../utils/files";
 
 export type ComposerDraft = { text: string; files: ChatFile[] };
 
@@ -68,120 +67,103 @@ export function ChatComposer({
   // the typed text stays. Enter submits even when only "Dừng" is shown.
   const blocked = disabled || attachments.isUploading;
 
+  // Pasted (Ctrl+V of a screenshot or of files copied in a file manager) or
+  // dropped files go to our own uploads, never to AI Elements' attachment
+  // list, which only keeps blob URLs. True when the event carried files.
+  const takeFiles = (data: DataTransfer | null) => {
+    const files = filesOf(data);
+    if (files.length === 0 || !workspaceId) return false;
+    if (attachments.canAdd) attachments.add(files);
+    return true;
+  };
+
   return (
     // The provider keeps the text until onSubmit resolves; a rejection keeps it.
     <PromptInputProvider>
-      <DroppedFiles onFiles={workspaceId && attachments.canAdd ? attachments.add : undefined} />
-      <PromptInput
-        className="*:data-[slot=input-group]:rounded-2xl *:data-[slot=input-group]:bg-background *:data-[slot=input-group]:shadow-sm"
-        onSubmit={async (message) => {
-          if (blocked || (!message.text.trim() && attachments.ready.length === 0)) {
-            throw new Error("not sent");
-          }
-          if (!(await onSubmit({ text: message.text, files: attachments.ready }))) {
-            throw new Error("not sent");
-          }
-          attachments.clear();
+      <div
+        // Capture: runs before PromptInput's own drop listener on its form.
+        onDropCapture={(event) => {
+          if (!takeFiles(event.dataTransfer)) return;
+          event.preventDefault();
+          event.stopPropagation();
         }}
       >
-        {attachments.items.length > 0 && (
-          <PromptInputHeader>
-            <AttachmentGroup className="w-full">
-              {attachments.items.map((item) => (
-                <AttachmentChip
-                  item={item}
-                  key={item.localId}
-                  onRemove={() => attachments.remove(item.localId)}
-                />
-              ))}
-            </AttachmentGroup>
-          </PromptInputHeader>
-        )}
-        <PromptInputBody>
-          <PromptInputTextarea className="text-[0.9375rem]" placeholder={placeholder} />
-        </PromptInputBody>
-        <PromptInputFooter>
-          <PromptInputTools>
-            {workspaceId && (
-              <>
-                <PromptInputButton
-                  aria-label="Đính kèm tệp"
-                  disabled={!attachments.canAdd}
-                  onClick={() => picker.current?.click()}
-                  title="Đính kèm tệp (hoặc dán, kéo thả vào đây)"
-                >
-                  <PaperclipIcon className="size-4" />
-                </PromptInputButton>
-                <input
-                  accept={ACCEPTED_FILES}
-                  aria-hidden
-                  className="hidden"
-                  multiple
-                  onChange={(event) => {
-                    if (event.currentTarget.files) attachments.add(event.currentTarget.files);
-                    // Picking the same file again must fire a change.
-                    event.currentTarget.value = "";
-                  }}
-                  ref={picker}
-                  tabIndex={-1}
-                  type="file"
-                />
-              </>
-            )}
-          </PromptInputTools>
-          {onStop ? (
-            <PromptInputSubmit
-              aria-label="Dừng"
-              onClick={onStop}
-              status="streaming"
-              type="button"
-            />
-          ) : (
-            <PromptInputSubmit disabled={blocked} status={status} />
+        <PromptInput
+          className="*:data-[slot=input-group]:rounded-2xl *:data-[slot=input-group]:bg-background *:data-[slot=input-group]:shadow-xs"
+          onSubmit={async (message) => {
+            if (blocked || (!message.text.trim() && attachments.ready.length === 0)) {
+              throw new Error("not sent");
+            }
+            if (!(await onSubmit({ text: message.text, files: attachments.ready }))) {
+              throw new Error("not sent");
+            }
+            attachments.clear();
+          }}
+        >
+          {attachments.items.length > 0 && (
+            <PromptInputHeader className="pb-0">
+              <AttachmentGroup className="w-full">
+                {attachments.items.map((item) => (
+                  <AttachmentChip
+                    item={item}
+                    key={item.localId}
+                    onRemove={() => attachments.remove(item.localId)}
+                  />
+                ))}
+              </AttachmentGroup>
+            </PromptInputHeader>
           )}
-        </PromptInputFooter>
-      </PromptInput>
+          <PromptInputBody>
+            <PromptInputTextarea
+              className="min-h-10 py-2.5 text-[0.9375rem]"
+              onPaste={(event) => takeFiles(event.clipboardData) && event.preventDefault()}
+              placeholder={placeholder}
+            />
+          </PromptInputBody>
+          <PromptInputFooter className="pt-0 pb-1.5">
+            <PromptInputTools>
+              {workspaceId && (
+                <>
+                  <PromptInputButton
+                    aria-label="Đính kèm tệp"
+                    disabled={!attachments.canAdd}
+                    onClick={() => picker.current?.click()}
+                    title="Đính kèm tệp (hoặc dán, kéo thả vào đây)"
+                  >
+                    <PaperclipIcon className="size-4" />
+                  </PromptInputButton>
+                  <input
+                    accept={ACCEPTED_FILES}
+                    aria-hidden
+                    className="hidden"
+                    multiple
+                    onChange={(event) => {
+                      if (event.currentTarget.files) attachments.add(event.currentTarget.files);
+                      // Picking the same file again must fire a change.
+                      event.currentTarget.value = "";
+                    }}
+                    ref={picker}
+                    tabIndex={-1}
+                    type="file"
+                  />
+                </>
+              )}
+            </PromptInputTools>
+            {onStop ? (
+              <PromptInputSubmit
+                aria-label="Dừng"
+                onClick={onStop}
+                status="streaming"
+                type="button"
+              />
+            ) : (
+              <PromptInputSubmit disabled={blocked} status={status} />
+            )}
+          </PromptInputFooter>
+        </PromptInput>
+      </div>
     </PromptInputProvider>
   );
-}
-
-/**
- * Files pasted into or dropped on the prompt land in the AI Elements
- * provider as blob URLs; hand each to our uploads once, then drop it there.
- * Without `onFiles` (no workspace, or full) they are dropped unused.
- */
-function DroppedFiles({ onFiles }: { onFiles?: (files: File[]) => void }) {
-  const { files, remove } = useProviderAttachments();
-  const taken = useRef(new Set<string>());
-  const latest = useRef(onFiles);
-  useEffect(() => {
-    latest.current = onFiles;
-  }, [onFiles]);
-
-  useEffect(() => {
-    const fresh = files.filter((part) => !taken.current.has(part.id));
-    if (fresh.length === 0) return;
-    for (const part of fresh) taken.current.add(part.id);
-    void Promise.all(
-      fresh.map(async (part) => {
-        try {
-          const blob = await (await fetch(part.url)).blob();
-          return new File([blob], part.filename || "tệp", { type: part.mediaType || blob.type });
-        } catch {
-          return null;
-        } finally {
-          // Revokes the blob URL; read above first. The id stays taken: the
-          // list may still show it for a render before the removal lands.
-          remove(part.id);
-        }
-      }),
-    ).then((read) => {
-      const ready = read.filter((file): file is File => file !== null);
-      if (ready.length > 0) latest.current?.(ready);
-    });
-  }, [files, remove]);
-
-  return null;
 }
 
 const STATE = { uploading: "uploading", failed: "error", ready: "done" } as const;
@@ -189,8 +171,8 @@ const STATE = { uploading: "uploading", failed: "error", ready: "done" } as cons
 function AttachmentChip({ item, onRemove }: { item: Picked; onRemove: () => void }) {
   return (
     <Attachment
-      className="max-w-64"
-      size="sm"
+      className="max-w-56"
+      size="xs"
       state={STATE[item.status]}
       title={item.error ?? item.name}
     >

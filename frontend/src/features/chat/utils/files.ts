@@ -106,6 +106,17 @@ export function formatBytes(bytes: number): string {
   return `${unit === 0 ? value : value.toFixed(1)} ${SIZE_UNITS[unit]}`;
 }
 
+/** Files carried by a paste or drop; empty when it holds only text. */
+export function filesOf(data: Pick<DataTransfer, "files" | "items"> | null): File[] {
+  if (!data) return [];
+  if (data.files.length > 0) return Array.from(data.files);
+  // Some browsers list pasted files only as items.
+  return Array.from(data.items).flatMap((item) => {
+    const file = item.kind === "file" ? item.getAsFile() : null;
+    return file ? [file] : [];
+  });
+}
+
 /** "PDF · 1.2 MB": a file's extension and size, under its name. */
 export function fileLabel(name: string, sizeBytes: number): string {
   const dot = name.lastIndexOf(".");

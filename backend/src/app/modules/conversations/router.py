@@ -21,6 +21,7 @@ from app.modules.conversations.schemas import (
     ConversationListResponse,
     ConversationResponse,
     ConversationSearchResponse,
+    ConversationSort,
     ConversationUpdate,
     EditTurn,
     HistoryResponse,
@@ -72,8 +73,14 @@ async def list_conversations(
     archived: Annotated[bool, Query(description="Archived chats only")] = False,
     folder_id: Annotated[UUID | None, Query(description="Chats of one folder")] = None,
     unfiled: Annotated[bool, Query(description="Chats outside any folder")] = False,
+    pinned: Annotated[
+        bool | None, Query(description="Only pinned (true) or only unpinned (false)")
+    ] = None,
+    sort: Annotated[
+        ConversationSort, Query(description="Newest activity or newest created first")
+    ] = "updated",
 ) -> ConversationListResponse:
-    """Pinned chats come first, then the most recently updated."""
+    """Pinned chats come first, then the newest by `sort`."""
     return await ConversationService(session).list(
         user=user,
         workspace=workspace,
@@ -81,6 +88,8 @@ async def list_conversations(
         archived=archived,
         folder_id=folder_id,
         unfiled=unfiled,
+        pinned=pinned,
+        sort=sort,
     )
 
 

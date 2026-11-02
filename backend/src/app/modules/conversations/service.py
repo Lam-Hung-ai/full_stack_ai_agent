@@ -43,6 +43,7 @@ from app.modules.conversations.schemas import (
     ConversationResponse,
     ConversationSearchItem,
     ConversationSearchResponse,
+    ConversationSort,
     ConversationUpdate,
     EditTurn,
     HistoryResponse,
@@ -103,6 +104,8 @@ class ConversationService:
         archived: bool = False,
         folder_id: UUID | None = None,
         unfiled: bool = False,
+        pinned: bool | None = None,
+        sort: ConversationSort = "updated",
     ) -> ConversationListResponse:
         rows, total = await self._conversations.list_for_owner(
             workspace_id=workspace.id,
@@ -110,6 +113,8 @@ class ConversationService:
             archived=archived,
             folder_id=folder_id,
             unfiled=unfiled,
+            pinned=pinned,
+            sort=sort,
             limit=params.page_size,
             offset=params.offset,
         )

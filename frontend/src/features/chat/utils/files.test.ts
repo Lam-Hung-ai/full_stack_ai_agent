@@ -5,6 +5,7 @@ import {
   madeFile,
   contentTypeOf,
   fileLabel,
+  filesOf,
   formatBytes,
   questionContent,
   questionText,
@@ -89,5 +90,18 @@ describe("madeFile", () => {
     expect(madeFile("get_current_time", result)).toBeNull();
     expect(madeFile("create_file", "Could not create the file: too big")).toBeNull();
     expect(madeFile("create_file", undefined)).toBeNull();
+  });
+});
+
+describe("filesOf", () => {
+  const file = new File(["x"], "a.txt", { type: "text/plain" });
+  const transfer = (files: File[], items: Partial<DataTransferItem>[]) =>
+    ({ files, items }) as unknown as DataTransfer;
+
+  it("takes the files list, else file items, and ignores text", () => {
+    expect(filesOf(transfer([file], []))).toEqual([file]);
+    expect(filesOf(transfer([], [{ kind: "file", getAsFile: () => file }]))).toEqual([file]);
+    expect(filesOf(transfer([], [{ kind: "string", getAsFile: () => null }]))).toEqual([]);
+    expect(filesOf(null)).toEqual([]);
   });
 });

@@ -15,10 +15,15 @@ export type Folder = components["schemas"]["FolderResponse"];
 export type FolderList = components["schemas"]["FolderListResponse"];
 
 /** Which chats a sidebar list shows. */
+/** Order after pinned chats: newest activity or newest created. */
+export type ConversationSort = "updated" | "created";
+
+/** A sidebar list: pinned and recent hold the chats outside folders. */
 export type ConversationFilter =
-  | { kind: "unfiled" }
+  | { kind: "pinned" }
+  | { kind: "recent"; sort: ConversationSort }
   | { kind: "folder"; folderId: string }
-  | { kind: "archived" };
+  | { kind: "archived"; sort: ConversationSort };
 
 /**
  * One SQL row as rendered: a user question or a whole assistant turn, whose

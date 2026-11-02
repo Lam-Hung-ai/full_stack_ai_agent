@@ -330,6 +330,11 @@
             ],
             "title": "Archived At"
           },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
           "folder_id": {
             "anyOf": [
               {
@@ -375,6 +380,7 @@
           "pinned_at",
           "archived_at",
           "folder_id",
+          "created_at",
           "updated_at"
         ],
         "title": "ConversationListItem",
@@ -5399,7 +5405,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/conversations": {
       "get": {
-        "description": "Pinned chats come first, then the most recently updated.",
+        "description": "Pinned chats come first, then the newest by `sort`.",
         "operationId": "list_conversations_api_v1_workspaces__workspace_id__conversations_get",
         "parameters": [
           {
@@ -5453,6 +5459,40 @@
               "description": "Chats outside any folder",
               "title": "Unfiled",
               "type": "boolean"
+            }
+          },
+          {
+            "description": "Only pinned (true) or only unpinned (false)",
+            "in": "query",
+            "name": "pinned",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only pinned (true) or only unpinned (false)",
+              "title": "Pinned"
+            }
+          },
+          {
+            "description": "Newest activity or newest created first",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "updated",
+              "description": "Newest activity or newest created first",
+              "enum": [
+                "updated",
+                "created"
+              ],
+              "title": "Sort",
+              "type": "string"
             }
           },
           {

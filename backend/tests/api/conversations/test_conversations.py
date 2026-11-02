@@ -127,3 +127,33 @@ async def test_unknown_conversation(client, make_user, login):
         f"/api/v1/conversations/{uuid4()}", headers=await login(user)
     )
     assert response.json()["error"]["code"] == "conversation_not_found"
+
+
+async def test_list_filters_pinned_and_sorts(client, make_user, login):
+    user = make_user("an@example.com")
+    headers = await login(user)
+    url = path(user.personal_workspace_id)
+    ids = {}
+    for title in ("Một", "Hai", "Ba"):
+        created = await client.post(url, json={"title": title}, headers=headers)
+        ids[title] = created.json()["id"]
+    await client.patch(
+        f"/api/v1/conversations/{ids['Hai']}", json={"pinned": True}, headers=headers
+    )
+    # Renaming is activity: "Một" becomes the most recently updated.
+    await client.patch(
+        f"/api/v1/conversations/{ids['Một']}", json={"title": "Một!"}, headers=headers
+    )
+
+    async def titles(**params):
+        listed = await client.get(url, params=params, headers=headers)
+        assert listed.status_code == 200
+        return [item["title"] for item in listed.json()["data"]]
+
+    assert await titles(pinned=True) == ["Hai"]
+    assert await titles(pinned=False) == ["Một!", "Ba"]
+    assert await titles(pinned=False, sort="created") == ["Ba", "Một!"]
+    assert await titles() == ["Hai", "Một!", "Ba"]
+    assert (
+        await client.get(url, params={"sort": "name"}, headers=headers)
+    ).status_code == 422
