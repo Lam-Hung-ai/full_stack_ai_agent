@@ -12,9 +12,12 @@ import { cn } from "@/lib/utils";
 export function ReasoningSummary({
   reasoning,
   isStreaming,
+  workTime,
 }: {
   reasoning: string;
   isStreaming: boolean;
+  /** How long the whole answer took, shown on its first thinking step. */
+  workTime?: string | null;
 }) {
   const { isOpen } = useReasoning();
 
@@ -22,9 +25,11 @@ export function ReasoningSummary({
     <>
       <BrainIcon className="size-4 shrink-0" />
       {isStreaming ? (
-        <span className="min-w-0 flex-1 truncate text-left">{latestLine(reasoning)}</span>
+        <span className="min-w-0 flex-1 truncate text-left">
+          {latestLine(reasoning) || "Đang suy nghĩ…"}
+        </span>
       ) : (
-        <span>Thought for a few seconds</span>
+        <span>{workTime ? `Đã làm việc trong ${workTime}` : "Đã suy nghĩ"}</span>
       )}
       <ChevronDownIcon
         className={cn("size-4 shrink-0 transition-transform", isOpen ? "rotate-180" : "rotate-0")}

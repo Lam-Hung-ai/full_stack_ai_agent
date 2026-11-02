@@ -2304,6 +2304,11 @@
             ],
             "title": "Status",
             "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
           }
         },
         "required": [
@@ -2313,6 +2318,7 @@
           "status",
           "content",
           "created_at",
+          "updated_at",
           "sibling_ids"
         ],
         "title": "TurnResponse",

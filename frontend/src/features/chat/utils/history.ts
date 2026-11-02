@@ -10,6 +10,7 @@ export function toRowView(row: TurnRow): RowView {
     content: row.content as unknown as Message[],
     siblingIds: row.sibling_ids,
     createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 

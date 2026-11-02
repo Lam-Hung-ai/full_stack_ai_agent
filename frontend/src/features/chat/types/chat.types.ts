@@ -37,6 +37,8 @@ export type RowView = {
   siblingIds: string[];
   /** When the turn was saved; absent while this tab is still sending it. */
   createdAt?: string;
+  /** Last change; for a finished turn, when it ended. */
+  updatedAt?: string;
   live?: boolean;
 };
 

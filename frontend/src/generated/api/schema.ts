@@ -1997,6 +1997,11 @@ export interface components {
              * @enum {string}
              */
             status: "pending" | "running" | "requires_action" | "completed" | "failed" | "cancelled";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /**
          * UploadCreate

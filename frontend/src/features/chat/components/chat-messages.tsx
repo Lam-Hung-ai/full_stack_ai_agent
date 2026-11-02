@@ -37,7 +37,7 @@ import {
 } from "../utils/agui-messages";
 import { isActive, isTerminal } from "../utils/history";
 import { attachedFiles, madeFile, questionText as textOf } from "../utils/files";
-import { turnTime, turnTimeTitle } from "../utils/turn-time";
+import { turnTime, turnTimeTitle, workDuration } from "../utils/turn-time";
 import { ASK_USER_TOOL, type InteractionAnswer, interactionOf } from "../utils/interactions";
 import { BranchSwitcher } from "./branch-switcher";
 import { CopyAction } from "./copy-action";
@@ -220,6 +220,9 @@ function AnswerRow({
   const finished = !row.live && isTerminal(row);
   const showActions = actions && finished;
   const copyText = answerText(row.content);
+  // Like ChatGPT's "Worked for 7s", on the answer's first thinking step.
+  const workTime = finished ? workDuration(row.createdAt, row.updatedAt) : null;
+  const firstThought = items.findIndex((item) => item.kind === "turn" && item.turn.reasoning);
   // Only a saved pause can be answered; the server checks it again.
   const onAnswer =
     answerable && !row.live && row.status === "requires_action" ? actions?.onAnswer : undefined;
@@ -243,6 +246,7 @@ function AnswerRow({
                 fileSource={fileSource}
                 isStreaming={isStreaming && index === items.length - 1}
                 key={item.turn.message.id}
+                workTime={index === firstThought ? workTime : null}
                 messages={row.content}
                 rowStatus={row.live ? "running" : row.status}
                 turn={item.turn}
@@ -313,12 +317,14 @@ function TurnView({
   rowStatus,
   fileSource,
   isStreaming,
+  workTime,
 }: {
   turn: Turn;
   messages: readonly AGUIMessage[];
   rowStatus: RowView["status"];
   fileSource?: FileLinkSource;
   isStreaming: boolean;
+  workTime?: string | null;
 }) {
   if (message.role !== "assistant") return null;
 
@@ -335,13 +341,17 @@ function TurnView({
         {reasoning && (
           <Reasoning defaultOpen={isReasoningStreaming} isStreaming={isReasoningStreaming}>
             <ReasoningTrigger>
-              <ReasoningSummary isStreaming={isReasoningStreaming} reasoning={reasoning} />
+              <ReasoningSummary
+                isStreaming={isReasoningStreaming}
+                reasoning={reasoning}
+                workTime={workTime}
+              />
             </ReasoningTrigger>
             <ReasoningContent>{reasoning}</ReasoningContent>
           </Reasoning>
         )}
         {message.content ? (
-          <MessageResponse className="font-serif leading-7">{message.content}</MessageResponse>
+          <MessageResponse className="leading-7">{message.content}</MessageResponse>
         ) : toolCalls.length === 0 && !reasoning && isStreaming ? (
           <Loader />
         ) : null}

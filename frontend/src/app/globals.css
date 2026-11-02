@@ -8,7 +8,6 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-source-serif), ui-serif, Georgia, serif;
   --font-mono: var(--font-jetbrains), ui-monospace, monospace;
   --font-heading: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
@@ -155,4 +154,23 @@
       scrollbar-color: color-mix(in oklch, var(--muted-foreground) 25%, transparent) transparent;
     }
   }
+}
+
+/* A hand over everything clickable. Unlayered on purpose: shadcn and cmdk
+   items set cursor-default as a utility, which would beat a base rule.
+   Disabled controls keep their own cursor. */
+:is(
+  button,
+  summary,
+  select,
+  label[for],
+  [role="button"],
+  [role="tab"],
+  [role="option"],
+  [role="menuitem"],
+  [role="menuitemradio"],
+  [role="menuitemcheckbox"],
+  [cmdk-item]
+):not(:disabled, [aria-disabled="true"], [data-disabled=""], [data-disabled="true"]) {
+  cursor: pointer;
 }

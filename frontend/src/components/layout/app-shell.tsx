@@ -28,7 +28,7 @@ export function AppShell({
       <Sidebar collapsible="icon">
         <SidebarHeader className="flex-row items-center gap-1">
           <SidebarTrigger aria-label="Ẩn hoặc hiện thanh bên" />
-          <span className="truncate font-serif font-semibold text-lg group-data-[collapsible=icon]:hidden">
+          <span className="truncate font-semibold text-base group-data-[collapsible=icon]:hidden">
             {brand}
           </span>
         </SidebarHeader>

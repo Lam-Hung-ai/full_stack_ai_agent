@@ -41,6 +41,8 @@ async def test_turn_streams_and_is_saved(client, make_user, login, scripted_mode
     assert assistant_row["parent_turn_id"] == str(turn_id)
     assert [m["role"] for m in assistant_row["content"]] == ["assistant"]
     assert assistant_row["content"][0]["content"] == "Xin chào bạn"
+    # The UI shows how long the answer took from these two.
+    assert assistant_row["updated_at"] >= assistant_row["created_at"]
 
     conversation = (
         await client.get(f"/api/v1/conversations/{conversation_id}", headers=headers)

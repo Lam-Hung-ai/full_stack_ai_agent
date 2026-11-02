@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDownIcon, Share2Icon } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,17 @@ import { ShareDialog } from "./share-dialog";
 export function ChatHeader({ conversation }: { conversation?: Conversation }) {
   const isPersonal = useCurrentWorkspace()?.kind === "personal";
   const [sharing, setSharing] = useState(false);
+  const title = conversation?.title;
+
+  // The browser tab shows the chat's name while it is open.
+  useEffect(() => {
+    if (!title) return;
+    const previous = document.title;
+    document.title = title;
+    return () => {
+      document.title = previous;
+    };
+  }, [title]);
 
   return (
     <PageHeader

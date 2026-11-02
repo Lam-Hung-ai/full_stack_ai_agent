@@ -122,6 +122,9 @@ class TurnResponse(BaseModel):
     status: TurnState
     content: list[dict[str, Any]]
     created_at: datetime
+    #: Last change; a finished turn no longer changes, so for one it is when
+    #: the turn ended (the UI shows how long an answer took).
+    updated_at: datetime
     #: Every version at this position (same parent), oldest first, this one
     #: included; more than one means the UI offers a branch switch.
     sibling_ids: list[UUID]

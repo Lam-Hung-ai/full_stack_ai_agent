@@ -11,6 +11,7 @@ const row = (overrides: Partial<TurnRow>): TurnRow => ({
   status: "completed",
   content: [],
   created_at: "2026-10-30T00:00:00Z",
+  updated_at: "2026-10-30T00:00:07Z",
   sibling_ids: ["r"],
   ...overrides,
 });
