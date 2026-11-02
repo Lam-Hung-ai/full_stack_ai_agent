@@ -175,3 +175,12 @@
 ):not(:disabled, [aria-disabled="true"], [data-disabled=""], [data-disabled="true"]) {
   cursor: pointer;
 }
+
+/* The fullscreen view of an answer's table opens outside the answer (a
+   portal on body); it keeps the answer table's serif and aligned digits. */
+@layer base {
+  [data-streamdown="table-fullscreen"] table {
+    font-family: var(--font-serif);
+    font-variant-numeric: tabular-nums;
+  }
+}

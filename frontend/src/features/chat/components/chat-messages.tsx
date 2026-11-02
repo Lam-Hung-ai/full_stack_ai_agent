@@ -53,11 +53,17 @@ import { ReasoningSummary } from "./reasoning-summary";
  */
 const ANSWER_CLASS = cn(
   "font-serif text-base leading-relaxed",
-  "*:max-w-[35em] [&>div]:max-w-none",
+  "*:max-w-[35em] [&>div]:max-w-none [&>hr]:max-w-none",
   "[&_:is(h1,h2,h3)]:font-semibold [&_:is(h1,h2,h3)]:leading-tight",
   "[&_h1]:text-xl [&_h2]:text-lg [&_h3]:text-base",
-  // Tables are data to scan: the interface sans with aligned digits.
-  "[&_table]:font-sans [&_table]:text-sm [&_table]:tabular-nums",
+  // Tables keep the answer's serif, a step smaller, with aligned digits.
+  // Columns take their natural width (cells wrap past 18rem) and a wide
+  // table scrolls, instead of squeezing a column to one word a line.
+  "[&_table]:w-max [&_table]:min-w-full [&_table]:text-sm [&_table]:tabular-nums",
+  "[&_:is(td,th)]:max-w-[18rem]",
+  // Math in a cell at the cell's size; important because katex.min.css is
+  // unlayered and beats every Tailwind layer.
+  "[&_td_.katex]:text-[1em]!",
   // Inline code scales with the text around it (mono looks large per px).
   "[&_:not(pre)>code]:text-[0.875em]",
 );
