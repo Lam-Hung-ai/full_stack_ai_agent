@@ -46,6 +46,18 @@ import { InteractionCard } from "./interaction-card";
 import { type FileLinkSource, MessageFiles } from "./message-files";
 import { ReasoningSummary } from "./reasoning-summary";
 
+/**
+ * Answer prose: 18px serif with relaxed leading; paragraphs, lists and
+ * headings capped at 35em (about 70 characters a line), while tables and
+ * code (wrapped in divs) keep the column width. Headings sit tighter.
+ */
+const ANSWER_CLASS = cn(
+  "font-serif text-lg leading-relaxed",
+  "*:max-w-[35em] [&>div]:max-w-none",
+  "[&_:is(h1,h2,h3)]:font-semibold [&_:is(h1,h2,h3)]:leading-tight",
+  "[&_h1]:text-2xl [&_h2]:text-xl [&_h3]:text-lg",
+);
+
 /** Turn footers: small, quiet icons. */
 const FOOTER_CLASS = "gap-0 text-muted-foreground [&_button]:size-6 [&_svg]:size-3";
 
@@ -153,7 +165,7 @@ function QuestionRow({
     <Message from="user">
       {fileSource && <MessageFiles files={files} source={fileSource} />}
       {text && (
-        <MessageContent className="text-[0.9375rem] group-[.is-user]:rounded-2xl">
+        <MessageContent className="text-base group-[.is-user]:rounded-2xl">
           <MessageResponse>{text}</MessageResponse>
         </MessageContent>
       )}
@@ -337,7 +349,7 @@ function TurnView({
 
   return (
     <Message from="assistant">
-      <MessageContent className="text-base">
+      <MessageContent className="w-full text-base">
         {reasoning && (
           <Reasoning defaultOpen={isReasoningStreaming} isStreaming={isReasoningStreaming}>
             <ReasoningTrigger>
@@ -351,9 +363,7 @@ function TurnView({
           </Reasoning>
         )}
         {message.content ? (
-          <MessageResponse className="font-serif text-[1.0625rem] leading-7">
-            {message.content}
-          </MessageResponse>
+          <MessageResponse className={ANSWER_CLASS}>{message.content}</MessageResponse>
         ) : toolCalls.length === 0 && !reasoning && isStreaming ? (
           <Loader />
         ) : null}
@@ -368,8 +378,10 @@ function TurnView({
 
           return (
             <Fragment key={toolCall.id}>
-              <Tool>
+              <Tool className="border-border/60">
                 <ToolHeader
+                  // Steps behind the answer: a regular-weight, muted name.
+                  className="[&_span.font-medium]:font-normal [&_span.font-medium]:text-muted-foreground"
                   state={state}
                   type={`tool-${toolCall.function.name}` as ToolUIPart["type"]}
                 />
@@ -396,7 +408,7 @@ function TurnView({
 function TurnTime({ createdAt }: { createdAt?: string }) {
   return (
     <time
-      className="px-1 text-[11px] text-muted-foreground"
+      className="px-1 text-muted-foreground text-xs"
       dateTime={createdAt}
       title={turnTimeTitle(createdAt)}
     >
