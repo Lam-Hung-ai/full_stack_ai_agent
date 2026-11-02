@@ -47,7 +47,7 @@ export function ChatComposer({
   workspaceId,
   status,
   disabled,
-  placeholder = "Trả lời…",
+  placeholder = "Hỏi agent",
   onSubmit,
   onStop,
 }: {

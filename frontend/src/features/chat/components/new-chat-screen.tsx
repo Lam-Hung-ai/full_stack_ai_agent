@@ -43,7 +43,6 @@ export function NewChatScreen() {
           <ChatComposer
             disabled={!workspace}
             onSubmit={start}
-            placeholder="Bạn muốn hỏi gì?"
             workspaceId={workspace?.id}
             status={create.isPending ? "submitted" : "ready"}
           />
