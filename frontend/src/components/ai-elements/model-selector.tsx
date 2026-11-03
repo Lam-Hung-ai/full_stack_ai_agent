@@ -170,6 +170,7 @@ export const ModelSelectorLogo = ({
   className,
   ...props
 }: ModelSelectorLogoProps) => (
+  // eslint-disable-next-line @next/next/no-img-element -- a 12px remote SVG logo
   <img
     {...props}
     alt={`${provider} logo`}

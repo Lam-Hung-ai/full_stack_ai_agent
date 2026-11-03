@@ -1,0 +1,52 @@
+{
+  "source_filename": "the_design_of_everyday_things(2).md",
+  "line_count": 5012,
+  "sha256": "d2047285b119f3ac7593a7d3ae63c94ade22ee2a5d29aa9d87cba3b28092e98d",
+  "parts": [
+    {
+      "file": "preface.md",
+      "start_line": 1,
+      "end_line": 230
+    },
+    {
+      "file": "chapter-01.md",
+      "start_line": 231,
+      "end_line": 682
+    },
+    {
+      "file": "chapter-02.md",
+      "start_line": 683,
+      "end_line": 1236
+    },
+    {
+      "file": "chapter-03.md",
+      "start_line": 1237,
+      "end_line": 1890
+    },
+    {
+      "file": "chapter-04.md",
+      "start_line": 1891,
+      "end_line": 2436
+    },
+    {
+      "file": "chapter-05.md",
+      "start_line": 2437,
+      "end_line": 3188
+    },
+    {
+      "file": "chapter-06.md",
+      "start_line": 3189,
+      "end_line": 3751
+    },
+    {
+      "file": "chapter-07.md",
+      "start_line": 3752,
+      "end_line": 4238
+    },
+    {
+      "file": "back-matter.md",
+      "start_line": 4239,
+      "end_line": 5012
+    }
+  ]
+}

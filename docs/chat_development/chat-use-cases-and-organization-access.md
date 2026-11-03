@@ -41,20 +41,20 @@ Search nội dung, nguồn/kết nối, memory, feedback và audit UI là featur
 | C01 | Viết một email/bản nháp, chat mới có tên | Hiện tại cho chat/text; title background cần cơ chế không ghi đè user trước khi bật |
 | C02 | Hỏi tiếp theo nhánh đang chọn | Hiện tại: context đi theo parent đã authorize, giữ câu cũ |
 | C03 | Đóng/mở trang giữa câu trả lời | Backend: worker tách HTTP, Redis snapshot + watermark + tail; không hứa khôi phục prefix khi Redis/worker mất |
-| C04 | Stop và giữ phần trả lời dở | Hiện tại cho status/partial; backend chuyển tín hiệu theo messageId + runId, ACK không đồng nghĩa đã dừng |
+| C04 | Stop và giữ phần trả lời dở | Hiện tại cho status/partial; stop theo conversation + assistant messageId, không body. pending/running dừng và cancelled giữ partial; requires_action hủy toàn lượt. ACK không đồng nghĩa đã dừng |
 | C05 | Retry mạng không nhân lượt, regenerate tạo phương án mới | Regenerate đã chốt. Hiện không tự retry mutation, lỗi mạng thì đọc trạng thái/connect; chưa bảo đảm dedup mọi submit. Identity/hash để mở rộng sau nếu cần |
 | C06 | Edit câu cũ, chọn nhánh khác hoặc copy chat | Hiện tại cho parent/sibling và copy snapshot; không exact native checkpoint fork theo branch |
 | C07 | Đổi tên thủ công thắng tên tự sinh | Backend: chưa chốt conditional update thay thế source/revision đã bỏ |
 | C08 | Hai tab giữ hai nhánh, không trộn context | Hiện tại có parent tường minh và busy qua active unique; state nhánh per-tab và integration test còn cần |
 | C09 | Pin/archive/folder, đọc trên thiết bị khác, tìm chat | Hiện tại cho tổ chức sidebar/history; search nội dung chưa thiết kế, không unread/read markers |
 
-Retry request cũ và regenerate mới là hai thao tác khác nhau. Public threadId, SQL messageId và wire runId theo [quyết định ID](conversation-message-run-id-decisions.md).
+Retry request cũ và regenerate mới là hai thao tác khác nhau. Public threadId (conversation) và SQL messageId theo [quyết định ID](conversation-message-run-id-decisions.md).
 
 ### File và dữ liệu
 
 | ID | Người dùng muốn | Trạng thái và hành vi |
 |---|---|---|
-| D01 | Upload PDF, biết đã xử lý được chưa | File attach/download hiện tại; extraction/scan/status/retry pipeline để sau, không có files.status |
+| D01 | Upload PDF, biết đã xử lý được chưa | Có từ S7: đính kèm (ảnh, PDF, văn bản) qua presigned upload có xác minh, tải lại qua URL ký; model đọc tệp mỗi lượt. Extraction/scan/status/retry pipeline để sau, không có files.status |
 | D02 | Hỏi tài liệu nội bộ có citation/version | Sau: attachments có chỗ chứa nguồn render nhưng chưa có source/version/ACL/RAG |
 | D03 | Bị chặn đọc lương khi không có quyền HR | Sau: quyền source/row/field trước model; quyền gọi tool không đủ thay ACL |
 | D04 | So sánh hai dataset nhưng chỉ được đọc một | Sau: source scopes và completeness; không để model nhìn dữ liệu ngoài quyền |
@@ -83,12 +83,12 @@ Tool hệ thống chỉ đọc và MCP search có thể dùng cấu hình triể
 | ID | Người dùng muốn | Trạng thái và hành vi |
 |---|---|---|
 | O01 | Một user ở nhiều org, chuyển workspace | Hiện tại: session toàn hệ thống, request kiểm tra scope; execution cũ không chuyển org |
-| O02 | Mời thành viên, nhóm team Sales | Invitation/membership hiện tại; team/org units chưa có trong scope |
-| O03 | Share cho đồng nghiệp/team | Policy mới: public personal hoặc link nội bộ org, toàn cây; chưa direct-recipient/team |
-| O04 | Người nhận hỏi tiếp | Hiện tại theo copy chat/file độc lập bằng quyền người nhận; không copy runtime/credentials |
+| O02 | Mời thành viên, nhóm team Sales | Có từ S6: mời bằng email, nhận lời mời (tạo tài khoản nếu chưa có), vai trò và quyền; team/org units chưa có trong scope |
+| O03 | Share cho đồng nghiệp/team | Có từ S8: public personal hoặc link nội bộ org, snapshot toàn cây có version, thu hồi; chưa direct-recipient/team |
+| O04 | Người nhận hỏi tiếp | Có từ S8: "Hỏi tiếp" copy chat và tệp (object mới) thành chat riêng của người nhận, chạy bằng quyền của họ; không copy runtime/credentials |
 | O05 | Nhớ sở thích user xuyên chat trong workspace | Sau: native Store + policy, không dùng checkpoint của một assistant làm memory xuyên chat |
 | O06 | Xem/sửa/xóa memory | Sau: chưa có Store API/UI/provenance/cleanup |
-| O07 | Rời org khi có stream/approval | Membership/share revoke có nền; resume recheck quyền, live stream invalidation/worker cancellation cần backend |
+| O07 | Rời org khi có stream/approval | Có từ S6: rời hoặc bị xoá thì mất đọc/resume/tool ngay request kế tiếp; lượt đang chạy bị dừng, lượt đang chờ bị huỷ (QD-25) |
 | O08 | Xóa chat/account hoặc export history | Soft-delete/revoke source share hiện tại; hard purge/export/native/S3 cleanup để sau |
 | O09 | Xem ai duyệt/gửi email hoặc ai đổi quyền | Action metadata có actor/response; audit quyền, external receipts và retention độc lập để sau |
 
@@ -102,10 +102,51 @@ Với policy share toàn org hiện tại, nguồn Finance/HR hạn chế cần 
 
 ## 5. Hợp đồng cần hoàn thiện trước triển khai
 
-- API dedupe, public/native thread mapping, exact stop và background title.
+- Public/native thread mapping, phối hợp stop theo assistant message và background title.
 - Redis accumulated prefix + tail, gap/reset, authority writer và reconnect không gọi model.
 - Renderer activity user_interaction và context builder lấy user answer đúng một lần.
 - API auth cho history/list/start/connect/resume/download/share/copy; không tin client state/tools.
 - Quyền thay đổi khi socket đang mở cần đường revalidation, không chỉ check ở lúc connect.
 
 Không tạo thêm bảng chỉ vì tên entity xuất hiện trong các tình huống. [Bản tổng hợp database](database-decisions.md) là nguồn schema; [kiến trúc](agent-chat-architecture.md) và [API](chat-agent-api-contract.md) xác định nơi backend còn phải triển khai.
+
+## 6. Chấm lại sau S0–S9 (30/10/2026)
+
+Chấm theo code trên nhánh `chat`: **Đạt** là chạy được và có test hoặc đã chạy thật; **Một phần** là phần trong phạm vi đã có, phần ghi kèm chưa có; **Sau** là ngoài phạm vi đã chốt.
+
+| ID | Kết quả | Căn cứ / còn thiếu |
+|---|---|---|
+| C01 | Đạt | Chat chữ; tên lấy từ câu hỏi đầu rồi model đặt tên ngắn, tên đổi tay luôn giữ (S2, S10) |
+| C02 | Đạt | Context dựng lại theo nhánh đã kiểm quyền (S2) |
+| C03 | Đạt | Redis live view + `connect` (S5); process chết giữa lượt thì không khôi phục (RR-01) |
+| C04 | Đạt | Stop tại chỗ, qua process khác, lượt mồ côi, lượt đang chờ (S3–S5) |
+| C05 | Đạt | Regenerate tạo phiên bản mới (S3); không tự retry mutation (QD-06) |
+| C06 | Đạt | Sửa câu hỏi, chuyển nhánh (S3), copy từ share (S8) |
+| C07 | Đạt | Tên tự sinh chỉ đặt khi chat còn tên mặc định; đổi tên tay luôn giữ (S2, S3) |
+| C08 | Đạt | Nhánh theo tab, parent tường minh, một lượt active mỗi chat (S3) |
+| C09 | Đạt | Ghim, lưu trữ, folder (S3); tìm theo tên và nội dung không phân biệt dấu, mở đúng nhánh (S10). Không có đánh dấu đã đọc |
+| D01 | Một phần | Đính kèm, model đọc, tải lại (S7). Chưa có trạng thái xử lý tệp |
+| D02 | Sau | RAG, nguồn có version/ACL |
+| D03 | Sau | Quyền theo nguồn/hàng/trường |
+| D04 | Sau | Như D03 |
+| D05 | Sau | Phụ thuộc nguồn |
+| D06 | Đạt | Tool `create_file` tạo CSV, MD, TXT, XLSX gắn vào câu trả lời, tải lại trong chat, share và bản copy (S7, S8, S10). Không có PDF |
+| D07 | Sau | Tool web search, chính sách dữ liệu nội bộ |
+| T01 | Một phần | Quyền tool theo vai trò (S3, S6). Chưa có tài khoản/phạm vi uỷ quyền |
+| T02 | Sau | Idempotency thao tác ngoài |
+| T03 | Một phần | Duyệt tool trước khi chạy (S4). Chưa có tool gửi email |
+| T04 | Sau | Người duyệt khác người hỏi |
+| T05 | Sau | Đối soát kết quả tool |
+| T06 | Sau | OAuth uỷ quyền |
+| T07 | Đạt | Kiểm lại quyền trước khi duyệt và sát lúc tool chạy (S4); thu hồi qua màn vai trò (S6) |
+| O01 | Đạt | Nhiều workspace, kiểm membership mỗi request (S1, S6) |
+| O02 | Đạt | Mời, nhận lời mời, vai trò (S6). Chưa có nhóm |
+| O03 | Đạt | Link public/nội bộ, version, thu hồi (S8). Chưa chia sẻ cho người cụ thể |
+| O04 | Đạt | "Hỏi tiếp" bằng bản sao riêng (S8) |
+| O05 | Sau | Memory |
+| O06 | Sau | Memory |
+| O07 | Đạt | Rời/bị xoá: mất quyền ngay, dừng lượt đang chạy, huỷ lượt đang chờ, thu hồi share (S6, trigger) |
+| O08 | Một phần | Xoá mềm chat, thu hồi share (S3, S8); export chat thành zip (S10). Chưa xoá tài khoản, purge |
+| O09 | Sau | Nhật ký thao tác chưa có trong schema |
+
+Tổng: 16 Đạt, 4 Một phần, 12 Sau (sau S10); không tình huống nào trong phạm vi bị bỏ dở.

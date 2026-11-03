@@ -26,7 +26,7 @@ AbstractAgent
 
 Kế thừa trực tiếp AbstractAgent làm phải viết thêm HTTP/SSE vốn đã có ở HttpAgent; không cần trong phạm vi hiện tại.
 
-Theo SDK local đã kiểm tra, runAgent() nhận runId/tools/context/forwardedProps/resume; threadId/messages/state được dựng từ instance. HttpAgent.requestInit(input) là điểm override để gửi body riêng. AbstractAgent có connectAgent(), nhưng protected connect() mặc định chưa triển khai; HttpAgent hiện chưa thêm transport connect.
+Theo SDK local đã kiểm tra, runAgent() nhận runId/tools/context/forwardedProps/resume; threadId/turns/state được dựng từ instance. HttpAgent.requestInit(input) là điểm override để gửi body riêng. AbstractAgent có connectAgent(), nhưng protected connect() mặc định chưa triển khai; HttpAgent hiện chưa thêm transport connect.
 
 Các chi tiết này cần đối chiếu lại khi nâng phiên bản SDK, không phải cam kết API mọi phiên bản.
 
@@ -69,7 +69,7 @@ Giữ cách sử dụng subscriber hiện tại như onMessagesChanged, onTextMe
 
 UI vẫn cần phần chức năng chưa có: render activity hỏi người dùng/duyệt tool, hiển thị pending/running/requires_action/terminal và liên kết protocol messages với SQL assistant row. Không tự suy completed từ stream đóng.
 
-Tên event/metadata liên kết nghiệp vụ sẽ chốt khi tích hợp. Chưa yêu cầu custom event chat.execution ở mọi thay đổi.
+Liên kết nghiệp vụ dùng event `CUSTOM chat.turn` ([API §8](chat-agent-api-contract.md#8-id-và-stream), QD-19): UI lấy `assistantTurnId` làm parent cho câu hỏi tiếp theo, kể cả khi lượt `failed`/`cancelled`.
 
 ## 6. Connect, detach và stop
 
@@ -116,26 +116,26 @@ interface ChatMessageInput {
 }
 
 interface SendMessageInput {
-  parentMessageId: string | null;
+  parentTurnId: string | null;
   message: ChatMessageInput;
 }
 
 interface EditMessageInput {
-  userMessageId: string;
+  userTurnId: string;
   message: ChatMessageInput;
 }
 
 interface RegenerateInput {
-  assistantMessageId: string;
+  assistantTurnId: string;
 }
 
 interface ResumeInput {
-  assistantMessageId: string;
+  assistantTurnId: string;
   resume: ResumeEntry[];
 }
 
 interface StopInput {
-  assistantMessageId: string;
+  assistantTurnId: string;
 }
 ```
 
@@ -146,14 +146,14 @@ Tất cả ID do ứng dụng tự tạo ở cả frontend/backend dùng UUIDv7;
 | message.id | UUIDv7 user message mới do client tạo, dùng optimistic UI; edit cũng phải tạo ID mới |
 | message.text | Nội dung câu hỏi mới/đã sửa; không mang toàn bộ conversation history |
 | message.fileIds | Danh sách stored_files.id đầy đủ cho message mới, không có file thì [] |
-| parentMessageId | null khi gửi đầu; còn lại là message cha tường minh thuộc nhánh đã authorize |
-| userMessageId | User message cũ cần tạo phiên bản sửa; backend lấy parent của nó, không sửa trực tiếp |
-| assistantMessageId | SQL assistant row đích; không phải ID của từng protocol message bên trong bundle |
+| parentTurnId | null khi gửi đầu; còn lại là message cha tường minh thuộc nhánh đã authorize |
+| userTurnId | User message cũ cần tạo phiên bản sửa; backend lấy parent của nó, không sửa trực tiếp |
+| assistantTurnId | SQL assistant row đích; không phải ID của từng protocol message bên trong bundle |
 | resume | Các ResumeEntry chuẩn AG-UI trả lời đúng interrupts hiện tại; giữ nguyên cấu trúc SDK |
 
 Không chèn requestId/Idempotency-Key vào các input. Backend tạo assistant ID; runId chỉ phục vụ SDK/protocol, không lưu messages.metadata.current_run_id hoặc dùng làm khóa nghiệp vụ. Một câu hỏi không có text nhưng có file có được phép hay không thuộc validation UX cần chốt khi triển khai; ít nhất không chấp nhận đồng thời text rỗng và fileIds rỗng.
 
-Edit không có parentMessageId: parent phải lấy từ userMessageId cũ. Regenerate không có text/fileIds vì nó dùng lại context parent đã lưu. Resume không có user message ID mới vì tiếp tục cùng SQL assistant.
+Edit không có parentTurnId: parent phải lấy từ userTurnId cũ. Regenerate không có text/fileIds vì nó dùng lại context parent đã lưu. Resume không có user message ID mới vì tiếp tục cùng SQL assistant.
 
 ## 9. Method public và mapping HTTP
 
@@ -172,14 +172,14 @@ RunAgentResult tái sử dụng từ @ag-ui/client. StopAcknowledgement là DTO 
 
 | Method | URL sau /conversations/{conversationId} | HTTP body |
 |---|---|---|
-| sendMessage | /messages | { parentMessageId, message } |
-| editMessage | /messages/{userMessageId}/edit | { message } |
-| regenerate | /messages/{assistantMessageId}/regenerate | {} |
-| resume | /messages/{assistantMessageId}/resume | { resume } |
+| sendMessage | /turns | { parent_turn_id, message: { id, text, file_ids } } |
+| editMessage | /turns/{userTurnId}/edit | { message } |
+| regenerate | /turns/{assistantTurnId}/regenerate | Không body |
+| resume | /turns/{assistantTurnId}/resume | { resume } |
 | attach | /connect | Không body |
-| stop | /messages/{assistantMessageId}/stop | Không body |
+| stop | /turns/{assistantTurnId}/stop | Không body |
 
-conversationId lấy từ config, không lặp lại trong mỗi input/body. userMessageId/assistantMessageId của thao tác đích dùng dựng URL, không tự chèn thêm vào body. attach không nhận cursor, messageId hoặc runId; server resolve assistant active và snapshot mới nhất.
+Input TypeScript dùng `camelCase`; `ChatAgent` đổi sang body `snake_case` của REST API (QD-19). Từ S3, stop là hàm REST `stopAssistant` trong `features/chat/api` (không phải method của `ChatAgent`) vì không chạy qua pipeline AG-UI; stream của lượt bị dừng tự kết thúc qua event của server (TD-009). Thao tác truyền vào `runAgent()` qua `forwardedProps` của chính lần chạy đó, nên không có biến dùng chung bị lời gọi sau ghi đè. conversationId lấy từ config, không lặp lại trong mỗi input/body. userTurnId/assistantTurnId của thao tác đích dùng dựng URL, không tự chèn thêm vào body. attach không nhận cursor, messageId hoặc runId; server resolve assistant active và snapshot mới nhất.
 
 StopInput áp dụng cả pending/running và requires_action: dừng/hủy toàn bộ assistant đích. Không nhận runId hoặc interrupt ID để phân biệt các lần resume. Chấp nhận stop đến muộn có thể dừng lần resume mới của cùng assistant; không tác động assistant khác của regenerate.
 
@@ -197,7 +197,7 @@ agent.subscribe({
 });
 
 await agent.sendMessage({
-  parentMessageId: selectedParentMessageId,
+  parentTurnId: selectedParentMessageId,
   message: {
     id: uuidv7(),
     text: "Phân tích tài liệu này",
@@ -209,7 +209,7 @@ await agent.sendMessage({
 await agent.attach();
 
 // Khi UI trả lời interrupt: resumeEntries đúng kiểu SDK.
-await agent.resume({ assistantMessageId, resume: resumeEntries });
+await agent.resume({ assistantTurnId, resume: resumeEntries });
 ```
 
 Ví dụ là minh họa contract, chưa phải code copy vào ứng dụng và chạy ngay. uuidv7() là helper UUIDv7 thống nhất của ứng dụng, không phải crypto.randomUUID() (UUIDv4). Cần import helper này, RunAgentResult/ChatAgent implementation và quản lý subscription theo vòng đời React khi triển khai.
@@ -228,6 +228,6 @@ Chưa viết ChatAgent hoặc đổi hook/proxy. Khi triển khai cần kiểm t
 
 ## 12. History và phần SSE tạm hoãn
 
-History DTO giữ SQL messageId/parentMessageId/role/status, bundle AG-UI content, files và dữ liệu nhánh. Chuyển bundle thành protocol messages để SDK render nhưng giữ mapping về SQL assistant ID cho thao tác UI. initialMessages không thay DTO cây message của ứng dụng.
+History DTO giữ SQL messageId/parentTurnId/role/status, bundle AG-UI content, files và dữ liệu nhánh. Chuyển bundle thành protocol messages để SDK render nhưng giữ mapping về SQL assistant ID cho thao tác UI. initialMessages không thay DTO cây message của ứng dụng.
 
 Phần nhiều SSE khi chuyển conversation, unsubscribe/detach, callback đến muộn và hiển thị chéo A/B tạm hoãn. Chưa chốt chỉ giữ một SSE hoặc cách quản lý nhiều instance. Việc pause phần thảo luận này không thay endpoint connect/stop đã chốt.

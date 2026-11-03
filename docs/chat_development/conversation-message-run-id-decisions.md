@@ -1,4 +1,4 @@
-# Quyết định ID: conversation, message và checkpoint
+# Quyết định ID: conversation, turn và checkpoint
 
 Cập nhật quyết định: **29/10/2026**, Asia/Ho_Chi_Minh.
 
@@ -9,18 +9,29 @@ Trạng thái: đã chốt hướng thiết kế; chưa triển khai adapter/bac
 | ID | Vai trò | Vòng đời |
 |---|---|---|
 | conversations.id | Danh tính chat, URL, sidebar, history và quyền | Suốt cuộc hội thoại |
-| messages.id | Danh tính user message hoặc toàn bộ một lượt assistant | Assistant giữ nguyên qua pause/resume |
+| turns.id | Danh tính một turn: câu hỏi của người dùng hoặc toàn bộ một câu trả lời của assistant | Turn assistant giữ nguyên qua pause/resume |
 
 Mỗi conversation chỉ có một assistant pending/running/requires_action tối đa. Các conversation khác nhau được phép thực thi độc lập. Resume claim trạng thái nguyên tử, không cho hai execution của cùng assistant chạy đồng thời.
 
 - Public AG-UI RunAgentInput.thread_id = conversations.id.
-- Native LangGraph configurable.thread_id = assistant messages.id.
-- Regenerate tạo assistant sibling mới, không dùng lại message terminal.
-- Edit tạo user sibling mới và assistant mới, không sửa message terminal.
+- Native LangGraph configurable.thread_id = turns.id của turn assistant.
+- Regenerate tạo turn assistant sibling mới, không dùng lại turn terminal.
+- Edit tạo turn người dùng sibling mới và turn assistant mới, không sửa turn terminal.
+
+### Từ ngữ (QD-33, từ S11)
+
+| Từ | Nghĩa |
+|---|---|
+| **Turn** (bảng `turns`) | Một nút của cây hội thoại, một bong bóng hiển thị: câu hỏi của người dùng, hoặc câu trả lời của assistant gồm gọi tool, suy luận, trả lời. Ví dụ: turn 1 người dùng hỏi đường đến Hà Nội; turn 2 AI gọi tool, suy luận, trả lời; turn 3 người dùng cảm ơn |
+| **Bundle** | Cột `content` của một turn: mảng message AG-UI |
+| **Message** | Chỉ còn nghĩa message AG-UI trong bundle (assistant, tool, reasoning, activity, user) |
+| **Lượt chạy** | Một lần agent chạy để điền một turn assistant (`TurnService`, `Runner`) |
+
+Trước S11 bảng `turns` tên là `messages`; tài liệu thiết kế cũ (database giai đoạn 1–4) vẫn dùng tên cũ.
 
 ## 2. UUIDv7 thống nhất
 
-Mọi ID do ứng dụng tự tạo ở frontend và backend dùng UUIDv7: conversation, user/assistant message, các bản ghi database, action và ID protocol do adapter mình chủ động tạo.
+Mọi ID do ứng dụng tự tạo ở frontend và backend dùng UUIDv7: conversation, turn người dùng/assistant, các bản ghi database, action và ID protocol do adapter mình chủ động tạo.
 
 Frontend dùng helper UUIDv7 thống nhất, không dùng crypto.randomUUID() vì hàm đó tạo UUIDv4. String trong TypeScript phải được validate phù hợp ở backend; không dùng thời gian trong UUID thay permission hoặc parent topology.
 
@@ -76,7 +87,7 @@ Start dựng context theo parent path; resume lấy checkpoint của đúng assi
 ## 7. Stop theo assistant
 
 ```http
-POST /api/v1/conversations/{conversationId}/messages/{assistantMessageId}/stop
+POST /api/v1/conversations/{conversationId}/turns/{assistantTurnId}/stop
 ```
 
 Không body. Backend kiểm tra ownership/workspace và message thuộc conversation.

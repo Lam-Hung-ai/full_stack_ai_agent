@@ -1,0 +1,101 @@
+import { apiClient, send } from "@/lib/api";
+import { attachmentName } from "@/lib/download";
+import type {
+  Conversation,
+  ConversationFilter,
+  ConversationList,
+  ConversationSearch,
+  ConversationUpdate,
+  History,
+  StopResult,
+} from "../types/chat.types";
+
+function filterQuery(filter: ConversationFilter) {
+  switch (filter.kind) {
+    case "pinned":
+      return { unfiled: true, pinned: true };
+    case "recent":
+      return { unfiled: true, pinned: false, sort: filter.sort };
+    case "folder":
+      return { folder_id: filter.folderId };
+    case "archived":
+      return { archived: true, sort: filter.sort };
+  }
+}
+
+/** Chats per page; the next page loads when the list is scrolled to its end. */
+export const CONVERSATION_PAGE_SIZE = 20;
+
+export function listConversations(
+  workspaceId: string,
+  filter: ConversationFilter,
+  page: number,
+  signal?: AbortSignal,
+) {
+  return apiClient<ConversationList>(`/api/v1/workspaces/${workspaceId}/conversations`, {
+    query: { page, page_size: CONVERSATION_PAGE_SIZE, ...filterQuery(filter) },
+    signal,
+  });
+}
+
+/** Own chats of the workspace matching `q` by title or message text. */
+export function searchConversations(
+  workspaceId: string,
+  q: string,
+  page: number,
+  signal?: AbortSignal,
+) {
+  return apiClient<ConversationSearch>(`/api/v1/workspaces/${workspaceId}/conversations/search`, {
+    query: { q, page, page_size: CONVERSATION_PAGE_SIZE },
+    signal,
+  });
+}
+
+export function getConversation(conversationId: string, signal?: AbortSignal) {
+  return apiClient<Conversation>(`/api/v1/conversations/${conversationId}`, { signal });
+}
+
+export function createConversation(workspaceId: string) {
+  return apiClient<Conversation>(`/api/v1/workspaces/${workspaceId}/conversations`, {
+    method: "POST",
+    body: {},
+  });
+}
+
+export function updateConversation(conversationId: string, changes: ConversationUpdate) {
+  return apiClient<Conversation>(`/api/v1/conversations/${conversationId}`, {
+    method: "PATCH",
+    body: changes,
+  });
+}
+
+export function deleteConversation(conversationId: string) {
+  return apiClient<void>(`/api/v1/conversations/${conversationId}`, { method: "DELETE" });
+}
+
+/** The saved branch, or with `fromTurnId` the branch through that message. */
+export function getHistory(
+  conversationId: string,
+  { fromTurnId, signal }: { fromTurnId?: string | null; signal?: AbortSignal } = {},
+) {
+  return apiClient<History>(`/api/v1/conversations/${conversationId}/turns`, {
+    query: { from_turn_id: fromTurnId },
+    signal,
+  });
+}
+
+export function stopAssistant(conversationId: string, assistantTurnId: string) {
+  return apiClient<StopResult>(
+    `/api/v1/conversations/${conversationId}/turns/${assistantTurnId}/stop`,
+    { method: "POST" },
+  );
+}
+
+/** The caller's own chats of the workspace as a zip, with its file name. */
+export async function exportConversations(workspaceId: string) {
+  const response = await send(`/api/v1/workspaces/${workspaceId}/export`);
+  return {
+    blob: await response.blob(),
+    name: attachmentName(response.headers.get("Content-Disposition"), "chat-export.zip"),
+  };
+}
