@@ -7,23 +7,37 @@ const CLOCK_TOOL = "get_current_time";
 /** Longest plain-text result shown as is on the step line. */
 const SHORT_RESULT = 80;
 
-/** What a run did, in a few words, for its header: "xem giờ, tạo 2 tệp". */
+/**
+ * What a run did, in a few words, for its header: "xem giờ, tạo 2 tệp".
+ * Only files actually made are counted (failed calls show as "bước lỗi");
+ * a tool that only failed reads as tried ("thử tạo tệp").
+ */
 export function workDone(steps: readonly WorkStep[]): string {
-  const counts = new Map<string, number>();
+  const counts = new Map<string, { done: number; failed: number }>();
   for (const step of steps) {
-    if (step.kind === "tool") {
-      const name = step.call.function.name;
-      counts.set(name, (counts.get(name) ?? 0) + 1);
-    }
+    if (step.kind !== "tool") continue;
+    const count = counts.get(step.call.function.name) ?? { done: 0, failed: 0 };
+    if (step.result?.error) count.failed += 1;
+    else count.done += 1;
+    counts.set(step.call.function.name, count);
   }
   if (counts.size === 0) return "suy nghĩ";
   return [...counts]
-    .map(([name, count]) => {
-      if (name === CLOCK_TOOL) return count > 1 ? `xem giờ ${count} lần` : "xem giờ";
-      if (name === CREATE_FILE_TOOL) return `tạo ${count} tệp`;
-      return count > 1 ? `${name} ×${count}` : name;
+    .map(([name, { done, failed }]) => {
+      if (name === CREATE_FILE_TOOL) return done > 0 ? `tạo ${done} tệp` : "thử tạo tệp";
+      if (done === 0 && failed > 0) return name === CLOCK_TOOL ? "thử xem giờ" : `thử ${name}`;
+      if (name === CLOCK_TOOL) return done > 1 ? `xem giờ ${done} lần` : "xem giờ";
+      return done > 1 ? `${name} ×${done}` : name;
     })
     .join(", ");
+}
+
+/**
+ * A failed tool's message. ag-ui-langgraph can only flag LangChain's error
+ * status with the fixed text "error"; the tool's own words are the content.
+ */
+export function toolErrorText(error: string, content: string): string {
+  return error === "error" ? content || "Công cụ báo lỗi" : error;
 }
 
 /**
@@ -34,8 +48,8 @@ export function workDone(steps: readonly WorkStep[]): string {
 export function toolResultText(step: ToolStep): { text: string; isError: boolean } | null {
   const result = step.result;
   if (!result) return null;
-  if (result.error) return { text: result.error, isError: true };
   const content = typeof result.content === "string" ? result.content.trim() : "";
+  if (result.error) return { text: toolErrorText(result.error, content), isError: true };
   const name = step.call.function.name;
   if (name === CLOCK_TOOL) {
     const time = new Date(content);

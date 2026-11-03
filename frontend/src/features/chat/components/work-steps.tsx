@@ -28,7 +28,7 @@ import type { RowView } from "../types/chat.types";
 import { parseToolArgs } from "../utils/agui-messages";
 import type { WorkStep } from "../utils/answer-blocks";
 import { type AttachedFile, madeFile } from "../utils/files";
-import { toolResultText, workDone } from "../utils/tool-steps";
+import { toolErrorText, toolResultText, workDone } from "../utils/tool-steps";
 import { type FileLinkSource, MessageFiles } from "./message-files";
 
 type ToolStep = Extract<WorkStep, { kind: "tool" }>;
@@ -263,7 +263,11 @@ function ToolStepView({
         <ToolPart code={JSON.stringify(args, null, 2)} title="Đầu vào" />
         {step.result && (
           <ToolPart
-            code={step.result.error ?? textOf(step.result.content)}
+            code={
+              step.result.error
+                ? toolErrorText(step.result.error, textOf(step.result.content))
+                : textOf(step.result.content)
+            }
             isError={!!step.result.error}
             title={step.result.error ? "Lỗi" : "Kết quả"}
           />

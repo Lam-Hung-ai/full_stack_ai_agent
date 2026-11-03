@@ -22,6 +22,15 @@ describe("workDone", () => {
     expect(workDone(steps)).toBe("xem giờ, tạo 2 tệp, search_web");
     expect(workDone([{ kind: "thinking", id: "t", text: "…" }])).toBe("suy nghĩ");
   });
+
+  it("counts only the files made; a tool that only failed was tried", () => {
+    const failed = { content: "Could not store", error: "error" };
+    expect(
+      workDone([tool("1", "create_file", { content: "{}" }), tool("2", "create_file", failed)]),
+    ).toBe("tạo 1 tệp");
+    expect(workDone([tool("1", "create_file", failed)])).toBe("thử tạo tệp");
+    expect(workDone([tool("1", "get_current_time", failed)])).toBe("thử xem giờ");
+  });
 });
 
 describe("toolResultText", () => {
@@ -45,5 +54,11 @@ describe("toolResultText", () => {
       isError: true,
     });
     expect(toolResultText(tool("6", "create_file"))).toBeNull();
+    // ag-ui-langgraph's fixed flag: the message is the content.
+    expect(
+      toolResultText(
+        tool("7", "create_file", { content: "Could not store the file", error: "error" }),
+      ),
+    ).toEqual({ text: "Could not store the file", isError: true });
   });
 });

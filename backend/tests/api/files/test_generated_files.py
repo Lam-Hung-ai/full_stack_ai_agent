@@ -113,10 +113,14 @@ async def test_bad_requests_are_refused_to_the_model(
     headers = await login(user)
     _, assistant = await made_file(client, user, headers)
 
-    missing, ok, too_many = [m["content"] for m in tool_results(assistant)]
-    assert missing.startswith("Could not create the file: content is required")
-    assert json.loads(ok)["name"] == "b.txt"
-    assert "at most 1 files" in too_many
+    missing, ok, too_many = tool_results(assistant)
+    assert missing["content"].startswith(
+        "Could not create the file: content is required"
+    )
+    assert json.loads(ok["content"])["name"] == "b.txt"
+    assert "at most 1 files" in too_many["content"]
+    # Failures are flagged, so the answer's trace marks those steps.
+    assert [m.get("error") for m in (missing, ok, too_many)] == ["error", None, "error"]
     assert len(db("SELECT id FROM chat_app.stored_files")) == 1
 
 
