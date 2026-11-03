@@ -223,7 +223,7 @@ function ThinkingStep({ text, active }: { text: string; active: boolean }) {
 
 /**
  * A tool call: its label, then its state or its result in words on the
- * line; the raw input and output only under "Chi tiết kỹ thuật".
+ * line; the raw input and output only once it is opened.
  */
 function ToolStepView({
   step,
@@ -263,7 +263,6 @@ function ToolStepView({
         </TraceLine>
       </TraceCollapsibleTrigger>
       <TraceCollapsibleContent className="flex flex-col gap-3 border-dashed">
-        <span className="text-xs">Chi tiết kỹ thuật</span>
         <ToolPart code={JSON.stringify(args, null, 2)} title="Đầu vào" />
         {step.result && (
           <ToolPart
