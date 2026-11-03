@@ -123,8 +123,11 @@ class TurnResponse(BaseModel):
     content: list[dict[str, Any]]
     created_at: datetime
     #: Last change; a finished turn no longer changes, so for one it is when
-    #: the turn ended (the UI shows how long an answer took).
+    #: the turn ended.
     updated_at: datetime
+    #: How long an assistant turn's runs took, summed: a pause waiting for
+    #: the user is not counted. None for questions and older turns.
+    work_seconds: float | None = None
     #: Every version at this position (same parent), oldest first, this one
     #: included; more than one means the UI offers a branch switch.
     sibling_ids: list[UUID]

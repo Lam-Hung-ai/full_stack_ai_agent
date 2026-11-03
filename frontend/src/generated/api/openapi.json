@@ -2309,6 +2309,17 @@
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
+          },
+          "work_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Seconds"
           }
         },
         "required": [

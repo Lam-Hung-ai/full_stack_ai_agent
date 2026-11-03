@@ -2002,6 +2002,8 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /** Work Seconds */
+            work_seconds?: number | null;
         };
         /**
          * UploadCreate

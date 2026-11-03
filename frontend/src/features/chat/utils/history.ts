@@ -11,6 +11,7 @@ export function toRowView(row: TurnRow): RowView {
     siblingIds: row.sibling_ids,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    workSeconds: row.work_seconds,
   };
 }
 

@@ -28,6 +28,7 @@ import type { RowView } from "../types/chat.types";
 import { parseToolArgs } from "../utils/agui-messages";
 import type { WorkStep } from "../utils/answer-blocks";
 import { type AttachedFile, madeFile } from "../utils/files";
+import { toolResultText, workDone } from "../utils/tool-steps";
 import { type FileLinkSource, MessageFiles } from "./message-files";
 
 type ToolStep = Extract<WorkStep, { kind: "tool" }>;
@@ -141,12 +142,20 @@ export function WorkSteps({
               )}
             </TraceIcon>
             <TraceTitle>{summary}</TraceTitle>
-            <TraceDescription>· {now ?? `${steps.length} bước`}</TraceDescription>
+            <TraceDescription className="min-w-0 shrink truncate">
+              · {now ?? workDone(steps)}
+            </TraceDescription>
             {failed > 0 && (
               <TraceDescription className="text-destructive">· {failed} bước lỗi</TraceDescription>
             )}
           </TraceLine>
         </TraceCollapsibleTrigger>
+        {/* Read out when the state changes, not on every second of the timer. */}
+        <span aria-live="polite" className="sr-only">
+          {running
+            ? "Agent đang làm việc"
+            : `${summary}, ${workDone(steps)}${failed > 0 ? `, ${failed} bước lỗi` : ""}`}
+        </span>
         <TraceCollapsibleContent className="border-dashed text-sm">
           <Trace className="gap-3">
             {steps.map((step, index) => (
@@ -186,31 +195,54 @@ function Step({
       </div>
     );
   }
+  if (step.kind === "thinking") return <ThinkingStep active={active} text={step.text} />;
+  return <ToolStepView active={active} rowStatus={rowStatus} step={step} />;
+}
 
-  if (step.kind === "thinking") {
-    return (
-      // Open: the trace itself is folded once the answer is done.
-      <TraceCollapsible defaultOpen>
-        <TraceCollapsibleTrigger>
-          <TraceLine status={active ? "running" : undefined}>
-            <TraceIcon>
-              <BrainIcon />
-            </TraceIcon>
-            <TraceTitle>{active ? "Đang suy nghĩ…" : "Đã suy nghĩ"}</TraceTitle>
-          </TraceLine>
-        </TraceCollapsibleTrigger>
-        <TraceCollapsibleContent className="border-dashed">
-          <MessageResponse className={NOTE_CLASS}>{step.text}</MessageResponse>
-        </TraceCollapsibleContent>
-      </TraceCollapsible>
-    );
-  }
+/** Open while the model thinks it; folded once done (the reader may open it). */
+function ThinkingStep({ text, active }: { text: string; active: boolean }) {
+  const [choice, setChoice] = useState<boolean | null>(null);
+  return (
+    <TraceCollapsible onOpenChange={setChoice} open={choice ?? active}>
+      <TraceCollapsibleTrigger>
+        <TraceLine status={active ? "running" : undefined}>
+          <TraceIcon>
+            <BrainIcon />
+          </TraceIcon>
+          <TraceTitle>{active ? "Đang suy nghĩ…" : "Đã suy nghĩ"}</TraceTitle>
+        </TraceLine>
+      </TraceCollapsibleTrigger>
+      <TraceCollapsibleContent className="border-dashed">
+        <MessageResponse className={NOTE_CLASS}>{text}</MessageResponse>
+      </TraceCollapsibleContent>
+    </TraceCollapsible>
+  );
+}
 
+/**
+ * A tool call: its label, then its state or its result in words on the
+ * line; the raw input and output only under "Chi tiết kỹ thuật".
+ */
+function ToolStepView({
+  step,
+  active,
+  rowStatus,
+}: {
+  step: ToolStep;
+  active: boolean;
+  rowStatus: RowView["status"];
+}) {
   const args = argsOf(step);
   const known = TOOLS[step.call.function.name];
   const Icon = known?.icon ?? WrenchIcon;
   const status = toolStatus(step, rowStatus, active);
   const lineStatus = status === "done" || status === "stopped" ? undefined : status;
+  const result = toolResultText(step);
+  const detail = result
+    ? result.isError
+      ? `Lỗi: ${result.text}`
+      : result.text
+    : STATUS_TEXT[status];
   return (
     <TraceCollapsible>
       <TraceCollapsibleTrigger>
@@ -219,10 +251,15 @@ function Step({
             <Icon />
           </TraceIcon>
           <TraceTitle>{known ? known.label(args) : step.call.function.name}</TraceTitle>
-          {STATUS_TEXT[status] && <TraceDescription>· {STATUS_TEXT[status]}</TraceDescription>}
+          {detail && (
+            <TraceDescription className="min-w-0 shrink truncate" title={detail}>
+              · {detail}
+            </TraceDescription>
+          )}
         </TraceLine>
       </TraceCollapsibleTrigger>
       <TraceCollapsibleContent className="flex flex-col gap-3 border-dashed">
+        <span className="text-xs">Chi tiết kỹ thuật</span>
         <ToolPart code={JSON.stringify(args, null, 2)} title="Đầu vào" />
         {step.result && (
           <ToolPart

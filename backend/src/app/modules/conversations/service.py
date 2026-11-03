@@ -261,7 +261,11 @@ class ConversationService:
             current_turn_id=leaf,
             data=[
                 TurnResponse.model_validate(
-                    {**dict(turn), "sibling_ids": tree.siblings(turn["id"])}
+                    {
+                        **dict(turn),
+                        "sibling_ids": tree.siblings(turn["id"]),
+                        "work_seconds": turn["metadata"].get("work_seconds"),
+                    }
                 )
                 for turn in path
             ],
@@ -898,7 +902,15 @@ class TurnService:
                 content = [*content, *activities]
                 metadata["pending_action"] = pending
                 events = interactions.activity_events(activities)
-            saved = await TurnRepository(session).set_status(
+            repository = TurnRepository(session)
+            # Working time adds up run by run, so a pause waiting for the
+            # user does not count as work.
+            ran = await repository.running_seconds(turn_id=assistant_id)
+            if ran is not None:
+                metadata["work_seconds"] = round(
+                    float(metadata.get("work_seconds") or 0) + ran, 1
+                )
+            saved = await repository.set_status(
                 turn_id=assistant_id,
                 status=status,
                 content=content,

@@ -39,6 +39,8 @@ export type RowView = {
   createdAt?: string;
   /** Last change; for a finished turn, when it ended. */
   updatedAt?: string;
+  /** An answer's working time, its runs summed (no pause for the user). */
+  workSeconds?: number | null;
   live?: boolean;
 };
 

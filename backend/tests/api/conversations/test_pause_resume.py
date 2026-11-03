@@ -1,6 +1,7 @@
 """Pausing for the user and resuming from the stored checkpoint (phase 4)."""
 
 import asyncio
+from datetime import datetime
 
 import pytest
 from langchain_core.messages import AIMessage
@@ -138,6 +139,34 @@ async def test_question_pauses_then_resumes_after_a_restart(
     assert row["metadata"]["actions"][0]["status"] == "answered"
     # Nothing resumes a finished turn: its checkpoint went with it (RR-16).
     assert checkpoints(db, assistant["id"]) == 0
+
+
+async def test_waiting_for_the_user_is_not_work(
+    client, make_user, login, scripted_model
+):
+    scripted_model(ASK_ROOM, "Đã đặt phòng A")
+    user = make_user("an@example.com")
+    headers = await login(user)
+    conversation_id, assistant, _ = await paused_turn(client, user, headers)
+    assert assistant["work_seconds"] is not None
+    (question,) = waiting(assistant)
+
+    await asyncio.sleep(1.5)  # the user takes a while to answer
+    await resume(
+        client,
+        conversation_id,
+        assistant["id"],
+        headers,
+        question["interrupt_id"],
+        {"answer": "Phòng A"},
+    )
+    final = (await history(client, conversation_id, headers))["data"][-1]
+    assert final["status"] == "completed"
+    span = datetime.fromisoformat(final["updated_at"]) - datetime.fromisoformat(
+        final["created_at"]
+    )
+    # Two short runs, summed; the 1.5 s wait sits between them.
+    assert final["work_seconds"] < span.total_seconds() - 1
 
 
 async def test_an_ordinary_turn_stores_no_checkpoint(

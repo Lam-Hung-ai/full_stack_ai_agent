@@ -43,6 +43,8 @@ async def test_turn_streams_and_is_saved(client, make_user, login, scripted_mode
     assert assistant_row["content"][0]["content"] == "Xin chào bạn"
     # The UI shows how long the answer took from these two.
     assert assistant_row["updated_at"] >= assistant_row["created_at"]
+    assert assistant_row["work_seconds"] >= 0
+    assert user_row["work_seconds"] is None
 
     conversation = (
         await client.get(f"/api/v1/conversations/{conversation_id}", headers=headers)

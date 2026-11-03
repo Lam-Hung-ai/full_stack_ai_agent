@@ -21,7 +21,7 @@ import type { RowView } from "../types/chat.types";
 import { answerBlocks, answerCopyText, workSummary } from "../utils/answer-blocks";
 import { isActive, isTerminal } from "../utils/history";
 import { attachedFiles, questionText as textOf } from "../utils/files";
-import { turnTime, turnTimeTitle, workDuration } from "../utils/turn-time";
+import { formatDuration, turnTime, turnTimeTitle, workDuration } from "../utils/turn-time";
 import { type InteractionAnswer, interactionOf } from "../utils/interactions";
 import { BranchSwitcher } from "./branch-switcher";
 import { CopyAction } from "./copy-action";
@@ -227,7 +227,12 @@ function AnswerRow({
   const showActions = actions && finished;
   const copyText = answerCopyText(blocks);
   // Like ChatGPT's "Worked for 7s", on the answer's first run of work.
-  const workTime = finished ? workDuration(row.createdAt, row.updatedAt) : null;
+  // Runs summed by the backend; older rows fall back to their whole span.
+  const workTime = !finished
+    ? null
+    : row.workSeconds != null
+      ? formatDuration(row.workSeconds)
+      : workDuration(row.createdAt, row.updatedAt);
   const firstWork = blocks.findIndex((block) => block.kind === "work");
   const lastWork = blocks.findLastIndex((block) => block.kind === "work");
   // Feedback while waiting: the seconds this tab has watched it work.

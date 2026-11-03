@@ -336,6 +336,16 @@ class TurnRepository:
         )
         return result.first() is not None
 
+    async def running_seconds(self, *, turn_id: UUID) -> float | None:
+        """Seconds since the row last changed. Nothing writes a turn while it
+        runs, so when a run saves its outcome this is how long that run took
+        (from going `running`, after any wait for a slot)."""
+        statement = select(
+            func.extract("epoch", func.now() - turns.c.updated_at)
+        ).where(turns.c.id == turn_id)
+        value = (await self._session.execute(statement)).scalar_one_or_none()
+        return None if value is None else float(value)
+
     async def links(self, *, conversation_id: UUID) -> list[tuple[UUID, UUID | None]]:
         """(id, parent) of every turn, oldest first (turns_history_idx)."""
         statement = (
