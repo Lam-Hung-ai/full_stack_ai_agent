@@ -8,7 +8,6 @@ import {
   ListChecksIcon,
   type LucideIcon,
   MessageSquareTextIcon,
-  TriangleAlertIcon,
   WrenchIcon,
 } from "lucide-react";
 import { CodeBlock } from "@/components/ai-elements/code-block";
@@ -142,11 +141,7 @@ export function WorkSteps({
         <TraceCollapsibleTrigger>
           <TraceLine status={running ? "running" : undefined}>
             <TraceIcon>
-              {failed > 0 && !running ? (
-                <TriangleAlertIcon className="text-destructive" />
-              ) : (
-                <ListChecksIcon />
-              )}
+              <ListChecksIcon />
             </TraceIcon>
             <TraceTitle className={TITLE_FIRST}>{summary}</TraceTitle>
             <TraceDescription className="min-w-0 shrink truncate">

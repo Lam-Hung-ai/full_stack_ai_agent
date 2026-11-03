@@ -156,7 +156,7 @@ Model hiện gán (`nvidia/nemotron-3.5-lightning:free`) theo quy tắc 1 cho c�
 | Lượt `failed`, khối cuối | `Gặp lỗi sau …` |
 | Các trường hợp khác (khối giữa, đang chờ người dùng) | `Đã làm việc` |
 
-Sau tiêu đề là phần mô tả: khi đang chạy là bước hiện tại (`đang suy nghĩ`, `đang chạy Tạo tệp …`); khi xong là việc đã làm (`workDone()`, ví dụ `xem giờ, tạo 1 tệp`); nếu có lỗi thêm `· N bước lỗi` màu đỏ và icon cảnh báo.
+Sau tiêu đề là phần mô tả: khi đang chạy là bước hiện tại (`đang suy nghĩ`, `đang chạy Tạo tệp …`); khi xong là việc đã làm (`workDone()`, ví dụ `xem giờ, tạo 1 tệp`); nếu có lỗi thêm `· N bước lỗi` màu đỏ; icon giữ nguyên `ListChecksIcon` (chữ đỏ đã đủ báo lỗi, không dùng icon cảnh báo).
 
 `workDone()` (`utils/tool-steps.ts`) chỉ đếm **lần thành công** (`tạo 2 tệp`); công cụ chỉ có lần hỏng thì ghi `thử …` (`thử tạo tệp`); không có công cụ nào thì `suy nghĩ`.
 
@@ -211,7 +211,7 @@ Mỗi khối có một vùng `aria-live="polite"` ẩn, đọc lên khi trạng 
 | Đang chạy công cụ | `… · đang chạy <nhãn>` | Mở | `· Đang chạy…` | — |
 | Đang viết câu trả lời | `Đã làm việc · <việc đã làm>` | Mở | Bước xong gập | — |
 | Xong | `Đã làm việc trong N giây · <việc>` | Gập | — | Sao chép, Tạo lại, phiên bản, giờ |
-| Xong nhưng có công cụ lỗi | `… · 1 bước lỗi` (đỏ, icon cảnh báo) | Mở | Dòng đỏ `· Lỗi: <nội dung>` | như trên |
+| Xong nhưng có công cụ lỗi | `… · 1 bước lỗi` (chữ đỏ, icon bình thường) | Mở | Dòng đỏ `· Lỗi: <nội dung>` | như trên |
 | Đang chờ người dùng (`requires_action`) | `Đã làm việc` | Gập | Công cụ cần duyệt: `· Chờ duyệt` | — (thẻ hỏi đáp có ô trả lời) |
 | Bị dừng | `Đã dừng sau N giây` | Mở | Công cụ dở: `· Đã dừng` | `· Đã dừng` |
 | Lỗi cả lượt | `Gặp lỗi sau N giây` | Mở | Công cụ dở: `· Lỗi` | `Câu trả lời chưa hoàn tất do lỗi` |
