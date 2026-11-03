@@ -14,17 +14,31 @@ pnpm install
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The chat page (`src/app/page.tsx`) talks to the backend over the [AG-UI protocol](https://docs.ag-ui.com):
+Open [http://localhost:3000](http://localhost:3000). Coding rules: [`AGENTS.md`](AGENTS.md); design and sprint plan: [`docs/chat_development`](../docs/chat_development/README.md).
 
-- `src/hooks/use-agent-chat.ts` — wraps `@ag-ui/client`'s `HttpAgent`, subscribes to its message/event stream, and exposes `messages` + `sendMessage`.
-- `src/app/api/agent/route.ts` — proxies the AG-UI SSE request/response to the FastAPI backend's `/agent` (see `../backend`), so the browser only ever talks to this origin.
+The chat lives in `src/features/chat` (`src/app/page.tsx` only composes `ChatScreen`) and talks to the backend over the [AG-UI protocol](https://docs.ag-ui.com):
+
+- `features/chat/hooks/use-agent-chat.ts` — wraps `@ag-ui/client`'s `HttpAgent`, subscribes to its message/event stream, and exposes `messages` + `sendMessage`.
+- `features/chat/utils/agui-messages.ts` — pure shaping of AG-UI messages into renderable turns.
+- `src/app/api/agent/route.ts` — legacy proxy to the backend's `/agent`; replaced by the `/api/v1` conversation API in sprint S2.
+
+Shared infrastructure: `src/lib/api` (FastAPI client and `ApiError`), `src/config/env.ts` (public config), `src/app/providers.tsx` (TanStack Query).
+
+## Checks
+
+```bash
+pnpm lint
+pnpm typecheck
+pnpm test        # Vitest, src/**/*.test.ts(x)
+pnpm build
+```
 
 ## UI components
 
 - `src/components/ui/*` — every shadcn/ui base component (`pnpm dlx shadcn@latest add --all`).
 - `src/components/ai-elements/*` — all AI Elements patterns (conversation, message, prompt-input, reasoning, tool, sources, etc.), installed from the AI SDK registry (`pnpm dlx shadcn@latest add https://registry.ai-sdk.dev/all.json`).
-- `Tool`/`ToolHeader`/`ToolContent`/`ToolInput`/`ToolOutput` render AG-UI tool calls — `page.tsx` maps an AG-UI `ToolCall` (plus its matching `tool` result message, by `toolCallId`) into the shape these expect.
-- `Reasoning`/`ReasoningTrigger`/`ReasoningContent` render the model's reasoning/thinking — `page.tsx` pairs an AG-UI `reasoning`-role message with the assistant message that follows it (no shared id between them).
+- `Tool`/`ToolHeader`/`ToolContent`/`ToolInput`/`ToolOutput` render AG-UI tool calls — `chat-screen.tsx` maps an AG-UI `ToolCall` (plus its matching `tool` result message, by `toolCallId`) into the shape these expect.
+- `Reasoning`/`ReasoningTrigger`/`ReasoningContent` render the model's reasoning/thinking — `buildTurns` pairs an AG-UI `reasoning`-role message with the assistant message that follows it (no shared id between them).
 
 To add more shadcn components later: `pnpm dlx shadcn@latest add <name>`.
 

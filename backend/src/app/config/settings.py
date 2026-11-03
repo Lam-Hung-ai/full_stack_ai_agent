@@ -1,0 +1,178 @@
+import re
+from functools import lru_cache
+from pathlib import Path
+from typing import Literal
+from urllib.parse import urlparse
+
+from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import make_url
+
+BACKEND_DIR = Path(__file__).resolve().parents[3]
+STORAGE_BUCKET_PATTERN = re.compile(r"^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$")
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=BACKEND_DIR / ".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        hide_input_in_errors=True,
+    )
+
+    # SQLAlchemy URL with the psycopg 3 driver (postgresql+psycopg://...).
+    # dbmate cannot read this form; it uses DBMATE_DATABASE_URL instead.
+    database_url: SecretStr
+    db_pool_size: int = Field(default=10, ge=1)
+    db_max_overflow: int = Field(default=5, ge=0)
+    # Fail fast when the pool is exhausted instead of hanging past proxy timeouts.
+    db_pool_timeout: int = Field(default=10, ge=1)
+
+    jwt_secret: SecretStr = Field(min_length=32)
+    jwt_issuer: str = "ai-chat"
+    jwt_audience: str = "ai-chat-api"
+    access_token_minutes: int = Field(default=15, ge=1, le=60)
+    refresh_token_days: int = Field(default=30, ge=1, le=90)
+    #: A token rotated this recently may be presented again without counting as
+    #: theft: two tabs loading at once, or a request whose response was lost.
+    refresh_reuse_grace_seconds: int = Field(default=10, ge=0, le=60)
+    #: Self-service sign-up. Off by default: accounts come from an operator or
+    #: an organization invitation unless the deployment opts in.
+    registration_enabled: bool = False
+    cookie_secure: bool = True
+    #: Requests per minute per IP on /auth.
+    auth_rate_limit: int = Field(default=30, ge=1)
+
+    #: Assistant turns running at once in this process (QD-15); more wait.
+    max_concurrent_turns: int = Field(default=10, ge=1)
+    #: Turns waiting for a slot; beyond that a new turn gets 503 server_busy.
+    max_queued_turns: int = Field(default=20, ge=0)
+    #: On shutdown, how long running turns get to finish before being cancelled.
+    shutdown_grace_seconds: float = Field(default=20, ge=0)
+    #: Tools that pause the turn for the user's approval before they run.
+    tools_requiring_approval: list[str] = []
+
+    #: Live view of running turns, stop signals across processes (S5).
+    redis_url: str = "redis://localhost:6379/0"
+
+    #: Outgoing mail (S6). Without a host, letters are dropped with a warning.
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: SecretStr | None = None
+    smtp_from: str = "noreply@example.com"
+    smtp_starttls: bool = True
+    #: Where links in letters point (invitations, verification, reset).
+    frontend_url: str = "http://localhost:3000"
+    invitation_days: int = Field(default=7, ge=1, le=30)
+    email_verification_hours: int = Field(default=24, ge=1, le=168)
+    password_reset_minutes: int = Field(default=60, ge=5, le=1440)
+
+    #: S3-compatible object storage for chat files (S7; RustFS in dev).
+    storage_endpoint_url: str = "http://localhost:9000"
+    #: Host put into presigned URLs; the browser must reach it.
+    storage_browser_endpoint_url: str | None = None
+    storage_region: str = "us-east-1"
+    storage_access_key_id: str | None = None
+    storage_secret_access_key: SecretStr | None = None
+    storage_bucket: str = "ai-chat"
+    storage_presign_ttl_seconds: int = Field(default=600, ge=60, le=3600)
+    storage_addressing_style: Literal["path", "virtual"] = "path"
+
+    #: Langfuse tracing of turns (S9); off while the keys are empty.
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: SecretStr | None = None
+    langfuse_host: str = "https://cloud.langfuse.com"
+
+    allowed_origins: list[str] = ["http://localhost:3000"]
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    log_format: Literal["json", "text"] = "json"
+
+    #: Answer with a local fake model instead of OpenRouter: load tests only.
+    agent_fake_model: bool = False
+
+    openrouter_api_key: SecretStr | None = None
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_model: str = "anthropic/claude-sonnet-4.5"
+    #: OpenRouter models tried in order when a call to `openrouter_model` fails
+    #: (ModelFallbackMiddleware); empty turns fallback off.
+    openrouter_fallback_models: list[str] = []
+    # "high" | "medium" | "low", or empty to turn reasoning off. Only takes effect
+    # on models OpenRouter marks as reasoning-capable; streamed as AG-UI REASONING_*.
+    openrouter_reasoning_effort: str | None = "high"
+    # Optional, recommended by OpenRouter for attributing requests on their dashboard.
+    openrouter_site_url: str | None = None
+    openrouter_app_name: str | None = "ai-backend"
+
+    #: Fernet key that encrypts the API keys of LLM connections stored in the
+    #: database (QD-34). Generate one with `Fernet.generate_key()` (see
+    #: `.env.example`).
+    llm_encryption_key: SecretStr | None = None
+
+    @field_validator("database_url")
+    @classmethod
+    def _postgres_psycopg(cls, value: SecretStr) -> SecretStr:
+        url = make_url(value.get_secret_value())
+        if url.drivername != "postgresql+psycopg":
+            raise ValueError("DATABASE_URL must use postgresql+psycopg://")
+        return value
+
+    @field_validator("storage_endpoint_url", "storage_browser_endpoint_url")
+    @classmethod
+    def _storage_url(cls, value: str | None) -> str | None:
+        if not value:
+            return None
+        normalized = value.rstrip("/")
+        parsed = urlparse(normalized)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("storage URL must be an absolute HTTP(S) URL")
+        if parsed.query or parsed.fragment:
+            raise ValueError("storage URL must not contain a query or fragment")
+        return normalized
+
+    @field_validator(
+        "storage_secret_access_key",
+        "langfuse_secret_key",
+        "llm_encryption_key",
+        mode="before",
+    )
+    @classmethod
+    def _blank_secret_is_unset(cls, value: object) -> object:
+        return value or None
+
+    @field_validator("storage_bucket")
+    @classmethod
+    def _storage_bucket(cls, value: str) -> str:
+        if not STORAGE_BUCKET_PATTERN.fullmatch(value):
+            raise ValueError("STORAGE_BUCKET must be a valid S3 bucket name")
+        return value
+
+    @model_validator(mode="after")
+    def _storage_credentials(self) -> "Settings":
+        if (self.storage_access_key_id is None) != (
+            self.storage_secret_access_key is None
+        ):
+            raise ValueError("storage access key and secret key must be set together")
+        return self
+
+    @property
+    def storage_presign_endpoint_url(self) -> str:
+        return self.storage_browser_endpoint_url or self.storage_endpoint_url
+
+    @field_validator(
+        "openrouter_reasoning_effort",
+        "openrouter_site_url",
+        "openrouter_app_name",
+        "smtp_host",
+        "smtp_username",
+        "storage_access_key_id",
+        "langfuse_public_key",
+    )
+    @classmethod
+    def _blank_is_unset(cls, value: str | None) -> str | None:
+        return value or None
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    return Settings()  # pyrefly: ignore[missing-argument]

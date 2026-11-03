@@ -1,5 +1,7 @@
 # Dòng tóm tắt sống cho reasoning khi thu gọn
 
+> **Đã thay (03/11/2026):** nhãn reasoning theo từng lượt model đã được thay bằng khối làm việc kiểu Kimi. Xem [Hiển thị phần làm việc của agent](hien-thi-lam-viec-agent.md). Phần dưới giữ làm lịch sử.
+
 Tham khảo từ: deepseek-harness (`ReasoningRow.tsx`, note `2026-08-02-web-thinking-tail-scroll`).
 
 > Ghi chú: `ReasoningContent` tự áp dụng chuyển đổi delimiter LaTeX qua `remend` handler (xem [`math-rendering.md`](./math-rendering.md)), nên ở đây chỉ truyền thẳng `reasoning`, không cần gọi hàm chuẩn hoá thủ công nào.

@@ -14,7 +14,7 @@ Nối tay route, dùng trực tiếp các khối xây dựng mà `add_langgraph_
 
 ```python
 # backend/src/agent_backend/main.py
-@app.post("/agent")
+@app.post("/ai")
 async def agent_endpoint(input_data: RunAgentInput, request: Request) -> StreamingResponse:
     # Nối tay (thay vì ag_ui_langgraph.add_langgraph_fastapi_endpoint) để sau này
     # có thể chèn thêm 1 dependency auth/authz ngay tại đây, ví dụ:
@@ -39,7 +39,7 @@ async def agent_endpoint(input_data: RunAgentInput, request: Request) -> Streami
 Khi cần thêm auth, chỉ sửa đúng signature của `agent_endpoint`, không phải đào lại cách AG-UI hoạt động bên trong thư viện:
 
 ```python
-@app.post("/agent")
+@app.post("/ai")
 async def agent_endpoint(
     input_data: RunAgentInput,
     request: Request,

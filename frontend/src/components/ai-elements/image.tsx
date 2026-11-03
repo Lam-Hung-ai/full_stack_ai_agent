@@ -6,19 +6,11 @@ export type ImageProps = Experimental_GeneratedImage & {
   alt?: string;
 };
 
-export const Image = ({
-  base64,
-  uint8Array,
-  mediaType,
-  ...props
-}: ImageProps) => (
+export const Image = ({ base64, mediaType, className, alt }: ImageProps) => (
+  // eslint-disable-next-line @next/next/no-img-element -- generated base64 data, not a static asset
   <img
-    {...props}
-    alt={props.alt}
-    className={cn(
-      "h-auto max-w-full overflow-hidden rounded-md",
-      props.className
-    )}
+    alt={alt}
+    className={cn("h-auto max-w-full overflow-hidden rounded-md", className)}
     src={`data:${mediaType};base64,${base64}`}
   />
 );
