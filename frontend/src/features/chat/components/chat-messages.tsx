@@ -1,13 +1,7 @@
 "use client";
 
-import { useLayoutEffect, useState } from "react";
-import { useStickToBottomContext } from "use-stick-to-bottom";
+import { useState } from "react";
 import { PencilIcon, RefreshCcwIcon, RotateCcwIcon } from "lucide-react";
-import {
-  Conversation,
-  ConversationContent,
-  ConversationScrollButton,
-} from "@/components/ai-elements/conversation";
 import {
   Message,
   MessageAction,
@@ -24,6 +18,7 @@ import { attachedFiles, questionText as textOf } from "../utils/files";
 import { formatDuration, turnTime, turnTimeTitle, workDuration } from "../utils/turn-time";
 import { type InteractionAnswer, interactionOf } from "../utils/interactions";
 import { BranchSwitcher } from "./branch-switcher";
+import { ChatScroller } from "./chat-scroller";
 import { CopyAction } from "./copy-action";
 import { EditQuestionForm } from "./edit-question-form";
 import { InteractionCard } from "./interaction-card";
@@ -72,6 +67,7 @@ export type RowActions = {
 export function ChatMessages({
   fileSource,
   rows,
+  sentQuestionId,
   isBusy,
   waitingForUser = false,
   actions,
@@ -80,6 +76,8 @@ export function ChatMessages({
   /** Where attached files open from; absent before the chat exists. */
   fileSource?: FileLinkSource;
   rows: readonly RowView[];
+  /** The question this tab just sent; the view moves it to the top. */
+  sentQuestionId?: string | null;
   isBusy: boolean;
   /** A pause holds the chat: only its questions can be acted on. */
   waitingForUser?: boolean;
@@ -88,10 +86,8 @@ export function ChatMessages({
 }) {
   const locked = isBusy || waitingForUser;
   return (
-    // Opens at the last turn at once, and follows growth without animating:
-    // a smooth scroll down the whole chat on every load is hard on the eyes.
-    <Conversation initial="instant" resize="instant">
-      <ConversationContent className="mx-auto w-full max-w-3xl px-4 py-6">
+    <ChatScroller anchorId={sentQuestionId}>
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-4 py-6">
         {rows.length === 0
           ? empty
           : rows.map((row, index) =>
@@ -116,10 +112,8 @@ export function ChatMessages({
                 />
               ),
             )}
-      </ConversationContent>
-      <OpenAtEnd />
-      <ConversationScrollButton />
-    </Conversation>
+      </div>
+    </ChatScroller>
   );
 }
 
@@ -156,7 +150,7 @@ function QuestionRow({
     );
   }
   return (
-    <Message from="user">
+    <Message data-row-id={row.id} from="user">
       {fileSource && <MessageFiles files={files} source={fileSource} />}
       {text && (
         <MessageContent className="text-sm group-[.is-user]:rounded-2xl">
@@ -355,17 +349,4 @@ function TurnTime({ createdAt }: { createdAt?: string }) {
       {turnTime(createdAt)}
     </time>
   );
-}
-
-/**
- * Puts the chat at its last turn before the first paint; the library alone
- * paints the top first and jumps a frame or two later.
- */
-function OpenAtEnd() {
-  const { scrollRef } = useStickToBottomContext();
-  useLayoutEffect(() => {
-    const scroller = scrollRef.current;
-    if (scroller) scroller.scrollTop = scroller.scrollHeight;
-  }, [scrollRef]);
-  return null;
 }

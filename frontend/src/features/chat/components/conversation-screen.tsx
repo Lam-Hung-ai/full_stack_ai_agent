@@ -76,6 +76,7 @@ export function ConversationScreen({
         empty={<ChatEmptyState />}
         isBusy={locked}
         rows={chat.rows}
+        sentQuestionId={chat.sentQuestionId}
         waitingForUser={chat.waitingForUser}
       />
       <ChatFooter>

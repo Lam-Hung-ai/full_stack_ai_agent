@@ -171,6 +171,12 @@ Sau tiêu đề là phần mô tả: khi đang chạy là bước hiện tại (
 
 Trạng thái một bước công cụ (`toolStatus`): có `result` → `done` hoặc `error`; chưa có kết quả → `running` (đang chạy) / `pending` (lượt `requires_action`, hiện "Chờ duyệt") / `error` (lượt `failed`) / `stopped` (lượt `cancelled`, "Đã dừng").
 
+**Cuộn — `components/chat-scroller.tsx`.** Khung chat **không bao giờ tự kéo theo nội dung**: khi mở một khối, suy nghĩ dài đang stream hay câu trả lời đang viết, nội dung mọc xuống dưới còn màn hình đứng yên. Không dùng `Conversation`/`use-stick-to-bottom` của ai-elements cho khung chat nữa: thư viện đó đặt lại `scrollTop` theo từng khung hình khi nội dung cao lên, làm khối mở ra bị giật và suy nghĩ dài tự cuộn. Chỉ ba việc được cuộn:
+
+1. Mở chat: nhảy tới cuối, và giữ ở cuối khi nội dung tải muộn (code tô màu, công thức) cho tới lần đầu người dùng chạm vào khung (cuộn, bấm, chạm, phím).
+2. Gửi hoặc sửa câu hỏi (`sentQuestionId` từ `useConversationChat`, khớp `data-row-id` của dòng câu hỏi): câu hỏi trượt lên đầu khung; một khoảng trống bên dưới giữ chỗ để câu trả lời mọc vào, và vẫn giữ sau khi lượt xong để màn hình không nhảy.
+3. Nút mũi tên "Xuống cuối": hiện khi còn nội dung bên dưới.
+
 ### 4.4. Nhãn và kết quả của từng công cụ
 
 Hai chỗ cần sửa khi thêm công cụ:

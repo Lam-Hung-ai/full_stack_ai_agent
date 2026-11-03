@@ -384,6 +384,8 @@ export function useConversationChat(conversationId: string, initialAnchor: strin
 
   return {
     rows,
+    /** A question this tab sent or edited, while its answer streams. */
+    sentQuestionId: live?.question?.id ?? null,
     status,
     error,
     isBusy,
