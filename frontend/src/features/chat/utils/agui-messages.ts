@@ -89,25 +89,3 @@ export function parseToolArgs(raw: string): unknown {
     return raw;
   }
 }
-
-/**
- * The latest non-blank line of a reasoning stream, for the collapsed summary.
- * A stalled model visibly stalls and a fast one visibly moves, without having
- * to expand the panel to tell the difference.
- */
-export function latestLine(text: string): string {
-  const visible = text.trimEnd();
-  const newline = visible.lastIndexOf("\n");
-  return newline === -1 ? visible : visible.slice(newline + 1);
-}
-
-/** The text an assistant turn wrote, for copying: its answers, without reasoning or tools. */
-export function answerText(messages: readonly AGUIMessage[]): string {
-  return messages
-    .flatMap((message) =>
-      message.role === "assistant" && typeof message.content === "string" && message.content.trim()
-        ? [message.content.trim()]
-        : [],
-    )
-    .join("\n\n");
-}

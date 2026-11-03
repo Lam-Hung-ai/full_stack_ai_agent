@@ -1,16 +1,13 @@
 "use client";
 
-import { Fragment, useLayoutEffect, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { useStickToBottomContext } from "use-stick-to-bottom";
-import type { Message as AGUIMessage } from "@ag-ui/client";
-import type { ToolUIPart } from "ai";
 import { PencilIcon, RefreshCcwIcon, RotateCcwIcon } from "lucide-react";
 import {
   Conversation,
   ConversationContent,
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
-import { Loader } from "@/components/ai-elements/loader";
 import {
   Message,
   MessageAction,
@@ -18,33 +15,19 @@ import {
   MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message";
-import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning";
-import {
-  Tool,
-  ToolContent,
-  ToolHeader,
-  ToolInput,
-  ToolOutput,
-} from "@/components/ai-elements/tool";
 import { cn } from "@/lib/utils";
 import type { RowView } from "../types/chat.types";
-import {
-  answerText,
-  buildItems,
-  findToolResult,
-  parseToolArgs,
-  type Turn,
-} from "../utils/agui-messages";
+import { answerBlocks, answerCopyText } from "../utils/answer-blocks";
 import { isActive, isTerminal } from "../utils/history";
-import { attachedFiles, madeFile, questionText as textOf } from "../utils/files";
+import { attachedFiles, questionText as textOf } from "../utils/files";
 import { turnTime, turnTimeTitle, workDuration } from "../utils/turn-time";
-import { ASK_USER_TOOL, type InteractionAnswer, interactionOf } from "../utils/interactions";
+import { type InteractionAnswer, interactionOf } from "../utils/interactions";
 import { BranchSwitcher } from "./branch-switcher";
 import { CopyAction } from "./copy-action";
 import { EditQuestionForm } from "./edit-question-form";
 import { InteractionCard } from "./interaction-card";
 import { type FileLinkSource, MessageFiles } from "./message-files";
-import { ReasoningSummary } from "./reasoning-summary";
+import { WorkingLine, WorkSteps } from "./work-steps";
 
 /**
  * Answer prose: 16px serif with relaxed leading, filling the 768px column
@@ -236,15 +219,16 @@ function AnswerRow({
   fileSource?: FileLinkSource;
   isStreaming: boolean;
 }) {
-  const items = buildItems(row.content);
+  const blocks = answerBlocks(row.content);
   // Content is saved when a turn ends: one running elsewhere has none yet.
   const waiting = isStreaming || (!row.live && isActive(row));
   const finished = !row.live && isTerminal(row);
   const showActions = actions && finished;
-  const copyText = answerText(row.content);
-  // Like ChatGPT's "Worked for 7s", on the answer's first thinking step.
+  const copyText = answerCopyText(blocks);
+  // Like ChatGPT's "Worked for 7s", on the answer's first run of work.
   const workTime = finished ? workDuration(row.createdAt, row.updatedAt) : null;
-  const firstThought = items.findIndex((item) => item.kind === "turn" && item.turn.reasoning);
+  const firstWork = blocks.findIndex((block) => block.kind === "work");
+  const rowStatus = row.live ? "running" : row.status;
   // Only a saved pause can be answered; the server checks it again.
   const onAnswer =
     answerable && !row.live && row.status === "requires_action" ? actions?.onAnswer : undefined;
@@ -253,33 +237,42 @@ function AnswerRow({
     // One block, so the footer sits right under the answer instead of a
     // whole conversation gap below it.
     <div className="flex flex-col gap-2">
-      {/* Steps of one answer sit closer than turns do (32px). */}
+      {/* Blocks of one answer sit closer than turns do (32px). */}
       <div className="flex flex-col gap-3">
-        {items.length === 0 && waiting && (
-          <Message className="max-w-full" from="assistant">
-            <MessageContent>
-              <Loader />
-            </MessageContent>
-          </Message>
-        )}
-        {items.map((item, index) => {
-          if (item.kind === "turn") {
+        {blocks.length === 0 && waiting && <WorkingLine />}
+        {blocks.map((block, index) => {
+          if (block.kind === "work") {
+            const running = isStreaming && index === blocks.length - 1;
             return (
-              <TurnView
+              <WorkSteps
                 fileSource={fileSource}
-                isStreaming={isStreaming && index === items.length - 1}
-                key={item.turn.message.id}
-                workTime={index === firstThought ? workTime : null}
-                messages={row.content}
-                rowStatus={row.live ? "running" : row.status}
-                turn={item.turn}
+                key={block.id}
+                rowStatus={rowStatus}
+                running={running}
+                steps={block.steps}
+                summary={
+                  running
+                    ? "Đang làm việc…"
+                    : index === firstWork && workTime
+                      ? `Đã làm việc trong ${workTime}`
+                      : "Đã làm việc"
+                }
               />
             );
           }
-          const interaction = interactionOf(item.message);
+          if (block.kind === "text") {
+            return (
+              <Message className="max-w-full" from="assistant" key={block.id}>
+                <MessageContent className="w-full text-sm">
+                  <MessageResponse className={ANSWER_CLASS}>{block.text}</MessageResponse>
+                </MessageContent>
+              </Message>
+            );
+          }
+          const interaction = interactionOf(block.message);
           if (!interaction) return null;
           return (
-            <Message className="max-w-full" from="assistant" key={item.message.id}>
+            <Message className="max-w-full" from="assistant" key={block.message.id}>
               <InteractionCard
                 draft={actions?.drafts?.[interaction.interrupt_id]}
                 interaction={interaction}
@@ -324,94 +317,6 @@ function AnswerRow({
         </MessageActions>
       )}
     </div>
-  );
-}
-
-/** A tool call with no result yet, by where its turn stands. */
-const PENDING_TOOL_STATE: Partial<Record<RowView["status"], ToolUIPart["state"]>> = {
-  requires_action: "approval-requested",
-  cancelled: "output-denied",
-  failed: "output-error",
-};
-
-function TurnView({
-  turn: { message, reasoning },
-  messages,
-  rowStatus,
-  fileSource,
-  isStreaming,
-  workTime,
-}: {
-  turn: Turn;
-  messages: readonly AGUIMessage[];
-  rowStatus: RowView["status"];
-  fileSource?: FileLinkSource;
-  isStreaming: boolean;
-  workTime?: string | null;
-}) {
-  if (message.role !== "assistant") return null;
-
-  // ask_user shows as its interaction card, not as a tool call.
-  const toolCalls = (message.toolCalls ?? []).filter(
-    (call) => call.function.name !== ASK_USER_TOOL,
-  );
-  const isReasoningStreaming = isStreaming && !message.content && toolCalls.length === 0;
-  if (!reasoning && !message.content && toolCalls.length === 0 && !isStreaming) return null;
-
-  return (
-    <Message className="max-w-full" from="assistant">
-      <MessageContent className="w-full text-sm">
-        {reasoning && (
-          <Reasoning defaultOpen={isReasoningStreaming} isStreaming={isReasoningStreaming}>
-            <ReasoningTrigger>
-              <ReasoningSummary
-                isStreaming={isReasoningStreaming}
-                reasoning={reasoning}
-                workTime={workTime}
-              />
-            </ReasoningTrigger>
-            <ReasoningContent>{reasoning}</ReasoningContent>
-          </Reasoning>
-        )}
-        {message.content ? (
-          <MessageResponse className={ANSWER_CLASS}>{message.content}</MessageResponse>
-        ) : toolCalls.length === 0 && !reasoning && isStreaming ? (
-          <Loader />
-        ) : null}
-        {toolCalls.map((toolCall) => {
-          const result = findToolResult(messages, toolCall.id);
-          const made = madeFile(toolCall.function.name, result?.content);
-          const state: ToolUIPart["state"] = result
-            ? result.error
-              ? "output-error"
-              : "output-available"
-            : (PENDING_TOOL_STATE[rowStatus] ?? "input-available");
-
-          return (
-            <Fragment key={toolCall.id}>
-              <Tool className="mb-0 border-border/60">
-                <ToolHeader
-                  // Steps behind the answer: a regular-weight, muted name.
-                  className="[&_span.font-medium]:font-normal [&_span.font-medium]:text-muted-foreground"
-                  state={state}
-                  type={`tool-${toolCall.function.name}` as ToolUIPart["type"]}
-                />
-                <ToolContent>
-                  <ToolInput input={parseToolArgs(toolCall.function.arguments)} />
-                  <ToolOutput
-                    errorText={result?.error}
-                    output={typeof result?.content === "string" ? result.content : undefined}
-                  />
-                </ToolContent>
-              </Tool>
-              {made && fileSource && (
-                <MessageFiles align="start" files={[made]} source={fileSource} />
-              )}
-            </Fragment>
-          );
-        })}
-      </MessageContent>
-    </Message>
   );
 }
 
