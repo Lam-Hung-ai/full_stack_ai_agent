@@ -48,12 +48,13 @@ import { ReasoningSummary } from "./reasoning-summary";
 
 /**
  * Answer prose: 16px serif with relaxed leading; paragraphs, lists and
- * headings capped at 35em (about 70 characters a line), while tables and
+ * headings capped at 46em (about 90 characters a line, the width the user
+ * chose over the 45-75 reading guideline), while tables and
  * code (wrapped in divs) keep the column width. Headings sit tighter.
  */
 const ANSWER_CLASS = cn(
   "font-serif text-base leading-relaxed",
-  "*:max-w-[35em] [&>div]:max-w-none [&>hr]:max-w-none",
+  "*:max-w-[46em] [&>div]:max-w-none [&>hr]:max-w-none",
   "[&_:is(h1,h2,h3)]:font-semibold [&_:is(h1,h2,h3)]:leading-tight",
   "[&_h1]:text-xl [&_h2]:text-lg [&_h3]:text-base",
   // Tables keep the answer's serif, a step smaller, with aligned digits.
@@ -107,7 +108,7 @@ export function ChatMessages({
     // Opens at the last turn at once, and follows growth without animating:
     // a smooth scroll down the whole chat on every load is hard on the eyes.
     <Conversation initial="instant" resize="instant">
-      <ConversationContent className="mx-auto w-full max-w-3xl px-4 py-6">
+      <ConversationContent className="mx-auto w-full max-w-5xl px-4 py-6">
         {rows.length === 0
           ? empty
           : rows.map((row, index) =>
