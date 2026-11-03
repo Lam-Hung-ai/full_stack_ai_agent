@@ -48,7 +48,7 @@ export function ConversationScreen({
     return (
       <div className="flex h-full flex-col">
         <ChatHeader />
-        <div className="mx-auto w-full max-w-5xl p-4">
+        <div className="mx-auto w-full max-w-3xl p-4">
           <Alert variant="destructive">
             <AlertDescription>
               Không tìm thấy cuộc trò chuyện hoặc bạn không có quyền xem.

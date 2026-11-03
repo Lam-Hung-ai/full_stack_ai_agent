@@ -34,7 +34,7 @@ export type ComposerDraft = { text: string; files: ChatFile[] };
 /** The composer's column under the messages, with the usual caution below it. */
 export function ChatFooter({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-2 px-4 pb-2">
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-2 px-4 pb-2">
       {children}
       <p className="text-center text-muted-foreground text-xs">
         AI có thể mắc lỗi. Hãy kiểm tra lại thông tin quan trọng.

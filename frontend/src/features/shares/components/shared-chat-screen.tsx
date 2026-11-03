@@ -76,7 +76,7 @@ export function SharedChatScreen({ token }: { token: string }) {
     });
 
   return (
-    <div className="mx-auto flex h-dvh w-full max-w-5xl flex-col p-4">
+    <div className="mx-auto flex h-dvh w-full max-w-3xl flex-col p-4">
       <header className="flex items-center justify-between gap-4 border-b pb-3">
         <div className="min-w-0">
           <h1 className="truncate font-semibold">{data.title}</h1>

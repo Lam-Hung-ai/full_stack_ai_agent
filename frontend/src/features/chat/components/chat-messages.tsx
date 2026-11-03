@@ -47,15 +47,13 @@ import { type FileLinkSource, MessageFiles } from "./message-files";
 import { ReasoningSummary } from "./reasoning-summary";
 
 /**
- * Answer prose: 16px serif with relaxed leading; paragraphs, lists and
- * headings capped at 35em: measured on long answers, full lines average
- * 62-71 characters and peak at 75-76, inside the 45-75 reading range
- * (Refactoring UI, lesson 22). Tables and code (wrapped in divs) keep the
- * wide column. Headings sit tighter.
+ * Answer prose: 16px serif with relaxed leading, filling the 768px column
+ * like every other block (about 95 characters a line); assistant messages
+ * drop the library's 95% cap so all blocks share the column's edges.
+ * Headings sit tighter.
  */
 const ANSWER_CLASS = cn(
   "font-serif text-base leading-relaxed",
-  "*:max-w-[35em] [&>div]:max-w-none [&>hr]:max-w-none",
   "[&_:is(h1,h2,h3)]:font-semibold [&_:is(h1,h2,h3)]:leading-tight",
   "[&_h1]:text-xl [&_h2]:text-lg [&_h3]:text-base",
   // Tables keep the answer's serif, a step smaller, with aligned digits.
@@ -109,7 +107,7 @@ export function ChatMessages({
     // Opens at the last turn at once, and follows growth without animating:
     // a smooth scroll down the whole chat on every load is hard on the eyes.
     <Conversation initial="instant" resize="instant">
-      <ConversationContent className="mx-auto w-full max-w-5xl px-4 py-6">
+      <ConversationContent className="mx-auto w-full max-w-3xl px-4 py-6">
         {rows.length === 0
           ? empty
           : rows.map((row, index) =>
@@ -258,7 +256,7 @@ function AnswerRow({
       {/* Steps of one answer sit closer than turns do (32px). */}
       <div className="flex flex-col gap-3">
         {items.length === 0 && waiting && (
-          <Message from="assistant">
+          <Message className="max-w-full" from="assistant">
             <MessageContent>
               <Loader />
             </MessageContent>
@@ -281,7 +279,7 @@ function AnswerRow({
           const interaction = interactionOf(item.message);
           if (!interaction) return null;
           return (
-            <Message from="assistant" key={item.message.id}>
+            <Message className="max-w-full" from="assistant" key={item.message.id}>
               <InteractionCard
                 draft={actions?.drafts?.[interaction.interrupt_id]}
                 interaction={interaction}
@@ -361,7 +359,7 @@ function TurnView({
   if (!reasoning && !message.content && toolCalls.length === 0 && !isStreaming) return null;
 
   return (
-    <Message from="assistant">
+    <Message className="max-w-full" from="assistant">
       <MessageContent className="w-full text-sm">
         {reasoning && (
           <Reasoning defaultOpen={isReasoningStreaming} isStreaming={isReasoningStreaming}>
