@@ -33,7 +33,7 @@ Kiểu hiển thị theo Kimi (chuỗi bước trên một đường kẻ đứt
 | Nguyên tắc | Áp dụng |
 |---|---|
 | Phản hồi phải nhanh, có thông tin, có ưu tiên (Ch1) | Đồng hồ + tên bước hiện tại khi đang chạy; kết quả công cụ bằng chữ; bước đã xong gập lại |
-| Tự động hoá hỏng thường không báo trước (Ch5, ví dụ chữ "dr" của tàu Royal Majesty) | Bước lỗi hiện ngay trên tiêu đề (icon đỏ, "· 1 bước lỗi"), khối tự mở |
+| Tự động hoá hỏng thường không báo trước (Ch5, ví dụ chữ "dr" của tàu Royal Majesty) | Bước lỗi hiện ngay trên tiêu đề (chữ đỏ "· 1 bước lỗi") kể cả khi khối đã gập; khối không tự mở để mọi lượt gập giống nhau |
 | Cho thấy trạng thái hệ thống chính xác (Ch5) | Tiêu đề nói kết cục (xong / dừng / lỗi); thời lượng không tính lúc chờ người dùng |
 | Cảm giác kiểm soát (Ch2) | Khối không tự gập khi câu trả lời đang viết; lựa chọn mở/gập của người dùng luôn thắng |
 
@@ -164,7 +164,7 @@ Sau tiêu đề là phần mô tả: khi đang chạy là bước hiện tại (
 
 | Thành phần | Mặc định | Ghi chú |
 |---|---|---|
-| Khối làm việc | Mở khi cả dòng đang stream (`keepOpen = isStreaming`); gập khi lượt xong | Giữ mở nếu có bước lỗi, hoặc là khối cuối của lượt bị dừng/lỗi. Người dùng bấm thì lựa chọn đó thắng (`choice ?? …`). |
+| Khối làm việc | Mở khi cả dòng đang stream (`keepOpen = isStreaming`); gập khi lượt xong | Lượt có bước lỗi, bị dừng hay lỗi cả lượt cũng gập như thường; tiêu đề đã báo kết cục. Người dùng bấm thì lựa chọn đó thắng (`choice ?? keepOpen`). |
 | Bước suy nghĩ | Mở khi đang chạy, tự gập khi xong | `ThinkingStep`, cùng cơ chế `choice ?? active`. |
 | Bước công cụ | Gập | Mở ra là "Chi tiết kỹ thuật": Đầu vào (JSON args) và Kết quả/Lỗi (raw). |
 | Thẻ tệp | Luôn hiện dưới khối | Lấy từ các bước `create_file` thành công (`madeFile`). |
@@ -211,10 +211,10 @@ Mỗi khối có một vùng `aria-live="polite"` ẩn, đọc lên khi trạng 
 | Đang chạy công cụ | `… · đang chạy <nhãn>` | Mở | `· Đang chạy…` | — |
 | Đang viết câu trả lời | `Đã làm việc · <việc đã làm>` | Mở | Bước xong gập | — |
 | Xong | `Đã làm việc trong N giây · <việc>` | Gập | — | Sao chép, Tạo lại, phiên bản, giờ |
-| Xong nhưng có công cụ lỗi | `… · 1 bước lỗi` (chữ đỏ, icon bình thường) | Mở | Dòng đỏ `· Lỗi: <nội dung>` | như trên |
+| Xong nhưng có công cụ lỗi | `… · 1 bước lỗi` (chữ đỏ, icon bình thường) | Gập | Dòng đỏ `· Lỗi: <nội dung>` | như trên |
 | Đang chờ người dùng (`requires_action`) | `Đã làm việc` | Gập | Công cụ cần duyệt: `· Chờ duyệt` | — (thẻ hỏi đáp có ô trả lời) |
-| Bị dừng | `Đã dừng sau N giây` | Mở | Công cụ dở: `· Đã dừng` | `· Đã dừng` |
-| Lỗi cả lượt | `Gặp lỗi sau N giây` | Mở | Công cụ dở: `· Lỗi` | `Câu trả lời chưa hoàn tất do lỗi` |
+| Bị dừng | `Đã dừng sau N giây` | Gập | Công cụ dở: `· Đã dừng` | `· Đã dừng` |
+| Lỗi cả lượt | `Gặp lỗi sau N giây` | Gập | Công cụ dở: `· Lỗi` | `Câu trả lời chưa hoàn tất do lỗi` |
 
 ---
 
@@ -260,7 +260,7 @@ Mỗi khối có một vùng `aria-live="polite"` ẩn, đọc lên khi trạng 
 |---|---|---|
 | Bình thường | "Xem giờ hiện tại bằng công cụ, rồi tạo tệp txt tên "ghi-gio" chứa giờ đó." | Đồng hồ chạy, tên bước đổi, gập khi xong: "Đã làm việc trong N giây · xem giờ, tạo 1 tệp" |
 | Công cụ lỗi thật | "Gọi công cụ tạo tệp định dạng xlsx tên "thu-loi" và KHÔNG truyền rows lẫn content." | "· thử tạo tệp · 1 bước lỗi", dòng đỏ "Lỗi: Could not create the file: rows is required…" |
-| Bị dừng | Câu hỏi dài, bấm Dừng sau bước công cụ | "Đã dừng sau N giây", khối mở |
+| Bị dừng | Câu hỏi dài, bấm Dừng sau bước công cụ | "Đã dừng sau N giây", khối gập |
 | Hỏi lại | Câu mơ hồ khiến agent dùng `ask_user` | Khối trước thẻ, thẻ hỏi đáp, khối sau khi trả lời |
 | Điện thoại / tối | Cửa sổ 390px, menu Giao diện → Tối | Không tràn ngang; tiêu đề không bị cắt mất; màu đúng token |
 

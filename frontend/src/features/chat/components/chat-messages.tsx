@@ -237,7 +237,6 @@ function AnswerRow({
   const lastWork = blocks.findLastIndex((block) => block.kind === "work");
   // Feedback while waiting: the seconds this tab has watched it work.
   const elapsed = useElapsedSeconds(isStreaming);
-  const stoppedOrFailed = finished && (row.status === "cancelled" || row.status === "failed");
   const rowStatus = row.live ? "running" : row.status;
   // Only a saved pause can be answered; the server checks it again.
   const onAnswer =
@@ -268,9 +267,8 @@ function AnswerRow({
               <WorkSteps
                 fileSource={fileSource}
                 // Open until the whole answer is written, so a step being
-                // read does not fold away when the text starts; a stopped
-                // or failed row keeps its last run open.
-                keepOpen={isStreaming || (stoppedOrFailed && index === lastWork)}
+                // read does not fold away when the text starts.
+                keepOpen={isStreaming}
                 key={block.id}
                 rowStatus={rowStatus}
                 running={running}

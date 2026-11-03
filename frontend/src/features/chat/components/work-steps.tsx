@@ -103,7 +103,7 @@ function currentStep(step: WorkStep | undefined): string | null {
 /**
  * A run of the agent's work as a trace, like Kimi: thinking, notes and tool
  * calls on a line under one header. It stays open while the answer is being
- * written (`keepOpen`) and folds once it is done, unless a step failed;
+ * written (`keepOpen`) and folds once it is done, failed steps or not;
  * whatever the reader chose wins. Files a tool made stay visible below.
  */
 export function WorkSteps({
@@ -123,11 +123,11 @@ export function WorkSteps({
   fileSource?: FileLinkSource;
 }) {
   const [choice, setChoice] = useState<boolean | null>(null);
-  // A failed step must not hide in a folded trace (Norman's "dr" mode).
+  // A failed step folds like any other; the header's "· N bước lỗi" tells.
   const failed = steps.filter(
     (step) => step.kind === "tool" && toolStatus(step, rowStatus, running) === "error",
   ).length;
-  const open = choice ?? (keepOpen || failed > 0);
+  const open = choice ?? keepOpen;
   const now = running ? currentStep(steps.at(-1)) : null;
   const files = steps.flatMap((step): AttachedFile[] => {
     if (step.kind !== "tool") return [];
