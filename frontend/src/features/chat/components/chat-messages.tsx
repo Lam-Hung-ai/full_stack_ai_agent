@@ -15,9 +15,10 @@ import {
   MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message";
+import { useElapsedSeconds } from "@/hooks/use-elapsed-seconds";
 import { cn } from "@/lib/utils";
 import type { RowView } from "../types/chat.types";
-import { answerBlocks, answerCopyText } from "../utils/answer-blocks";
+import { answerBlocks, answerCopyText, workSummary } from "../utils/answer-blocks";
 import { isActive, isTerminal } from "../utils/history";
 import { attachedFiles, questionText as textOf } from "../utils/files";
 import { turnTime, turnTimeTitle, workDuration } from "../utils/turn-time";
@@ -228,6 +229,10 @@ function AnswerRow({
   // Like ChatGPT's "Worked for 7s", on the answer's first run of work.
   const workTime = finished ? workDuration(row.createdAt, row.updatedAt) : null;
   const firstWork = blocks.findIndex((block) => block.kind === "work");
+  const lastWork = blocks.findLastIndex((block) => block.kind === "work");
+  // Feedback while waiting: the seconds this tab has watched it work.
+  const elapsed = useElapsedSeconds(isStreaming);
+  const stoppedOrFailed = finished && (row.status === "cancelled" || row.status === "failed");
   const rowStatus = row.live ? "running" : row.status;
   // Only a saved pause can be answered; the server checks it again.
   const onAnswer =
@@ -239,24 +244,40 @@ function AnswerRow({
     <div className="flex flex-col gap-2">
       {/* Blocks of one answer sit closer than turns do (32px). */}
       <div className="flex flex-col gap-3">
-        {blocks.length === 0 && waiting && <WorkingLine />}
+        {blocks.length === 0 && waiting && (
+          <WorkingLine
+            label={workSummary({
+              running: true,
+              elapsed,
+              status: row.status,
+              workTime: null,
+              isFirst: true,
+              isLast: true,
+            })}
+          />
+        )}
         {blocks.map((block, index) => {
           if (block.kind === "work") {
             const running = isStreaming && index === blocks.length - 1;
             return (
               <WorkSteps
                 fileSource={fileSource}
+                // Open until the whole answer is written, so a step being
+                // read does not fold away when the text starts; a stopped
+                // or failed row keeps its last run open.
+                keepOpen={isStreaming || (stoppedOrFailed && index === lastWork)}
                 key={block.id}
                 rowStatus={rowStatus}
                 running={running}
                 steps={block.steps}
-                summary={
-                  running
-                    ? "Đang làm việc…"
-                    : index === firstWork && workTime
-                      ? `Đã làm việc trong ${workTime}`
-                      : "Đã làm việc"
-                }
+                summary={workSummary({
+                  running,
+                  elapsed,
+                  status: row.status,
+                  workTime,
+                  isFirst: index === firstWork,
+                  isLast: index === lastWork,
+                })}
               />
             );
           }

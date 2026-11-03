@@ -1,6 +1,6 @@
 import type { Message as AGUIMessage } from "@ag-ui/client";
 import { describe, expect, it } from "vitest";
-import { answerBlocks, answerCopyText } from "./answer-blocks";
+import { answerBlocks, answerCopyText, workSummary } from "./answer-blocks";
 
 const call = (id: string, name: string) => ({
   id,
@@ -54,5 +54,30 @@ describe("answerBlocks", () => {
     expect(
       answerBlocks([{ id: "a", role: "assistant", content: "Chào" }] as AGUIMessage[]),
     ).toEqual([{ kind: "text", id: "a", text: "Chào" }]);
+  });
+});
+
+describe("workSummary", () => {
+  const base = {
+    running: false,
+    elapsed: 0,
+    status: "completed" as const,
+    workTime: "33 giây",
+    isFirst: true,
+    isLast: true,
+  };
+
+  it("counts while running and tells how a finished row ended", () => {
+    expect(workSummary({ ...base, running: true, workTime: null })).toBe("Đang làm việc…");
+    expect(workSummary({ ...base, running: true, elapsed: 12 })).toBe("Đang làm việc… 12 giây");
+    expect(workSummary(base)).toBe("Đã làm việc trong 33 giây");
+    expect(workSummary({ ...base, status: "cancelled" })).toBe("Đã dừng sau 33 giây");
+    expect(workSummary({ ...base, status: "failed", workTime: null })).toBe("Gặp lỗi");
+  });
+
+  it("puts the duration on the first run and the ending on the last", () => {
+    expect(workSummary({ ...base, isFirst: false })).toBe("Đã làm việc");
+    expect(workSummary({ ...base, status: "cancelled", isLast: false })).toBe("Đã làm việc");
+    expect(workSummary({ ...base, status: "requires_action", workTime: null })).toBe("Đã làm việc");
   });
 });

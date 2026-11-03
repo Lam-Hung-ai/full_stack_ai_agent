@@ -1,4 +1,5 @@
 import type { Message as AGUIMessage, ToolCall } from "@ag-ui/client";
+import type { RowView } from "../types/chat.types";
 import {
   type ActivityMessage,
   buildItems,
@@ -6,6 +7,7 @@ import {
   type ToolResultMessage,
 } from "./agui-messages";
 import { ASK_USER_TOOL } from "./interactions";
+import { formatDuration } from "./turn-time";
 
 /** One step of the agent's work, shown in the trace above the answer. */
 export type WorkStep =
@@ -77,4 +79,33 @@ export function answerBlocks(messages: readonly AGUIMessage[]): AnswerBlock[] {
 /** The answer's own words, for copying: its text blocks without the work. */
 export function answerCopyText(blocks: readonly AnswerBlock[]): string {
   return blocks.flatMap((block) => (block.kind === "text" ? [block.text.trim()] : [])).join("\n\n");
+}
+
+/**
+ * The header of a run of work. While it runs it counts the seconds; once
+ * the row ends, the last run tells how it ended (stopped, failed) and the
+ * first run of a completed row how long the whole answer took.
+ */
+export function workSummary({
+  running,
+  elapsed,
+  status,
+  workTime,
+  isFirst,
+  isLast,
+}: {
+  running: boolean;
+  /** Seconds this tab has watched it run; 0 before the first tick. */
+  elapsed: number;
+  status: RowView["status"];
+  /** The finished row's duration, as formatted text. */
+  workTime: string | null;
+  isFirst: boolean;
+  isLast: boolean;
+}): string {
+  if (running) return elapsed > 0 ? `Đang làm việc… ${formatDuration(elapsed)}` : "Đang làm việc…";
+  if (isLast && status === "cancelled") return workTime ? `Đã dừng sau ${workTime}` : "Đã dừng";
+  if (isLast && status === "failed") return workTime ? `Gặp lỗi sau ${workTime}` : "Gặp lỗi";
+  if (isFirst && status === "completed" && workTime) return `Đã làm việc trong ${workTime}`;
+  return "Đã làm việc";
 }

@@ -8,6 +8,7 @@ import {
   ListChecksIcon,
   type LucideIcon,
   MessageSquareTextIcon,
+  TriangleAlertIcon,
   WrenchIcon,
 } from "lucide-react";
 import { CodeBlock } from "@/components/ai-elements/code-block";
@@ -72,38 +73,55 @@ function argsOf(step: ToolStep): Record<string, unknown> {
   return args && typeof args === "object" ? (args as Record<string, unknown>) : {};
 }
 
-/** Shown before the first step arrives. */
-export function WorkingLine() {
+/** Shown before the first step arrives; `label` counts the seconds. */
+export function WorkingLine({ label }: { label: string }) {
   return (
     <TraceLine status="running">
       <TraceIcon>
         <ListChecksIcon />
       </TraceIcon>
-      <TraceTitle>Đang làm việc…</TraceTitle>
+      <TraceTitle>{label}</TraceTitle>
     </TraceLine>
   );
 }
 
+/** What the last step is doing, for the header while the run goes on. */
+function currentStep(step: WorkStep | undefined): string | null {
+  if (step?.kind === "thinking") return "đang suy nghĩ";
+  if (step?.kind !== "tool") return null;
+  const known = TOOLS[step.call.function.name];
+  return `đang chạy ${known ? known.label(argsOf(step)) : step.call.function.name}`;
+}
+
 /**
  * A run of the agent's work as a trace, like Kimi: thinking, notes and tool
- * calls on a line under one header. Open while the agent works, folded once
- * it is done (the reader can open it). Files a tool made stay visible below.
+ * calls on a line under one header. It stays open while the answer is being
+ * written (`keepOpen`) and folds once it is done, unless a step failed;
+ * whatever the reader chose wins. Files a tool made stay visible below.
  */
 export function WorkSteps({
   steps,
   summary,
   running,
+  keepOpen,
   rowStatus,
   fileSource,
 }: {
   steps: readonly WorkStep[];
   summary: string;
+  /** This run is the one going on now. */
   running: boolean;
+  keepOpen: boolean;
   rowStatus: RowView["status"];
   fileSource?: FileLinkSource;
 }) {
   const [choice, setChoice] = useState<boolean | null>(null);
-  const open = choice ?? running;
+  // A failed step must not hide in a folded trace (Norman's "dr" mode).
+  const failed = steps.filter(
+    (step) => step.kind === "tool" && toolStatus(step, rowStatus, running) === "error",
+  ).length;
+  const open = choice ?? (keepOpen || failed > 0);
+  const now = running ? currentStep(steps.at(-1)) : null;
   const files = steps.flatMap((step): AttachedFile[] => {
     if (step.kind !== "tool") return [];
     const made = madeFile(step.call.function.name, step.result?.content);
@@ -116,10 +134,17 @@ export function WorkSteps({
         <TraceCollapsibleTrigger>
           <TraceLine status={running ? "running" : undefined}>
             <TraceIcon>
-              <ListChecksIcon />
+              {failed > 0 && !running ? (
+                <TriangleAlertIcon className="text-destructive" />
+              ) : (
+                <ListChecksIcon />
+              )}
             </TraceIcon>
             <TraceTitle>{summary}</TraceTitle>
-            <TraceDescription>· {steps.length} bước</TraceDescription>
+            <TraceDescription>· {now ?? `${steps.length} bước`}</TraceDescription>
+            {failed > 0 && (
+              <TraceDescription className="text-destructive">· {failed} bước lỗi</TraceDescription>
+            )}
           </TraceLine>
         </TraceCollapsibleTrigger>
         <TraceCollapsibleContent className="border-dashed text-sm">
