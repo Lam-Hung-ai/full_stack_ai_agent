@@ -171,11 +171,17 @@ Sau tiêu đề là phần mô tả: khi đang chạy là bước hiện tại (
 
 Trạng thái một bước công cụ (`toolStatus`): có `result` → `done` hoặc `error`; chưa có kết quả → `running` (đang chạy) / `pending` (lượt `requires_action`, hiện "Chờ duyệt") / `error` (lượt `failed`) / `stopped` (lượt `cancelled`, "Đã dừng").
 
-**Cuộn — `components/chat-scroller.tsx`.** Khung chat **không bao giờ tự kéo theo nội dung**: khi mở một khối, suy nghĩ dài đang stream hay câu trả lời đang viết, nội dung mọc xuống dưới còn màn hình đứng yên. Không dùng `Conversation`/`use-stick-to-bottom` của ai-elements cho khung chat nữa: thư viện đó đặt lại `scrollTop` theo từng khung hình khi nội dung cao lên, làm khối mở ra bị giật và suy nghĩ dài tự cuộn. Chỉ ba việc được cuộn:
+**Cuộn — `components/chat-scroller.tsx`.** Khung chat chỉ bám theo nội dung mới khi **người dùng tự yêu cầu**, và không bao giờ tự đoán. Không dùng `Conversation`/`use-stick-to-bottom` của ai-elements cho khung chat nữa: thư viện đó bám đáy bất cứ khi nào khung đang ở cuối, nên bấm mở một khối ở cuối thì khối bị kéo đi (giật), còn suy nghĩ dài thì tự cuộn mất chỗ đang đọc.
 
-1. Mở chat: nhảy tới cuối, và giữ ở cuối khi nội dung tải muộn (code tô màu, công thức) cho tới lần đầu người dùng chạm vào khung (cuộn, bấm, chạm, phím).
-2. Gửi hoặc sửa câu hỏi (`sentQuestionId` từ `useConversationChat`, khớp `data-row-id` của dòng câu hỏi): câu hỏi trượt lên đầu khung; một khoảng trống bên dưới giữ chỗ để câu trả lời mọc vào, và vẫn giữ sau khi lượt xong để màn hình không nhảy.
-3. Nút mũi tên "Xuống cuối": hiện khi còn nội dung bên dưới.
+| Thao tác của người dùng | Ý định | Khung làm gì |
+|---|---|---|
+| Mở một chat | Xem chỗ mới nhất | Nhảy tới cuối (không hiệu ứng) và bám theo nội dung tải muộn |
+| Gửi / sửa câu hỏi (`sentQuestionId`, khớp `data-row-id`) | Đọc câu trả lời từ đầu | Câu hỏi trượt lên đầu khung, khoảng trống bên dưới giữ chỗ cho câu trả lời; **không** bám theo |
+| Tự cuộn tới cuối (lăn chuột, kéo thanh cuộn, vuốt), lăn/mũi tên xuống khi đã ở cuối, phím End, nút mũi tên | Xem cái mới nhất | Bám theo: nội dung mới hiện ngay ở cuối |
+| Cuộn lên (lăn, vuốt, phím lên/Page Up/Home) | Đọc lại phía trên | Thôi bám, đứng yên |
+| Bấm vào nội dung (mở khối, bôi chọn chữ), Enter/Space trên một nút | Đọc / thao tác chỗ này | Thôi bám, đứng yên; nội dung mọc xuống dưới |
+
+Nút mũi tên "Xuống cuối" hiện khi còn nội dung bên dưới mà khung không bám theo, nên luôn nhìn thấy khung đang ở chế độ nào (không có chế độ ẩn). Một lần cuộn chỉ được tính là của người dùng nếu xảy ra trong 800 ms sau thao tác của họ (`INPUT_WINDOW_MS`); các lần cuộn do trang tự làm (trượt câu hỏi lên, bám đáy) không đổi chế độ. Khung có `tabIndex={0}` để cuộn được bằng bàn phím.
 
 ### 4.4. Nhãn và kết quả của từng công cụ
 
