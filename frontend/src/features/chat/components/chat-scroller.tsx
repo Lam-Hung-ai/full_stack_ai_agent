@@ -18,14 +18,13 @@ const DOWN_KEYS = new Set(["ArrowDown", "PageDown", " "]);
 /**
  * The chat's scroll area. It follows new content only while the reader asks
  * for it, and never guesses:
- * - Following starts when they go to the end themselves (scroll, wheel or
- *   arrow down at the end, End, or the button), and on opening the chat,
- *   which starts there.
+ * - It follows on opening the chat and on sending a question: a question
+ *   just sent (`anchorId`, a row's `data-row-id`) moves to the top, with
+ *   room below that the answer fills before the view starts to follow.
  * - It stops as soon as they scroll up, or act on the content (open a step,
  *   select text), so what they are reading stays put while it grows below.
- * - A question just sent (`anchorId`, a row's `data-row-id`) moves to the
- *   top with room below for the answer, and is not followed: the answer
- *   is read from its start, until the reader goes to the end.
+ * - It starts again when they go to the end themselves (scroll, wheel or
+ *   arrow down at the end, End, or the button).
  * The button shows whenever there is more below and the view is not
  * following, so which of the two it is doing can always be seen.
  */
@@ -82,7 +81,7 @@ export function ChatScroller({
     if (!anchor || !scroller || !content) return;
     const top = questionTop(scroller, content, anchor);
     if (top === null) return;
-    following.current = false;
+    following.current = true;
     scroller.scrollTo({ top: top - TOP_GAP_PX, behavior: "smooth" });
   }, [anchor]);
 

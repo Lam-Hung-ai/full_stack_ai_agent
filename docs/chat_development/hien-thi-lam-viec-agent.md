@@ -176,7 +176,7 @@ Trạng thái một bước công cụ (`toolStatus`): có `result` → `done` h
 | Thao tác của người dùng | Ý định | Khung làm gì |
 |---|---|---|
 | Mở một chat | Xem chỗ mới nhất | Nhảy tới cuối (không hiệu ứng) và bám theo nội dung tải muộn |
-| Gửi / sửa câu hỏi (`sentQuestionId`, khớp `data-row-id`) | Đọc câu trả lời từ đầu | Câu hỏi trượt lên đầu khung, khoảng trống bên dưới giữ chỗ cho câu trả lời; **không** bám theo |
+| Gửi / sửa câu hỏi (`sentQuestionId`, khớp `data-row-id`) | Theo dõi câu trả lời | Câu hỏi trượt lên đầu khung, khoảng trống bên dưới giữ chỗ; câu trả lời (cả suy nghĩ) lấp đầy chỗ trống rồi khung **bám theo** cuối |
 | Tự cuộn tới cuối (lăn chuột, kéo thanh cuộn, vuốt), lăn/mũi tên xuống khi đã ở cuối, phím End, nút mũi tên | Xem cái mới nhất | Bám theo: nội dung mới hiện ngay ở cuối |
 | Cuộn lên (lăn, vuốt, phím lên/Page Up/Home) | Đọc lại phía trên | Thôi bám, đứng yên |
 | Bấm vào nội dung (mở khối, bôi chọn chữ), Enter/Space trên một nút | Đọc / thao tác chỗ này | Thôi bám, đứng yên; nội dung mọc xuống dưới |
