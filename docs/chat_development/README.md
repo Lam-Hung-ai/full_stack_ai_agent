@@ -30,8 +30,9 @@ Cập nhật: **29/10/2026**. Backend FastAPI + LangGraph OSS + LangGraphAgent/E
 
 ## Kinh nghiệm frontend
 
+- [Hiển thị phần làm việc của agent](hien-thi-lam-viec-agent.md): **đọc trước khi thêm công cụ** hoặc sửa phần suy nghĩ/công cụ dưới câu trả lời; luồng dữ liệu, quy tắc báo lỗi `status="error"`, trạng thái, checklist.
 - [Reasoning có dữ liệu nhưng không hiển thị](reasoning-render-gap-bug.md).
-- [Dòng tóm tắt reasoning sống](live-reasoning-summary.md).
+- [Dòng tóm tắt reasoning sống](live-reasoning-summary.md) (đã thay bằng tài liệu hiển thị phần làm việc).
 - [Gộp cập nhật stream theo requestAnimationFrame](raf-batched-reasoning-updates.md).
 - [Hiển thị công thức toán](math-rendering.md).
 
