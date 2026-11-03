@@ -30,7 +30,7 @@ export function ChatHeader({ conversation }: { conversation?: Conversation }) {
       className="border-b"
       end={
         conversation && (
-          <Button onClick={() => setSharing(true)} size="sm" variant="ghost">
+          <Button onClick={() => setSharing(true)} variant="ghost">
             <Share2Icon />
             Chia sẻ
           </Button>
@@ -42,7 +42,8 @@ export function ChatHeader({ conversation }: { conversation?: Conversation }) {
           conversation={conversation}
           workspaceId={conversation.workspace_id}
         >
-          <Button className="min-w-0 max-w-full font-normal" size="sm" variant="ghost">
+          {/* The default size: 14px like the rest of the interface. */}
+          <Button className="min-w-0 max-w-full" variant="ghost">
             <span className="truncate">{conversation.title}</span>
             <ChevronDownIcon className="text-muted-foreground" />
           </Button>
