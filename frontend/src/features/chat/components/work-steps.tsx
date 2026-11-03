@@ -51,6 +51,13 @@ const TOOLS: Record<
   },
 };
 
+/**
+ * A line's title keeps its room (up to 70%) and the details after it give
+ * way first, so a narrow screen shows "Đã làm việc trong 2 giây · thử tạo…"
+ * rather than cutting both to a few letters.
+ */
+const TITLE_FIRST = "max-w-[70%] shrink-0";
+
 type ToolStatus = "done" | "running" | "error" | "pending" | "stopped";
 
 const STATUS_TEXT: Partial<Record<ToolStatus, string>> = {
@@ -141,7 +148,7 @@ export function WorkSteps({
                 <ListChecksIcon />
               )}
             </TraceIcon>
-            <TraceTitle>{summary}</TraceTitle>
+            <TraceTitle className={TITLE_FIRST}>{summary}</TraceTitle>
             <TraceDescription className="min-w-0 shrink truncate">
               · {now ?? workDone(steps)}
             </TraceDescription>
@@ -250,7 +257,9 @@ function ToolStepView({
           <TraceIcon>
             <Icon />
           </TraceIcon>
-          <TraceTitle>{known ? known.label(args) : step.call.function.name}</TraceTitle>
+          <TraceTitle className={TITLE_FIRST}>
+            {known ? known.label(args) : step.call.function.name}
+          </TraceTitle>
           {detail && (
             <TraceDescription className="min-w-0 shrink truncate" title={detail}>
               · {detail}

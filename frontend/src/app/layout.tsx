@@ -18,8 +18,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
+    // next-themes sets the theme class on <html> before React hydrates.
     <html
       lang="vi"
+      suppressHydrationWarning
       className={`${sans.variable} ${serif.variable} ${mono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">

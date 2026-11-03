@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ThemeProvider } from "@/components/layout/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ApiError } from "@/lib/api";
@@ -33,9 +34,11 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>{children}</TooltipProvider>
-      <Toaster position="bottom-right" />
-    </QueryClientProvider>
+    <ThemeProvider attribute="class" defaultTheme="system" disableTransitionOnChange enableSystem>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>{children}</TooltipProvider>
+        <Toaster position="bottom-right" />
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }
