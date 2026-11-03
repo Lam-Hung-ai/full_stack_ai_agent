@@ -48,13 +48,14 @@ import { ReasoningSummary } from "./reasoning-summary";
 
 /**
  * Answer prose: 16px serif with relaxed leading; paragraphs, lists and
- * headings capped at 46em (about 90 characters a line, the width the user
- * chose over the 45-75 reading guideline), while tables and
- * code (wrapped in divs) keep the column width. Headings sit tighter.
+ * headings capped at 35em: measured on long answers, full lines average
+ * 62-71 characters and peak at 75-76, inside the 45-75 reading range
+ * (Refactoring UI, lesson 22). Tables and code (wrapped in divs) keep the
+ * wide column. Headings sit tighter.
  */
 const ANSWER_CLASS = cn(
   "font-serif text-base leading-relaxed",
-  "*:max-w-[46em] [&>div]:max-w-none [&>hr]:max-w-none",
+  "*:max-w-[35em] [&>div]:max-w-none [&>hr]:max-w-none",
   "[&_:is(h1,h2,h3)]:font-semibold [&_:is(h1,h2,h3)]:leading-tight",
   "[&_h1]:text-xl [&_h2]:text-lg [&_h3]:text-base",
   // Tables keep the answer's serif, a step smaller, with aligned digits.
